@@ -1492,3 +1492,94 @@
   color: var(--text-secondary-dark);
 }
 
+/* Dashboard Filter Panel Styles */
+.dashboard-filter-panel {
+  padding: 1rem;
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-item-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Mobile responsive styles for filter panel */
+@media (max-width: 576px) {
+  .dashboard-filter-panel {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.75rem !important;
+    padding: 0.75rem !important;
+    margin-top: 1rem !important;
+    margin-bottom: 1.5rem !important;
+  }
+
+  .filter-search-wrapper {
+    grid-column: span 2 !important;
+    width: 100% !important;
+  }
+
+  .filter-item-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.2rem !important;
+    width: 100% !important;
+  }
+
+  .filter-item-wrapper.status-filter {
+    grid-column: span 2 !important;
+  }
+
+  .filter-item-wrapper.mode-selector {
+    grid-column: span 1 !important;
+  }
+
+  .filter-item-wrapper.full-screen-btn {
+    grid-column: span 1 !important;
+    margin-top: auto !important; /* aligns button with the select/button group next to it */
+  }
+
+  .dashboard-filter-panel label {
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    margin-bottom: 0.15rem;
+  }
+
+  .dashboard-filter-panel select,
+  .dashboard-filter-panel .form-input {
+    width: 100% !important;
+    padding: 0.35rem 0.5rem !important;
+    font-size: 0.8rem !important;
+    height: 32px !important;
+    line-height: normal !important;
+  }
+
+  /* Adjust button height inside switcher and btn-outline on mobile */
+  .dashboard-filter-panel button,
+  .dashboard-filter-panel .btn-outline {
+    height: 32px !important;
+    padding: 0.35rem 0.5rem !important;
+    font-size: 0.8rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.25rem !important;
+  }
+
+  /* Make gridMode button group fill the container */
+  .dashboard-filter-panel .mode-selector > div {
+    width: 100% !important;
+    display: flex !important;
+  }
+
+  .dashboard-filter-panel .mode-selector button {
+    flex: 1 !important;
+  }
+}
+

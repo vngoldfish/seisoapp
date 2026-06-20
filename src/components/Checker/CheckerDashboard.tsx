@@ -1465,8 +1465,8 @@ export const CheckerDashboard: React.FC = () => {
 
 
               {/* Filters Panel */}
-              <div className="glass-panel" style={{ padding: '1rem', marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                <div style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
+              <div className="dashboard-filter-panel glass-panel" style={{ marginBottom: '2rem' }}>
+                <div className="filter-search-wrapper" style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
                   <input
                     type="text"
                     className="form-input"
@@ -1479,7 +1479,7 @@ export const CheckerDashboard: React.FC = () => {
                 </div>
 
                 {/* Floor Filter */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div className="filter-item-wrapper floor-filter">
                   <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{getTranslation(language, 'filterFloor')}:</label>
                   <select 
                     className="form-input" 
@@ -1495,7 +1495,7 @@ export const CheckerDashboard: React.FC = () => {
                 </div>
 
                 {/* Checked Status Filter */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div className="filter-item-wrapper status-filter">
                   <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Trạng thái check' : language === 'ja' ? '検査別' : 'Check Status'}:</label>
                   <select 
                     className="form-input" 
@@ -1510,7 +1510,7 @@ export const CheckerDashboard: React.FC = () => {
                 </div>
 
                 {/* Grid Columns Filter */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div className="filter-item-wrapper columns-filter">
                   <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Số cột:' : language === 'ja' ? 'グリッド列:' : 'Columns:'}</label>
                   <select 
                     className="form-input" 
@@ -1529,7 +1529,7 @@ export const CheckerDashboard: React.FC = () => {
                 </div>
 
                 {/* Mode Selector */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div className="filter-item-wrapper mode-selector">
                   <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Chế độ:' : language === 'ja' ? 'モード:' : 'Mode:'}</label>
                   <div style={{ display: 'flex', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
                     <button
@@ -1568,7 +1568,7 @@ export const CheckerDashboard: React.FC = () => {
                 </div>
 
                 {/* Full Screen Carousel View trigger */}
-                <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div className="filter-item-wrapper full-screen-btn">
                   <button
                     type="button"
                     className="btn btn-outline"
