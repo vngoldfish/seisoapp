@@ -47,6 +47,7 @@ export const CheckerDashboard: React.FC = () => {
   const [logs, setLogs] = useState<CleaningLog[]>([]);
   const [cleaners, setCleaners] = useState<User[]>([]);
   const [activeStaffIds, setActiveStaffIds] = useState<string[]>([]);
+  const [showStats, setShowStats] = useState(false);
 
   // daily staff search state
   const [dailyStaffSearchTerm, setDailyStaffSearchTerm] = useState<string>('');
@@ -1801,37 +1802,56 @@ export const CheckerDashboard: React.FC = () => {
                   })
               )}
 
-              {/* Metrics Panels */}
-              <div className="metrics-grid" style={{ marginTop: '2rem' }}>
-                <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--primary-color)' }}>
-                  <div className="metric-icon" style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary-color)' }}>
-                    <Hotel size={20} />
-                  </div>
-                  <div>
-                    <div className="metric-value">{totalCleaned}</div>
-                    <div className="metric-label">{language === 'vi' ? 'Đã dọn xong' : language === 'ja' ? '清掃完了数' : 'Total Cleaned'}</div>
-                  </div>
+              {/* Collapsible Stats Section */}
+              <div className="glass-panel" style={{ padding: '0.75rem 1rem', marginTop: '2rem', marginBottom: '1.25rem', borderRadius: 'var(--radius-md)' }}>
+                <div 
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => setShowStats(!showStats)}
+                >
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    📊 {language === 'vi' ? 'Xem thống kê hôm nay' : language === 'ja' ? '本日の統計表示' : 'View Today\'s Stats'}
+                  </span>
+                  <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>
+                    {showStats ? '▲' : '▼'}
+                  </span>
                 </div>
 
-                <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-dirty)' }}>
-                  <div className="metric-icon" style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', color: 'var(--status-dirty)' }}>
-                    <AlertTriangle size={20} style={{ color: 'var(--status-dirty)' }} />
-                  </div>
-                  <div>
-                    <div className="metric-value">{pendingCheck}</div>
-                    <div className="metric-label">{language === 'vi' ? 'Chờ phê duyệt' : language === 'ja' ? '要検査待ち' : 'Pending Check'}</div>
-                  </div>
-                </div>
+                {showStats && (
+                  <div style={{ marginTop: '1.25rem' }}>
+                    {/* Metrics Panels */}
+                    <div className="metrics-grid" style={{ marginTop: '0.5rem' }}>
+                      <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--primary-color)' }}>
+                        <div className="metric-icon" style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary-color)' }}>
+                          <Hotel size={20} />
+                        </div>
+                        <div>
+                          <div className="metric-value">{totalCleaned}</div>
+                          <div className="metric-label">{language === 'vi' ? 'Đã dọn xong' : language === 'ja' ? '清掃完了数' : 'Total Cleaned'}</div>
+                        </div>
+                      </div>
 
-                <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-clean)' }}>
-                  <div className="metric-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)' }}>
-                    <CheckCircle2 size={20} style={{ color: 'var(--status-clean)' }} />
+                      <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-dirty)' }}>
+                        <div className="metric-icon" style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', color: 'var(--status-dirty)' }}>
+                          <AlertTriangle size={20} style={{ color: 'var(--status-dirty)' }} />
+                        </div>
+                        <div>
+                          <div className="metric-value">{pendingCheck}</div>
+                          <div className="metric-label">{language === 'vi' ? 'Chờ phê duyệt' : language === 'ja' ? '要検査待ち' : 'Pending Check'}</div>
+                        </div>
+                      </div>
+
+                      <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-clean)' }}>
+                        <div className="metric-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)' }}>
+                          <CheckCircle2 size={20} style={{ color: 'var(--status-clean)' }} />
+                        </div>
+                        <div>
+                          <div className="metric-value">{approvedCheck}</div>
+                          <div className="metric-label">{language === 'vi' ? 'Đã phê duyệt' : language === 'ja' ? '検査合格済' : 'Checked & Ready'}</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="metric-value">{approvedCheck}</div>
-                    <div className="metric-label">{language === 'vi' ? 'Đã phê duyệt' : language === 'ja' ? '検査合格済' : 'Checked & Ready'}</div>
-                  </div>
-                </div>
+                )}
               </div>
             </>
           )}
