@@ -1670,7 +1670,7 @@ export const CheckerDashboard: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #8b5cf6 50%, #38bdf8 50%)' }}></div>
                     <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                      {language === 'vi' ? 'Phòng stay DND - DD (Tím / Xanh da trời)' : language === 'ja' ? '滞在 DND (紫 / 水色)' : 'Stay DND (Purple / Sky Blue)'}
+                      {language === 'vi' ? 'Stay DND hoặc Đã dọn (Tím / Xanh da trời)' : language === 'ja' ? '滞在 DND または清掃完了 (紫 / 水色)' : 'Stay DND or Cleaned (Purple / Sky Blue)'}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

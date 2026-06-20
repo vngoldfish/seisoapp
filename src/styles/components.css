@@ -200,6 +200,12 @@
   border-color: #38bdf8 !important;
 }
 
+/* Phòng stay đã dọn xong -> tím 1/2, xanh da trời 1/2 */
+.room-card.clean.stay {
+  background: linear-gradient(135deg, #8b5cf6 50%, #38bdf8 50%) !important;
+  border-color: #38bdf8 !important;
+}
+
 /* 7. Phổ biến màu chữ trắng cho các thẻ phòng có màu nền */
 .room-card:not(.vacant) {
   color: #ffffff !important;
