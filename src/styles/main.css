@@ -317,3 +317,20 @@ body.dark-mode {
   }
 }
 
+/* Responsive display helper classes */
+.desktop-only-block {
+  display: block !important;
+}
+.mobile-only-block {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .desktop-only-block {
+    display: none !important;
+  }
+  .mobile-only-block {
+    display: block !important;
+  }
+}
+

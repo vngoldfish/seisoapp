@@ -1161,50 +1161,88 @@ export const CheckerDashboard: React.FC = () => {
               {logs.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem', opacity: 0.6 }}>{getTranslation(language, 'noData')}</div>
               ) : (
-                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomNumber')}</th>
-                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
-                        <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Bắt đầu' : 'Start'}</th>
-                        <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Kết thúc' : 'Finish'}</th>
-                        <th style={{ padding: '0.75rem 0.5rem' }}>Duration</th>
-                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'notes')}</th>
-                        <th style={{ padding: '0.75rem 0.5rem' }}>Photo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {logs
-                        .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
-                        .map(log => (
-                          <tr key={log.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                            <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>
-                              {log.roomNumber} <span style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.6 }}>({log.floor}F)</span>
-                            </td>
-                            <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{log.cleanerName}</td>
-                            <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.startedAt).toLocaleTimeString()}</td>
-                            <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.endedAt).toLocaleTimeString()}</td>
-                            <td style={{ padding: '0.75rem 0.5rem' }}>
-                              <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
-                            </td>
-                            <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.notes}>
-                              {log.notes}
-                            </td>
-                            <td style={{ padding: '0.75rem 0.5rem' }}>
-                              {log.photoAfter ? (
-                                <a href={log.photoAfter} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.8rem', fontWeight: 600 }}>
-                                  View Photo
-                                </a>
-                              ) : (
-                                <span style={{ opacity: 0.4, fontSize: '0.8rem' }}>No Photo</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  {/* Desktop view: Table */}
+                  <div className="desktop-only-block" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomNumber')}</th>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Bắt đầu' : 'Start'}</th>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Kết thúc' : 'Finish'}</th>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>Duration</th>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'notes')}</th>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>Photo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {logs
+                          .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
+                          .map(log => (
+                            <tr key={log.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                              <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>
+                                {log.roomNumber} <span style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.6 }}>({log.floor}F)</span>
+                              </td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{log.cleanerName}</td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.startedAt).toLocaleTimeString()}</td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.endedAt).toLocaleTimeString()}</td>
+                              <td style={{ padding: '0.75rem 0.5rem' }}>
+                                <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
+                              </td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.notes}>
+                                {log.notes}
+                              </td>
+                              <td style={{ padding: '0.75rem 0.5rem' }}>
+                                {log.photoAfter ? (
+                                  <a href={log.photoAfter} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.8rem', fontWeight: 600 }}>
+                                    View Photo
+                                  </a>
+                                ) : (
+                                  <span style={{ opacity: 0.4, fontSize: '0.8rem' }}>No Photo</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile view: Cards/Boxes */}
+                  <div className="mobile-only-block" style={{ width: '100%' }}>
+                    {logs
+                      .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
+                      .map(log => (
+                        <div key={log.id} className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: '4px solid var(--primary-color)', position: 'relative' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span style={{ fontWeight: 700, fontSize: '1rem' }}>Room {log.roomNumber} ({log.floor}F)</span>
+                            <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
+                          </div>
+                          <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
+                            <strong>{getTranslation(language, 'cleanerName')}:</strong> {log.cleanerName}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', opacity: 0.8, display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+                            <span>🕒 {language === 'vi' ? 'Bắt đầu' : 'Start'}: {new Date(log.startedAt).toLocaleTimeString()}</span>
+                            <span>⌛ {language === 'vi' ? 'Kết thúc' : 'Finish'}: {new Date(log.endedAt).toLocaleTimeString()}</span>
+                          </div>
+                          {log.notes && (
+                            <div style={{ fontSize: '0.8rem', backgroundColor: 'rgba(0,0,0,0.02)', padding: '0.35rem 0.5rem', borderRadius: '4px', marginBottom: '0.5rem', borderLeft: '2px solid #eab308' }}>
+                              <strong>{getTranslation(language, 'notes')}:</strong> {log.notes}
+                            </div>
+                          )}
+                          <div style={{ marginTop: '0.5rem' }}>
+                            {log.photoAfter ? (
+                              <a href={log.photoAfter} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', padding: '0.25rem 0.75rem', fontSize: '0.75rem', alignItems: 'center' }}>
+                                🖼️ {language === 'vi' ? 'Xem ảnh' : language === 'ja' ? '写真を見る' : 'View Photo'}
+                              </a>
+                            ) : (
+                              <span style={{ opacity: 0.5, fontSize: '0.75rem' }}>🚫 {language === 'vi' ? 'Không có ảnh' : language === 'ja' ? '写真なし' : 'No Photo'}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </>
               )}
             </div>
           )}

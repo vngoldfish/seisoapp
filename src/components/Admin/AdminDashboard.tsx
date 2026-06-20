@@ -2166,61 +2166,116 @@ export const AdminDashboard: React.FC = () => {
             </button>
           </div>
 
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '500px' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                  <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'hotelCode')}</th>
-                  <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'hotelName')}</th>
-                  <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'description')}</th>
-                  <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'action')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hotels.map(h => (
-                  <tr key={h.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                    <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>{h.id}</td>
-                    <td 
-                      style={{ padding: '0.75rem 0.5rem', fontWeight: 600, color: 'var(--primary-color)', cursor: 'pointer' }}
-                      onClick={() => {
-                        setManagingHotel(h);
-                        selectHotel(h.id);
-                        setBranchTab('stats');
-                      }}
-                      title={language === 'vi' ? 'Nhấp để quản lý chi nhánh này' : 'Click to manage this branch'}
-                    >
-                      {h.name}
-                    </td>
-                    <td style={{ padding: '0.75rem 0.5rem', opacity: 0.8 }}>{h.description || '-'}</td>
-                    <td style={{ padding: '0.75rem 0.5rem', display: 'flex', gap: '0.5rem' }}>
-                      <button 
-                        className="btn btn-primary btn-sm" 
-                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} 
+          <>
+            {/* Desktop view: Table */}
+            <div className="desktop-only-block" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '500px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'hotelCode')}</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'hotelName')}</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'description')}</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'action')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hotels.map(h => (
+                    <tr key={h.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                      <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>{h.id}</td>
+                      <td 
+                        style={{ padding: '0.75rem 0.5rem', fontWeight: 600, color: 'var(--primary-color)', cursor: 'pointer' }}
                         onClick={() => {
                           setManagingHotel(h);
                           selectHotel(h.id);
                           setBranchTab('stats');
                         }}
+                        title={language === 'vi' ? 'Nhấp để quản lý chi nhánh này' : 'Click to manage this branch'}
                       >
-                        {language === 'vi' ? 'Quản lý' : 'Manage'}
-                      </button>
-                      <button className="btn btn-secondary btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleEditHotelClick(h)}>
-                        <Edit2 size={12} />
-                      </button>
-                      <button 
-                        className="btn btn-danger btn-sm" 
-                        style={{ padding: '0.25rem 0.5rem' }} 
-                        onClick={() => handleDeleteHotel(h.id)}
-                        disabled={h.id === hotelId}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        {h.name}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', opacity: 0.8 }}>{h.description || '-'}</td>
+                      <td style={{ padding: '0.75rem 0.5rem', display: 'flex', gap: '0.5rem' }}>
+                        <button 
+                          className="btn btn-primary btn-sm" 
+                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} 
+                          onClick={() => {
+                            setManagingHotel(h);
+                            selectHotel(h.id);
+                            setBranchTab('stats');
+                          }}
+                        >
+                          {language === 'vi' ? 'Quản lý' : 'Manage'}
+                        </button>
+                        <button className="btn btn-secondary btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleEditHotelClick(h)}>
+                          <Edit2 size={12} />
+                        </button>
+                        <button 
+                          className="btn btn-danger btn-sm" 
+                          style={{ padding: '0.25rem 0.5rem' }} 
+                          onClick={() => handleDeleteHotel(h.id)}
+                          disabled={h.id === hotelId}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile view: Cards */}
+            <div className="mobile-only-block" style={{ width: '100%' }}>
+              {hotels.map(h => (
+                <div key={h.id} className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: '4px solid var(--primary-color)', position: 'relative' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span 
+                      style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--primary-color)', cursor: 'pointer' }}
+                      onClick={() => {
+                        setManagingHotel(h);
+                        selectHotel(h.id);
+                        setBranchTab('stats');
+                      }}
+                    >
+                      🏨 {h.name}
+                    </span>
+                    <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{h.id}</span>
+                  </div>
+                  {h.description && (
+                    <p style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.75rem' }}>{h.description}</p>
+                  )}
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                    <button 
+                      className="btn btn-primary btn-sm"
+                      style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
+                      onClick={() => {
+                        setManagingHotel(h);
+                        selectHotel(h.id);
+                        setBranchTab('stats');
+                      }}
+                    >
+                      {language === 'vi' ? 'Quản lý' : 'Manage'}
+                    </button>
+                    <button 
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.3rem 0.6rem' }}
+                      onClick={() => handleEditHotelClick(h)}
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button 
+                      className="btn btn-danger btn-sm"
+                      style={{ padding: '0.3rem 0.6rem' }}
+                      onClick={() => handleDeleteHotel(h.id)}
+                      disabled={h.id === hotelId}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         </div>
       )}
 
@@ -2971,37 +3026,64 @@ export const AdminDashboard: React.FC = () => {
                   </button>
                 </div>
 
-                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', maxHeight: '450px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '400px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomNumber')}</th>
-                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'floor')}</th>
-                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomType')}</th>
-                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'action')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rooms
-                        .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber))
-                        .map(room => (
-                          <tr key={room.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                            <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>{room.roomNumber}</td>
-                            <td style={{ padding: '0.75rem 0.5rem' }}>{room.floor}F</td>
-                            <td style={{ padding: '0.75rem 0.5rem' }}>{getFormattedRoomType(room.type)}</td>
-                            <td style={{ padding: '0.75rem 0.5rem', display: 'flex', gap: '0.5rem' }}>
-                              <button className="btn btn-secondary btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleEditRoomClick(room)}>
-                                <Edit2 size={12} />
-                              </button>
-                              <button className="btn btn-danger btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleDeleteRoom(room.id, room.roomNumber)}>
-                                <Trash2 size={12} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  {/* Desktop view: Table */}
+                  <div className="desktop-only-block" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', maxHeight: '450px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '400px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomNumber')}</th>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'floor')}</th>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomType')}</th>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'action')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rooms
+                          .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber))
+                          .map(room => (
+                            <tr key={room.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                              <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>{room.roomNumber}</td>
+                              <td style={{ padding: '0.75rem 0.5rem' }}>{room.floor}F</td>
+                              <td style={{ padding: '0.75rem 0.5rem' }}>{getFormattedRoomType(room.type)}</td>
+                              <td style={{ padding: '0.75rem 0.5rem', display: 'flex', gap: '0.5rem' }}>
+                                <button className="btn btn-secondary btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleEditRoomClick(room)}>
+                                  <Edit2 size={12} />
+                                </button>
+                                <button className="btn btn-danger btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleDeleteRoom(room.id, room.roomNumber)}>
+                                  <Trash2 size={12} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile view: Cards */}
+                  <div className="mobile-only-block" style={{ width: '100%', maxHeight: '450px', overflowY: 'auto' }}>
+                    {rooms
+                      .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber))
+                      .map(room => (
+                        <div key={room.id} className="glass-panel" style={{ padding: '0.85rem 1rem', marginBottom: '0.6rem', borderLeft: '4px solid var(--primary-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Room {room.roomNumber}</div>
+                            <div style={{ fontSize: '0.75rem', opacity: 0.8, marginTop: '0.15rem' }}>
+                              {room.floor}F • {getFormattedRoomType(room.type)}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <button className="btn btn-secondary btn-sm" style={{ padding: '0.35rem 0.5rem' }} onClick={() => handleEditRoomClick(room)}>
+                              <Edit2 size={12} />
+                            </button>
+                            <button className="btn btn-danger btn-sm" style={{ padding: '0.35rem 0.5rem' }} onClick={() => handleDeleteRoom(room.id, room.roomNumber)}>
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </>
               </div>
 
               {/* Right Column: Bulk Rooms List updater and Generator */}
@@ -3386,74 +3468,138 @@ export const AdminDashboard: React.FC = () => {
             </button>
           </div>
 
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '500px' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'username')}</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>Role</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>Password</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Khách sạn' : language === 'ja' ? '所属ホテル' : 'Hotels'}</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Trạng thái' : language === 'ja' ? 'ステータス' : 'Status'}</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'action')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentUsers.map(user => (
-                  <tr key={user.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                    <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>{user.name}</td>
-                    <td style={{ padding: '0.75rem 0.5rem' }}>{user.username || '-'}</td>
-                    <td style={{ padding: '0.75rem 0.5rem' }}>
-                      <span className="badge badge-occupied" style={{ fontSize: '0.65rem' }}>{user.role.toUpperCase()}</span>
-                    </td>
-                    <td style={{ padding: '0.75rem 0.5rem', whiteSpace: 'nowrap' }}>
-                      <span style={{ marginRight: '0.5rem' }}>
-                        {showPasswords[user.id] ? `${user.username || 'cleaner'}123` : '••••••••'}
-                      </span>
-                      <button
-                        onClick={() => setShowPasswords(prev => ({ ...prev, [user.id]: !prev[user.id] }))}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', verticalAlign: 'middle', color: '#64748b' }}
-                        title={showPasswords[user.id] ? 'Hide' : 'Show'}
-                      >
-                        {showPasswords[user.id] ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </td>
-                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', fontWeight: 600 }}>
-                      {user.hotelIds?.map(hId => {
-                        const match = hotels.find(h => h.id === hId);
-                        return match ? match.name : hId;
-                      }).join(', ') || '-'}
-                    </td>
-                    <td style={{ padding: '0.75rem 0.5rem' }}>
-                      {user.status === 'quit' ? (
-                        <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                          {language === 'vi' ? 'Đã nghỉ' : language === 'ja' ? '退職' : 'Quit'}
-                        </span>
-                      ) : (
-                        <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                          {language === 'vi' ? 'Đang làm' : language === 'ja' ? '在職' : 'Working'}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: '0.75rem 0.5rem', display: 'flex', gap: '0.5rem' }}>
-                      <button className="btn btn-secondary btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleEditUserClick(user)}>
-                        <Edit2 size={12} />
-                      </button>
-                      <button 
-                        className="btn btn-danger btn-sm" 
-                        style={{ padding: '0.25rem 0.5rem' }} 
-                        onClick={() => handleDeleteUser(user.id)}
-                        disabled={user.username === 'admin'} // Protect primary admin from deletion
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </td>
+          <>
+            {/* Desktop view: Table */}
+            <div className="desktop-only-block" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '500px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
+                     <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
+                     <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'username')}</th>
+                     <th style={{ padding: '0.75rem 0.5rem' }}>Role</th>
+                     <th style={{ padding: '0.75rem 0.5rem' }}>Password</th>
+                     <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Khách sạn' : language === 'ja' ? '所属ホテル' : 'Hotels'}</th>
+                     <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Trạng thái' : language === 'ja' ? 'ステータス' : 'Status'}</th>
+                     <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'action')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {currentUsers.map(user => (
+                    <tr key={user.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                      <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>{user.name}</td>
+                      <td style={{ padding: '0.75rem 0.5rem' }}>{user.username || '-'}</td>
+                      <td style={{ padding: '0.75rem 0.5rem' }}>
+                        <span className="badge badge-occupied" style={{ fontSize: '0.65rem' }}>{user.role.toUpperCase()}</span>
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', whiteSpace: 'nowrap' }}>
+                        <span style={{ marginRight: '0.5rem' }}>
+                          {showPasswords[user.id] ? `${user.username || 'cleaner'}123` : '••••••••'}
+                        </span>
+                        <button
+                          onClick={() => setShowPasswords(prev => ({ ...prev, [user.id]: !prev[user.id] }))}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', verticalAlign: 'middle', color: '#64748b' }}
+                          title={showPasswords[user.id] ? 'Hide' : 'Show'}
+                        >
+                          {showPasswords[user.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', fontWeight: 600 }}>
+                        {user.hotelIds?.map(hId => {
+                          const match = hotels.find(h => h.id === hId);
+                          return match ? match.name : hId;
+                        }).join(', ') || '-'}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem' }}>
+                        {user.status === 'quit' ? (
+                          <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                            {language === 'vi' ? 'Đã nghỉ' : language === 'ja' ? '退職' : 'Quit'}
+                          </span>
+                        ) : (
+                          <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                            {language === 'vi' ? 'Đang làm' : language === 'ja' ? '在職' : 'Working'}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', display: 'flex', gap: '0.5rem' }}>
+                        <button className="btn btn-secondary btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleEditUserClick(user)}>
+                          <Edit2 size={12} />
+                        </button>
+                        <button 
+                          className="btn btn-danger btn-sm" 
+                          style={{ padding: '0.25rem 0.5rem' }} 
+                          onClick={() => handleDeleteUser(user.id)}
+                          disabled={user.username === 'admin'} // Protect primary admin from deletion
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile view: Cards */}
+            <div className="mobile-only-block" style={{ width: '100%' }}>
+              {currentUsers.map(user => (
+                <div key={user.id} className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: '4px solid var(--primary-color)', position: 'relative' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>👤 {user.name}</span>
+                    <span className="badge badge-occupied" style={{ fontSize: '0.65rem' }}>{user.role.toUpperCase()}</span>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
+                    <strong>{getTranslation(language, 'username')}:</strong> {user.username || '-'}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <strong>Password:</strong> 
+                    <span>{showPasswords[user.id] ? `${user.username || 'cleaner'}123` : '••••••••'}</span>
+                    <button
+                      onClick={() => setShowPasswords(prev => ({ ...prev, [user.id]: !prev[user.id] }))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', display: 'inline-flex', alignItems: 'center', color: '#64748b' }}
+                    >
+                      {showPasswords[user.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
+                    <strong>{language === 'vi' ? 'Khách sạn' : language === 'ja' ? '所属ホテル' : 'Hotels'}:</strong>{' '}
+                    {user.hotelIds?.map(hId => {
+                      const match = hotels.find(h => h.id === hId);
+                      return match ? match.name : hId;
+                    }).join(', ') || '-'}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+                    <strong>Status:</strong>{' '}
+                    {user.status === 'quit' ? (
+                      <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                        {language === 'vi' ? 'Đã nghỉ' : language === 'ja' ? '退職' : 'Quit'}
+                      </span>
+                    ) : (
+                      <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                        {language === 'vi' ? 'Đang làm' : language === 'ja' ? '在職' : 'Working'}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                    <button 
+                      className="btn btn-secondary btn-sm" 
+                      style={{ padding: '0.3rem 0.6rem' }} 
+                      onClick={() => handleEditUserClick(user)}
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button 
+                      className="btn btn-danger btn-sm" 
+                      style={{ padding: '0.3rem 0.6rem' }} 
+                      onClick={() => handleDeleteUser(user.id)}
+                      disabled={user.username === 'admin'}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
 
 
           {/* Pagination Controls */}
@@ -3524,50 +3670,88 @@ export const AdminDashboard: React.FC = () => {
             {dailyLogs.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '3rem', opacity: 0.6 }}>{getTranslation(language, 'noData')}</div>
             ) : (
-              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                      <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomNumber')}</th>
-                      <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
-                      <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'startCleaning')}</th>
-                      <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'finishCleaning')}</th>
-                      <th style={{ padding: '0.75rem 0.5rem' }}>Duration</th>
-                      <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'notes')}</th>
-                      <th style={{ padding: '0.75rem 0.5rem' }}>Photo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dailyLogs
-                      .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
-                      .map(log => (
-                        <tr key={log.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                          <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>
-                            {log.roomNumber} <span style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.6 }}>({log.floor}F)</span>
-                          </td>
-                          <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{log.cleanerName}</td>
-                          <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.startedAt).toLocaleTimeString()}</td>
-                          <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.endedAt).toLocaleTimeString()}</td>
-                          <td style={{ padding: '0.75rem 0.5rem' }}>
-                            <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
-                          </td>
-                          <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.notes}>
-                            {log.notes}
-                          </td>
-                          <td style={{ padding: '0.75rem 0.5rem' }}>
-                            {log.photoAfter ? (
-                              <a href={log.photoAfter} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.8rem', fontWeight: 600 }}>
-                                View Photo
-                              </a>
-                            ) : (
-                              <span style={{ opacity: 0.4, fontSize: '0.8rem' }}>No Photo</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Desktop view: Table */}
+                <div className="desktop-only-block" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
+                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomNumber')}</th>
+                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
+                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'startCleaning')}</th>
+                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'finishCleaning')}</th>
+                        <th style={{ padding: '0.75rem 0.5rem' }}>Duration</th>
+                        <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'notes')}</th>
+                        <th style={{ padding: '0.75rem 0.5rem' }}>Photo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dailyLogs
+                        .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
+                        .map(log => (
+                          <tr key={log.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                            <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>
+                              {log.roomNumber} <span style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.6 }}>({log.floor}F)</span>
+                            </td>
+                            <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{log.cleanerName}</td>
+                            <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.startedAt).toLocaleTimeString()}</td>
+                            <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.endedAt).toLocaleTimeString()}</td>
+                            <td style={{ padding: '0.75rem 0.5rem' }}>
+                              <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
+                            </td>
+                            <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.notes}>
+                              {log.notes}
+                            </td>
+                            <td style={{ padding: '0.75rem 0.5rem' }}>
+                              {log.photoAfter ? (
+                                <a href={log.photoAfter} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.8rem', fontWeight: 600 }}>
+                                  View Photo
+                                </a>
+                              ) : (
+                                <span style={{ opacity: 0.4, fontSize: '0.8rem' }}>No Photo</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile view: Cards */}
+                <div className="mobile-only-block" style={{ width: '100%' }}>
+                  {dailyLogs
+                    .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
+                    .map(log => (
+                      <div key={log.id} className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: '4px solid var(--primary-color)', position: 'relative' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                          <span style={{ fontWeight: 700, fontSize: '1rem' }}>Room {log.roomNumber} ({log.floor}F)</span>
+                          <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
+                        </div>
+                        <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
+                          <strong>{getTranslation(language, 'cleanerName')}:</strong> {log.cleanerName}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', opacity: 0.8, display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+                          <span>🕒 {language === 'vi' ? 'Bắt đầu' : 'Start'}: {new Date(log.startedAt).toLocaleTimeString()}</span>
+                          <span>⌛ {language === 'vi' ? 'Kết thúc' : 'Finish'}: {new Date(log.endedAt).toLocaleTimeString()}</span>
+                        </div>
+                        {log.notes && (
+                          <div style={{ fontSize: '0.8rem', backgroundColor: 'rgba(0,0,0,0.02)', padding: '0.35rem 0.5rem', borderRadius: '4px', marginBottom: '0.5rem', borderLeft: '2px solid #eab308' }}>
+                            <strong>{getTranslation(language, 'notes')}:</strong> {log.notes}
+                          </div>
+                        )}
+                        <div style={{ marginTop: '0.5rem' }}>
+                          {log.photoAfter ? (
+                            <a href={log.photoAfter} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', padding: '0.25rem 0.75rem', fontSize: '0.75rem', alignItems: 'center' }}>
+                              🖼️ {language === 'vi' ? 'Xem ảnh' : language === 'ja' ? '写真を見る' : 'View Photo'}
+                            </a>
+                          ) : (
+                            <span style={{ opacity: 0.5, fontSize: '0.75rem' }}>🚫 {language === 'vi' ? 'Không có ảnh' : language === 'ja' ? '写真なし' : 'No Photo'}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </>
             )}
           </div>
         );
