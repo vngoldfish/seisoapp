@@ -47,6 +47,7 @@ export const Header: React.FC = () => {
     const handleOpenDateModal = () => {
       setTempDate(activeDate);
       setShowDateModal(true);
+      document.body.classList.remove('mobile-sidebar-open');
     };
     window.addEventListener('open-date-modal', handleOpenDateModal);
     return () => window.removeEventListener('open-date-modal', handleOpenDateModal);
@@ -130,6 +131,7 @@ export const Header: React.FC = () => {
             if (currentUser.role !== 'housekeeping') {
               setTempDate(activeDate);
               setShowDateModal(true);
+              document.body.classList.remove('mobile-sidebar-open');
             }
           }}
           style={{ 
