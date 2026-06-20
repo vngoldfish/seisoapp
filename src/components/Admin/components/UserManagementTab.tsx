@@ -514,13 +514,8 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
             className="modal-content glass-panel" 
             style={{ 
               maxWidth: '440px', 
-              width: '90%', 
-              padding: '1.75rem', 
-              borderRadius: '12px',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              position: 'relative',
-              overflow: 'hidden'
+              border: '1px solid rgba(255, 255, 255, 0.2)'
             }}
             onClick={(e) => e.stopPropagation()}
           >
