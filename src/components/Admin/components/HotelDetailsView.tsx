@@ -106,6 +106,9 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   // Main Room CRUD Modals
   const [roomModalOpen, setRoomModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
+  const [gridColumns, setGridColumns] = useState<string>(() => {
+    return localStorage.getItem('hotel_clean_room_grid_columns') || 'auto';
+  });
   const [roomForm, setRoomForm] = useState({ 
     roomNumber: '', 
     floor: 1, 
@@ -1078,6 +1081,31 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
 
       {branchTab === 'grid' && (
         <div>
+          {/* Grid Layout Filter Bar */}
+          <div className="glass-panel" style={{ display: 'flex', justifyContent: 'flex-end', padding: '0.75rem 1.25rem', marginBottom: '1.25rem', alignItems: 'center', gap: '0.5rem' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+              {language === 'vi' ? 'Số cột hiển thị:' : language === 'ja' ? '表示列数:' : 'Grid Columns:'}
+            </label>
+            <select 
+              className="form-input" 
+              style={{ width: '120px', padding: '0.4rem 0.75rem' }}
+              value={gridColumns}
+              onChange={e => {
+                const val = e.target.value;
+                setGridColumns(val);
+                localStorage.setItem('hotel_clean_room_grid_columns', val);
+              }}
+            >
+              <option value="auto">{language === 'vi' ? 'Tự động' : language === 'ja' ? '自動' : 'Auto'}</option>
+              <option value="4">4</option>
+              <option value="6">6</option>
+              <option value="8">8</option>
+              <option value="10">10</option>
+              <option value="12">12</option>
+              <option value="16">16</option>
+            </select>
+          </div>
+
           {rooms.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem', opacity: 0.6 }} className="glass-panel">
               {getTranslation(language, 'noData')}
@@ -1106,7 +1134,18 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                         </span>
                       </h3>
                       
-                      <div className="room-grid">
+                      <div 
+                        className="room-grid"
+                        style={gridColumns !== 'auto' ? {
+                          gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
+                          ['--room-card-min-height' as any]: Number(gridColumns) >= 12 ? '80px' : Number(gridColumns) >= 8 ? '95px' : '120px',
+                          ['--room-card-padding' as any]: Number(gridColumns) >= 12 ? '0.5rem 0.4rem 0.4rem' : Number(gridColumns) >= 8 ? '0.8rem 0.6rem 0.5rem' : '1.25rem 1rem 0.75rem',
+                          ['--room-number-font-size' as any]: Number(gridColumns) >= 12 ? '1.1rem' : Number(gridColumns) >= 8 ? '1.35rem' : '1.75rem',
+                          ['--room-type-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                          ['--room-guest-font-size' as any]: Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 8 ? '0.6rem' : '0.7rem',
+                          ['--room-assignee-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                        } : undefined}
+                      >
                         {floorRooms
                           .sort((a: Room, b: Room) => a.roomNumber.localeCompare(b.roomNumber))
                           .map((room: Room) => {
@@ -1162,10 +1201,17 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                                   <div className="room-type-text">{getFormattedRoomType(room.type)}</div>
                                   <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                     {room.roomNumber}
-                                    {room.status === 'dirty' && <Play size={14} style={{ color: 'var(--status-dirty)' }} fill="var(--status-dirty)" />}
-                                    {room.status === 'eco' && <Play size={14} style={{ color: 'var(--status-eco)' }} fill="var(--status-eco)" />}
-                                    {room.status === 'cleaning' && <CheckCircle size={14} style={{ color: 'var(--status-cleaning)' }} />}
-                                    {room.notes && <AlertTriangle size={14} style={{ color: 'var(--status-maintenance)' }} className="animate-pulse" />}
+                                    {(() => {
+                                      const iconSize = gridColumns !== 'auto' && Number(gridColumns) >= 12 ? 10 : gridColumns !== 'auto' && Number(gridColumns) >= 8 ? 12 : 14;
+                                      return (
+                                        <>
+                                          {room.status === 'dirty' && <Play size={iconSize} style={{ color: 'var(--status-dirty)' }} fill="var(--status-dirty)" />}
+                                          {room.status === 'eco' && <Play size={iconSize} style={{ color: 'var(--status-eco)' }} fill="var(--status-eco)" />}
+                                          {room.status === 'cleaning' && <CheckCircle size={iconSize} style={{ color: 'var(--status-cleaning)' }} />}
+                                          {room.notes && <AlertTriangle size={iconSize} style={{ color: 'var(--status-maintenance)' }} className="animate-pulse" />}
+                                        </>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
                                 
