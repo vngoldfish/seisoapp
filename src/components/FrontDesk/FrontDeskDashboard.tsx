@@ -3,7 +3,7 @@ import { useApp } from '../Common/AppContext';
 import { getTranslation } from '../../i18n/translations';
 import { db } from '../../db/firebaseDB';
 import type { Room, User, CleaningLog } from '../../db/dbInterface';
-import { Search, Volume2, VolumeX, CheckCircle2, Info, Play, CheckCircle, AlertTriangle, Hotel, Users, LayoutDashboard, Clock, Building, Sun, Moon, LogOut, User as UserIcon, LayoutGrid, List, Maximize2, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Bell, BellOff, CheckCircle2, Info, Play, CheckCircle, AlertTriangle, Hotel, Users, LayoutDashboard, Clock, Building, Sun, Moon, LogOut, User as UserIcon, LayoutGrid, List, Maximize2, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 const getVisiblePages = (current: number, total: number) => {
@@ -910,7 +910,7 @@ export const FrontDeskDashboard: React.FC = () => {
           className={`btn ${soundEnabled ? 'btn-primary' : 'btn-secondary'} btn-sm`}
           style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
-          {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+          {soundEnabled ? <Bell size={16} /> : <BellOff size={16} />}
           <span>{getTranslation(language, 'soundAlert')}: {soundEnabled ? 'ON' : 'OFF'}</span>
         </button>
       </div>
