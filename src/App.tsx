@@ -68,35 +68,29 @@ const HotelSelectionPortal: React.FC = () => {
   const portalMaxWidth = cols === 'list' ? '780px' : cols === 3 ? '1000px' : cols === 4 ? '1200px' : '1400px';
 
   return (
-    <div className="auth-layout" style={{ flexDirection: 'column', gap: '2rem', padding: '2rem 1rem' }}>
+    <div className="auth-layout flex flex-col gap-8 py-8 px-4">
       
       {/* Header controls for Portal */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        width: '100%', 
-        maxWidth: portalMaxWidth,
-        padding: '0 1rem',
-        boxSizing: 'border-box',
-        transition: 'all 0.3s ease'
-      }}>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div 
+        className="flex justify-between items-center w-full px-4 box-border transition-all duration-300 ease-in-out"
+        style={{ maxWidth: portalMaxWidth }}
+      >
+        <div className="flex gap-2">
           <button className={`lang-btn ${language === 'ja' ? 'active' : ''}`} onClick={() => setLanguage('ja')}>JP</button>
           <button className={`lang-btn ${language === 'vi' ? 'active' : ''}`} onClick={() => setLanguage('vi')}>VN</button>
           <button className={`lang-btn ${language === 'en' ? 'active' : ''}`} onClick={() => setLanguage('en')}>EN</button>
         </div>
-        <button onClick={toggleDarkMode} className="btn btn-secondary btn-sm" style={{ borderRadius: '50%', padding: '0.4rem' }}>
+        <button onClick={toggleDarkMode} className="btn btn-secondary btn-sm rounded-full p-1.5">
           {darkMode ? <Sun size={16} /> : <Moon size={16} />}
         </button>
       </div>
 
-      <div style={{ textAlign: 'center', maxWidth: '600px', padding: '0 1rem' }}>
-        <h1 style={{ fontSize: '2.25rem', fontWeight: 800, letterSpacing: '-0.025em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
-          <Building size={40} style={{ color: 'var(--primary-color)' }} />
+      <div className="text-center max-w-[600px] px-4">
+        <h1 className="text-4xl font-extrabold tracking-tight flex items-center justify-center gap-3">
+          <Building size={40} className="text-[var(--primary-color)]" />
           {language === 'ja' ? '客室清掃ポータル' : language === 'vi' ? 'Cổng Chọn Khách Sạn' : 'Hotel Housekeeping Portal'}
         </h1>
-        <p style={{ marginTop: '0.5rem', opacity: 0.7, fontSize: '0.95rem' }}>
+        <p className="mt-2 opacity-70 text-[0.95rem]">
           {language === 'ja' 
             ? '管理するホテルを選択して清掃管理システムにアクセスしてください。' 
             : language === 'vi' 
@@ -317,21 +311,36 @@ const MainApp: React.FC = () => {
 
   // Helper to check if current URL path points to the selector portal
   const isValidHotel = hotels.some(h => h.id === hotelId);
-  const isPortal = !isValidHotel;
+  const isPortal = !isValidHotel && hotelId !== 'admin';
 
-  // Auto-redirect admin to default hotel dashboard if they are on the portal
+  // Auto-redirect user to assigned hotel dashboard if they are on the portal
   useEffect(() => {
-    if (currentUser && currentUser.role === 'admin' && isPortal && hotels.length > 0) {
-      selectHotel(hotels[0].id);
+    if (!currentUser || hotels.length === 0) return;
+    
+    const isUserAdmin = currentUser.role === 'admin';
+    const isCurrentPathAdmin = hotelId === 'admin';
+
+    if (isUserAdmin) {
+      if (isPortal) {
+        selectHotel('admin');
+      }
+    } else {
+      if (isPortal || isCurrentPathAdmin) {
+        if (currentUser.hotelIds && currentUser.hotelIds.length > 0) {
+          selectHotel(currentUser.hotelIds[0]);
+        } else {
+          selectHotel('portal');
+        }
+      }
     }
-  }, [currentUser, isPortal, hotels, selectHotel]);
+  }, [currentUser, isPortal, hotelId, hotels, selectHotel]);
 
   // Synchronize browser history and path on first boot
   useEffect(() => {
     if (loading) return;
     const path = window.location.pathname.replace(/^\/|\/$/g, '');
     const isValid = hotels.some(h => h.id === path);
-    if (!isValid && path !== '') {
+    if (!isValid && path !== '' && path !== 'portal' && path !== 'admin') {
       // Clean invalid paths back to portal
       window.history.replaceState({}, '', '/');
       selectHotel('portal');

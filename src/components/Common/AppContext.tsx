@@ -65,7 +65,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const savedUser = localStorage.getItem('hotel_clean_curr_user');
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
-        const hasAccess = parsed.role === 'admin' || (parsed.hotelIds && parsed.hotelIds.includes(activeId)) || activeId === 'portal';
+        const hasAccess = parsed.role === 'admin' || (parsed.hotelIds && parsed.hotelIds.includes(activeId)) || activeId === 'portal' || activeId === 'admin';
         if (hasAccess) {
           setCurrentUser(parsed);
         } else {
@@ -94,12 +94,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     const activeId = getActiveHotelId();
     const savedUserStr = localStorage.getItem('hotel_clean_curr_user');
-    let userObj = null;
+    let userObj: User | null = null;
     if (savedUserStr) {
-      userObj = JSON.parse(savedUserStr);
-      const hasAccess = userObj.role === 'admin' || (userObj.hotelIds && userObj.hotelIds.includes(activeId)) || activeId === 'portal';
-      if (hasAccess) {
-        setCurrentUser(userObj);
+      userObj = JSON.parse(savedUserStr) as User;
+      const hasAccess = userObj.role === 'admin' || (userObj.hotelIds && userObj.hotelIds.includes(activeId)) || activeId === 'portal' || activeId === 'admin';
+      const finalUser = userObj;
+      if (hasAccess && finalUser) {
+        setCurrentUser(prev => {
+          if (prev && prev.id === finalUser.id && prev.username === finalUser.username && prev.role === finalUser.role) {
+            return prev;
+          }
+          return finalUser;
+        });
       } else {
         setCurrentUser(null);
         localStorage.removeItem('hotel_clean_curr_user');

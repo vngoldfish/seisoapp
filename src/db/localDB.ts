@@ -216,6 +216,9 @@ export function seedMockDataForDate(hotelId: string, date: string): void {
   const hasRooms = !!localStorage.getItem(roomsKey);
   const hasActiveStaff = !!localStorage.getItem(activeStaffKey);
 
+  const todayStr = getTodayDateString();
+  const isFuture = date > todayStr;
+
   // 1. Get or seed master rooms
   let masterRooms: Room[] = [];
   const masterStr = localStorage.getItem(masterRoomsKey);
@@ -246,34 +249,40 @@ export function seedMockDataForDate(hotelId: string, date: string): void {
     u => u.role === 'housekeeping' && u.hotelIds?.includes(hotelId) && u.status !== 'quit'
   );
 
-  if (activeStaffIds.length === 0) {
-    if (hotelHousekeepers.length > 0) {
-      const countToPick = Math.min(6, hotelHousekeepers.length);
-      const shuffled = [...hotelHousekeepers].sort(() => 0.5 - Math.random());
-      activeStaffIds = shuffled.slice(0, countToPick).map(u => u.id);
+  if (activeStaffIds.length === 0 && !hasActiveStaff) {
+    if (isFuture) {
+      // Future date: no active staff by default
+      activeStaffIds = [];
     } else {
-      const names = [
-        'Nguyễn Văn An', 'Trần Thị Bình', 'Lê Hoàng Cường', 'Phạm Minh Duy', 'Vũ Thị Dung',
-        'Hoàng Văn Hải', 'Phan Thị Hoa', 'Đỗ Minh Hùng', 'Bùi Văn Hùng', 'Đặng Thị Hương'
-      ];
-      const newDemoCleaners: User[] = [];
-      for (let i = 0; i < 6; i++) {
-        const uId = `cleaner_${hotelId}_demo_${i + 1}`;
-        const newUser: User = {
-          id: uId,
-          username: `cleaner_${hotelId}_demo_${i + 1}`,
-          role: 'housekeeping',
-          pin: String(7001 + i),
-          name: names[i] || `Housekeeper Demo ${i + 1}`,
-          language: 'vi',
-          hotelIds: [hotelId],
-          status: 'working'
-        };
-        newDemoCleaners.push(newUser);
-        allUsers.push(newUser);
+      // Today or past date: randomly assign staff
+      if (hotelHousekeepers.length > 0) {
+        const countToPick = Math.min(6, hotelHousekeepers.length);
+        const shuffled = [...hotelHousekeepers].sort(() => 0.5 - Math.random());
+        activeStaffIds = shuffled.slice(0, countToPick).map(u => u.id);
+      } else {
+        const names = [
+          'Nguyễn Văn An', 'Trần Thị Bình', 'Lê Hoàng Cường', 'Phạm Minh Duy', 'Vũ Thị Dung',
+          'Hoàng Văn Hải', 'Phan Thị Hoa', 'Đỗ Minh Hùng', 'Bùi Văn Hùng', 'Đặng Thị Hương'
+        ];
+        const newDemoCleaners: User[] = [];
+        for (let i = 0; i < 6; i++) {
+          const uId = `cleaner_${hotelId}_demo_${i + 1}`;
+          const newUser: User = {
+            id: uId,
+            username: `cleaner_${hotelId}_demo_${i + 1}`,
+            role: 'housekeeping',
+            pin: String(7001 + i),
+            name: names[i] || `Housekeeper Demo ${i + 1}`,
+            language: 'vi',
+            hotelIds: [hotelId],
+            status: 'working'
+          };
+          newDemoCleaners.push(newUser);
+          allUsers.push(newUser);
+        }
+        localStorage.setItem('global_hotel_clean_users', JSON.stringify(allUsers));
+        activeStaffIds = newDemoCleaners.map(u => u.id);
       }
-      localStorage.setItem('global_hotel_clean_users', JSON.stringify(allUsers));
-      activeStaffIds = newDemoCleaners.map(u => u.id);
     }
     localStorage.setItem(activeStaffKey, JSON.stringify(activeStaffIds));
   }
@@ -289,98 +298,116 @@ export function seedMockDataForDate(hotelId: string, date: string): void {
   // 3. Seed rooms for this date if not existing
   let dailyRooms: Room[] = [];
   if (!hasRooms) {
-    dailyRooms = masterRooms.map((room) => {
-      let status: Room['status'] = 'vacant';
-      let isStay = false;
-      let guestCount = 0;
-      let notes = '';
-      let assignedTo = '';
-      let cleanerName = '';
-      let isChecked: boolean | undefined = undefined;
-      let checkedBy: string | undefined = undefined;
-      let checkedAt: string | undefined = undefined;
-
-      const rand = Math.random();
-      
-      if (rand < 0.25) {
-        status = 'occupied';
-        isStay = Math.random() > 0.3;
-        guestCount = Math.floor(Math.random() * 3) + 1;
-      } else if (rand < 0.50) {
-        status = 'dirty';
-        isStay = Math.random() > 0.4;
-        guestCount = Math.floor(Math.random() * 3) + 1;
-        if (Math.random() > 0.4 && activeStaffIds.length > 0) {
-          const staffId = activeStaffIds[Math.floor(Math.random() * activeStaffIds.length)];
-          assignedTo = staffId;
-          cleanerName = staffMap.get(staffId)?.name || 'Housekeeper';
-        }
-      } else if (rand < 0.85) {
-        status = 'clean';
-        isStay = Math.random() > 0.5;
-        guestCount = Math.floor(Math.random() * 3) + 1;
-        
-        if (activeStaffIds.length > 0) {
-          const staffId = activeStaffIds[Math.floor(Math.random() * activeStaffIds.length)];
-          assignedTo = staffId;
-          cleanerName = staffMap.get(staffId)?.name || 'Housekeeper';
-        }
-
-        if (Math.random() > 0.4) {
-          isChecked = true;
-          checkedBy = 'System Checker';
-          checkedAt = `${date}T${13 + Math.floor(Math.random() * 3)}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}:00.000Z`;
-        } else {
-          isChecked = false;
-        }
-      } else if (rand < 0.90) {
-        status = 'cleaning';
-        isStay = Math.random() > 0.5;
-        guestCount = Math.floor(Math.random() * 3) + 1;
-        if (activeStaffIds.length > 0) {
-          const staffId = activeStaffIds[Math.floor(Math.random() * activeStaffIds.length)];
-          assignedTo = staffId;
-          cleanerName = staffMap.get(staffId)?.name || 'Housekeeper';
-        }
-      } else if (rand < 0.94) {
-        status = 'eco';
-        isStay = true;
-        guestCount = Math.floor(Math.random() * 2) + 1;
-      } else if (rand < 0.97) {
-        status = 'dnd';
-        isStay = true;
-        guestCount = Math.floor(Math.random() * 2) + 1;
-      } else {
-        status = 'maintenance';
-        notes = 'Air conditioner check / Water leak repair';
-      }
-
-      if (Math.random() > 0.85 && status !== 'maintenance') {
-        const sampleNotes = [
-          'Guest requested extra towels',
-          'Allergy to feathers - use synthetic pillows',
-          'VIP guest - prepare fruit basket',
-          'Late check-out requested',
-          'Fix window lock before guest returns'
-        ];
-        notes = sampleNotes[Math.floor(Math.random() * sampleNotes.length)];
-      }
-
-      return {
+    if (isFuture) {
+      // Future dates start all vacant and clean without mock checkins
+      dailyRooms = masterRooms.map((room) => ({
         ...room,
-        status,
-        isStay,
-        guestCount,
-        notes: notes || undefined,
-        assignedTo,
-        cleanerName,
-        isChecked,
-        checkedBy,
-        checkedAt,
+        status: 'vacant',
+        isStay: false,
+        guestCount: 0,
+        notes: undefined,
+        assignedTo: '',
+        cleanerName: '',
+        isChecked: undefined,
+        checkedBy: undefined,
+        checkedAt: undefined,
         updatedAt: new Date(date + 'T12:00:00.000Z').toISOString(),
         updatedBy: 'system'
-      };
-    });
+      }));
+    } else {
+      dailyRooms = masterRooms.map((room) => {
+        let status: Room['status'] = 'vacant';
+        let isStay = false;
+        let guestCount = 0;
+        let notes = '';
+        let assignedTo = '';
+        let cleanerName = '';
+        let isChecked: boolean | undefined = undefined;
+        let checkedBy: string | undefined = undefined;
+        let checkedAt: string | undefined = undefined;
+
+        const rand = Math.random();
+        
+        if (rand < 0.25) {
+          status = 'occupied';
+          isStay = Math.random() > 0.3;
+          guestCount = Math.floor(Math.random() * 3) + 1;
+        } else if (rand < 0.50) {
+          status = 'dirty';
+          isStay = Math.random() > 0.4;
+          guestCount = Math.floor(Math.random() * 3) + 1;
+          if (Math.random() > 0.4 && activeStaffIds.length > 0) {
+            const staffId = activeStaffIds[Math.floor(Math.random() * activeStaffIds.length)];
+            assignedTo = staffId;
+            cleanerName = staffMap.get(staffId)?.name || 'Housekeeper';
+          }
+        } else if (rand < 0.85) {
+          status = 'clean';
+          isStay = Math.random() > 0.5;
+          guestCount = Math.floor(Math.random() * 3) + 1;
+          
+          if (activeStaffIds.length > 0) {
+            const staffId = activeStaffIds[Math.floor(Math.random() * activeStaffIds.length)];
+            assignedTo = staffId;
+            cleanerName = staffMap.get(staffId)?.name || 'Housekeeper';
+          }
+
+          if (Math.random() > 0.4) {
+            isChecked = true;
+            checkedBy = 'System Checker';
+            checkedAt = `${date}T${13 + Math.floor(Math.random() * 3)}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}:00.000Z`;
+          } else {
+            isChecked = false;
+          }
+        } else if (rand < 0.90) {
+          status = 'cleaning';
+          isStay = Math.random() > 0.5;
+          guestCount = Math.floor(Math.random() * 3) + 1;
+          if (activeStaffIds.length > 0) {
+            const staffId = activeStaffIds[Math.floor(Math.random() * activeStaffIds.length)];
+            assignedTo = staffId;
+            cleanerName = staffMap.get(staffId)?.name || 'Housekeeper';
+          }
+        } else if (rand < 0.94) {
+          status = 'eco';
+          isStay = true;
+          guestCount = Math.floor(Math.random() * 2) + 1;
+        } else if (rand < 0.97) {
+          status = 'dnd';
+          isStay = true;
+          guestCount = Math.floor(Math.random() * 2) + 1;
+        } else {
+          status = 'maintenance';
+          notes = 'Air conditioner check / Water leak repair';
+        }
+
+        if (Math.random() > 0.85 && status !== 'maintenance') {
+          const sampleNotes = [
+            'Guest requested extra towels',
+            'Allergy to feathers - use synthetic pillows',
+            'VIP guest - prepare fruit basket',
+            'Late check-out requested',
+            'Fix window lock before guest returns'
+          ];
+          notes = sampleNotes[Math.floor(Math.random() * sampleNotes.length)];
+        }
+
+        return {
+          ...room,
+          status,
+          isStay,
+          guestCount,
+          notes: notes || undefined,
+          assignedTo,
+          cleanerName,
+          isChecked,
+          checkedBy,
+          checkedAt,
+          updatedAt: new Date(date + 'T12:00:00.000Z').toISOString(),
+          updatedBy: 'system'
+        };
+      });
+    }
     localStorage.setItem(roomsKey, JSON.stringify(dailyRooms));
   }
 
@@ -395,7 +422,7 @@ export function seedMockDataForDate(hotelId: string, date: string): void {
 
   const logsForThisDate = allLogs.filter(log => log.endedAt.startsWith(date));
   
-  if (logsForThisDate.length === 0 && activeStaffIds.length > 0) {
+  if (logsForThisDate.length === 0 && activeStaffIds.length > 0 && !isFuture) {
     if (dailyRooms.length === 0) {
       try {
         dailyRooms = JSON.parse(localStorage.getItem(roomsKey) || '[]');
@@ -510,6 +537,66 @@ export class LocalDB implements DBInterface {
     }
     if (!existingHotelsStr || existingCount < 3) {
       localStorage.setItem('global_hotels', JSON.stringify(DEFAULT_HOTELS));
+    }
+
+    // Cleanup any future date data (after today) from localStorage
+    try {
+      const todayStr = getTodayDateString();
+      const keysToRemove: string[] = [];
+      
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        
+        // Matches keys like: ks1_hotel_clean_rooms_YYYY-MM-DD or ks1_active_staff_YYYY-MM-DD
+        const roomsMatch = key.match(/^([a-zA-Z0-9]+)_hotel_clean_rooms_(\d{4}-\d{2}-\d{2})$/);
+        const staffMatch = key.match(/^([a-zA-Z0-9]+)_active_staff_(\d{4}-\d{2}-\d{2})$/);
+        
+        if (roomsMatch) {
+          const dateStr = roomsMatch[2];
+          if (dateStr > todayStr) {
+            keysToRemove.push(key);
+          }
+        } else if (staffMatch) {
+          const dateStr = staffMatch[2];
+          if (dateStr > todayStr) {
+            keysToRemove.push(key);
+          }
+        }
+      }
+      
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      
+      // Also filter out future logs from all hotel logs
+      const hotelsStr = localStorage.getItem('global_hotels') || '[]';
+      let hotelsList: any[] = [];
+      try {
+        hotelsList = JSON.parse(hotelsStr);
+      } catch (e) {}
+      
+      const hotelIds = new Set<string>(['ks1', 'ks2']);
+      hotelsList.forEach((h: any) => {
+        if (h && h.id) hotelIds.add(h.id);
+      });
+      
+      hotelIds.forEach(hId => {
+        const logsKey = `${hId}_hotel_clean_logs`;
+        const logsStr = localStorage.getItem(logsKey);
+        if (logsStr) {
+          try {
+            const logs: CleaningLog[] = JSON.parse(logsStr);
+            const filteredLogs = logs.filter(log => {
+              const dateStr = log.endedAt.split('T')[0];
+              return dateStr <= todayStr;
+            });
+            if (filteredLogs.length !== logs.length) {
+              localStorage.setItem(logsKey, JSON.stringify(filteredLogs));
+            }
+          } catch (e) {}
+        }
+      });
+    } catch (e) {
+      console.error('Failed to cleanup future mock data:', e);
     }
     
     // Global User initialization and migration

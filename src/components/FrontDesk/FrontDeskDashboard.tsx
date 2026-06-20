@@ -3,9 +3,29 @@ import { useApp } from '../Common/AppContext';
 import { getTranslation } from '../../i18n/translations';
 import { db } from '../../db/firebaseDB';
 import type { Room, User, CleaningLog } from '../../db/dbInterface';
-import { Search, Volume2, VolumeX, CheckCircle2, Info, Play, CheckCircle, AlertTriangle, Hotel, Users, LayoutDashboard, Clock, Building, Sun, Moon, LogOut, User as UserIcon } from 'lucide-react';
+import { Search, Volume2, VolumeX, CheckCircle2, Info, Play, CheckCircle, AlertTriangle, Hotel, Users, LayoutDashboard, Clock, Building, Sun, Moon, LogOut, User as UserIcon, LayoutGrid, List } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
+const getVisiblePages = (current: number, total: number) => {
+  if (total <= 5) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const pages: (number | string)[] = [];
+  pages.push(1);
+  if (current > 3) {
+    pages.push('...');
+  }
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let i = start; i <= end; i++) {
+    pages.push(i);
+  }
+  if (current < total - 2) {
+    pages.push('...');
+  }
+  pages.push(total);
+  return pages;
+};
 
 export const FrontDeskDashboard: React.FC = () => {
   const { currentUser, language, addToast, triggerSoundAlert, activeDate, logout, darkMode, toggleDarkMode, setLanguage } = useApp();
@@ -52,13 +72,55 @@ export const FrontDeskDashboard: React.FC = () => {
   const [cleaners, setCleaners] = useState<User[]>([]);
   const [activeStaffIds, setActiveStaffIds] = useState<string[]>([]);
   const [allHotelUsers, setAllHotelUsers] = useState<User[]>([]);
-  const [staffViewMode, setStaffViewMode] = useState<'today' | 'total'>('today');
+  const [staffViewMode, setStaffViewMode] = useState<'today' | 'total'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlVal = params.get('staffViewMode');
+    if (urlVal === 'today' || urlVal === 'total') return urlVal;
+    const localVal = localStorage.getItem('hotel_clean_staff_view_mode');
+    if (localVal === 'today' || localVal === 'total') return localVal;
+    return 'today';
+  });
+  const [staffSortField, setStaffSortField] = useState<'name' | 'username' | 'status' | 'role'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlVal = params.get('staffSortField');
+    const validFields = ['name', 'username', 'status', 'role'];
+    if (urlVal && validFields.includes(urlVal)) return urlVal as any;
+    const localVal = localStorage.getItem('hotel_clean_staff_sort_field');
+    if (localVal && validFields.includes(localVal)) return localVal as any;
+    return 'name';
+  });
+  const [staffSortOrder, setStaffSortOrder] = useState<'asc' | 'desc'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlVal = params.get('staffSortOrder');
+    if (urlVal === 'asc' || urlVal === 'desc') return urlVal;
+    const localVal = localStorage.getItem('hotel_clean_staff_sort_order');
+    if (localVal === 'asc' || localVal === 'desc') return localVal;
+    return 'asc';
+  });
+  const [staffPage, setStaffPage] = useState<number>(1);
+  const [staffLayout, setStaffLayout] = useState<'grid' | 'list'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlVal = params.get('staffLayout');
+    if (urlVal === 'grid' || urlVal === 'list') return urlVal;
+    const localVal = localStorage.getItem('hotel_clean_staff_layout');
+    if (localVal === 'grid' || localVal === 'list') return localVal;
+    return 'grid';
+  });
   const [activeTab, setActiveTab] = useState<'stats' | 'grid' | 'staff'>(() => {
     const queryTab = new URLSearchParams(window.location.search).get('tab');
     const isKacho = currentUser?.role === 'kacho';
     const defaultTab = isKacho ? 'stats' : 'grid';
     const validTabs = ['stats', 'grid', 'staff'];
     return (queryTab && validTabs.includes(queryTab)) ? (queryTab as 'stats' | 'grid' | 'staff') : defaultTab;
+  });
+
+  const [gridMode, setGridMode] = useState<'work' | 'setup'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlVal = params.get('gridMode');
+    if (urlVal === 'work' || urlVal === 'setup') return urlVal;
+    const localVal = localStorage.getItem('hotel_clean_grid_mode');
+    if (localVal === 'work' || localVal === 'setup') return localVal;
+    return 'work';
   });
 
   const getCleanerActivity = (cleanerId: string) => {
@@ -73,11 +135,47 @@ export const FrontDeskDashboard: React.FC = () => {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    let changed = false;
+
     if (params.get('tab') !== activeTab) {
       params.set('tab', activeTab);
-      window.history.pushState(null, '', `${window.location.pathname}?${params.toString()}`);
+      changed = true;
     }
-  }, [activeTab]);
+
+    if (params.get('staffLayout') !== staffLayout) {
+      params.set('staffLayout', staffLayout);
+      localStorage.setItem('hotel_clean_staff_layout', staffLayout);
+      changed = true;
+    }
+
+    if (params.get('staffSortField') !== staffSortField) {
+      params.set('staffSortField', staffSortField);
+      localStorage.setItem('hotel_clean_staff_sort_field', staffSortField);
+      changed = true;
+    }
+
+    if (params.get('staffSortOrder') !== staffSortOrder) {
+      params.set('staffSortOrder', staffSortOrder);
+      localStorage.setItem('hotel_clean_staff_sort_order', staffSortOrder);
+      changed = true;
+    }
+
+    if (params.get('staffViewMode') !== staffViewMode) {
+      params.set('staffViewMode', staffViewMode);
+      localStorage.setItem('hotel_clean_staff_view_mode', staffViewMode);
+      changed = true;
+    }
+
+    if (params.get('gridMode') !== gridMode) {
+      params.set('gridMode', gridMode);
+      localStorage.setItem('hotel_clean_grid_mode', gridMode);
+      changed = true;
+    }
+
+    if (changed) {
+      window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
+    }
+  }, [activeTab, staffLayout, staffSortField, staffSortOrder, staffViewMode, gridMode]);
 
 
 
@@ -109,10 +207,41 @@ export const FrontDeskDashboard: React.FC = () => {
     fetchStaffData();
   }, [activeDate]);
 
-  const handleStaffToggle = async (userId: string) => {
+  // daily staff search state
+  const [dailyStaffSearchTerm, setDailyStaffSearchTerm] = useState<string>('');
+
+  // staff toggle modal state
+  const [confirmStaffModal, setConfirmStaffModal] = useState<{
+    open: boolean;
+    userId: string;
+    cleanerName: string;
+    isActive: boolean;
+  }>({
+    open: false,
+    userId: '',
+    cleanerName: '',
+    isActive: false
+  });
+
+  const handleStaffToggle = (userId: string) => {
+    const cleaner = cleaners.find(c => c.id === userId);
+    if (!cleaner) return;
+
+    const isActive = activeStaffIds.includes(userId);
+    setConfirmStaffModal({
+      open: true,
+      userId,
+      cleanerName: cleaner.name,
+      isActive
+    });
+  };
+
+  const executeStaffToggle = async () => {
+    const { userId, isActive } = confirmStaffModal;
+    setConfirmStaffModal(prev => ({ ...prev, open: false }));
     try {
       let nextIds;
-      if (activeStaffIds.includes(userId)) {
+      if (isActive) {
         nextIds = activeStaffIds.filter(id => id !== userId);
       } else {
         nextIds = [...activeStaffIds, userId];
@@ -128,8 +257,15 @@ export const FrontDeskDashboard: React.FC = () => {
         'success'
       );
     } catch (e) {
-      console.error(e);
-      addToast('Error updating staff assignment', 'warning');
+      console.error('Failed to toggle staff status:', e);
+      addToast(
+        language === 'vi' 
+          ? 'Không thể cập nhật trạng thái nhân sự' 
+          : language === 'ja'
+            ? 'スタッフ出勤状態の更新に失敗しました'
+            : 'Failed to update staff status',
+        'warning'
+      );
     }
   };
 
@@ -542,6 +678,80 @@ export const FrontDeskDashboard: React.FC = () => {
       cleanerErrorLeaderboard
     };
   }, [rooms, logs, activeStaffIds, activeDate]);
+
+  const sortedTodayCleaners = useMemo(() => {
+    const filtered = cleaners.filter(cleaner => {
+      const isActive = activeStaffIds.includes(cleaner.id);
+      const matchesSearch = cleaner.name.toLowerCase().includes(dailyStaffSearchTerm.toLowerCase()) ||
+        cleaner.username.toLowerCase().includes(dailyStaffSearchTerm.toLowerCase());
+      if (!matchesSearch) return false;
+      if (currentUser?.role === 'front_desk') {
+        return isActive;
+      }
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+      if (staffSortField === 'name') {
+        comparison = a.name.localeCompare(b.name, language === 'vi' ? 'vi' : 'ja');
+      } else if (staffSortField === 'username') {
+        comparison = (a.username || '').localeCompare(b.username || '');
+      } else if (staffSortField === 'status') {
+        const aActive = activeStaffIds.includes(a.id) ? 1 : 0;
+        const bActive = activeStaffIds.includes(b.id) ? 1 : 0;
+        comparison = bActive - aActive;
+      }
+      return staffSortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [cleaners, dailyStaffSearchTerm, staffSortField, staffSortOrder, activeStaffIds, language, currentUser]);
+
+  const sortedTotalUsers = useMemo(() => {
+    const filtered = allHotelUsers.filter(user => 
+      user.name.toLowerCase().includes(dailyStaffSearchTerm.toLowerCase()) ||
+      (user.username || '').toLowerCase().includes(dailyStaffSearchTerm.toLowerCase())
+    );
+
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+      if (staffSortField === 'name') {
+        comparison = a.name.localeCompare(b.name, language === 'vi' ? 'vi' : 'ja');
+      } else if (staffSortField === 'username') {
+        comparison = (a.username || '').localeCompare(b.username || '');
+      } else if (staffSortField === 'role') {
+        comparison = (a.role || '').localeCompare(b.role || '');
+      } else if (staffSortField === 'status') {
+        const aActive = activeStaffIds.includes(a.id) ? 1 : 0;
+        const bActive = activeStaffIds.includes(b.id) ? 1 : 0;
+        comparison = bActive - aActive;
+      }
+      return staffSortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [allHotelUsers, dailyStaffSearchTerm, staffSortField, staffSortOrder, activeStaffIds, language]);
+
+  const paginatedTodayCleaners = useMemo(() => {
+    const itemsPerPage = 12;
+    const startIdx = (staffPage - 1) * itemsPerPage;
+    return sortedTodayCleaners.slice(startIdx, startIdx + itemsPerPage);
+  }, [sortedTodayCleaners, staffPage]);
+
+  const paginatedTotalUsers = useMemo(() => {
+    const itemsPerPage = 12;
+    const startIdx = (staffPage - 1) * itemsPerPage;
+    return sortedTotalUsers.slice(startIdx, startIdx + itemsPerPage);
+  }, [sortedTotalUsers, staffPage]);
+
+  const totalTodayPages = useMemo(() => {
+    return Math.ceil(sortedTodayCleaners.length / 12) || 1;
+  }, [sortedTodayCleaners]);
+
+  const totalTotalPages = useMemo(() => {
+    return Math.ceil(sortedTotalUsers.length / 12) || 1;
+  }, [sortedTotalUsers]);
+
+  useEffect(() => {
+    setStaffPage(1);
+  }, [dailyStaffSearchTerm, staffViewMode, staffSortField, staffSortOrder]);
 
   return (
     <div className="main-content">
@@ -1306,6 +1516,45 @@ export const FrontDeskDashboard: React.FC = () => {
                 <option value="maintenance">{getTranslation(language, 'statusMaintenance')}</option>
               </select>
             </div>
+
+            {/* Mode Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Chế độ:' : language === 'ja' ? 'モード:' : 'Mode:'}</label>
+              <div style={{ display: 'flex', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                <button
+                  type="button"
+                  onClick={() => setGridMode('work')}
+                  style={{
+                    padding: '0.4rem 0.75rem',
+                    border: 'none',
+                    backgroundColor: gridMode === 'work' ? 'var(--primary-color)' : 'transparent',
+                    color: gridMode === 'work' ? '#ffffff' : 'inherit',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    transition: 'all var(--transition-fast)'
+                  }}
+                >
+                  💼 {language === 'vi' ? 'Làm việc' : language === 'ja' ? '通常業務' : 'Work'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGridMode('setup')}
+                  style={{
+                    padding: '0.4rem 0.75rem',
+                    border: 'none',
+                    backgroundColor: gridMode === 'setup' ? 'var(--primary-color)' : 'transparent',
+                    color: gridMode === 'setup' ? '#ffffff' : 'inherit',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.8rem',
+                    transition: 'all var(--transition-fast)'
+                  }}
+                >
+                  ⚙️ {language === 'vi' ? 'Cài đặt' : language === 'ja' ? '客室設定' : 'Setup'}
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Rooms Floor Grid */}
@@ -1459,112 +1708,288 @@ export const FrontDeskDashboard: React.FC = () => {
             </div>
           </div>
           
+          {/* Search and Sort controls */}
+          <div style={{ marginBottom: '1.25rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ position: 'relative', flex: 1, maxWidth: '400px', minWidth: '260px' }}>
+              <input
+                type="text"
+                className="form-input"
+                style={{ paddingLeft: '2.25rem', paddingTop: '0.4rem', paddingBottom: '0.4rem', fontSize: '0.85rem' }}
+                placeholder={language === 'vi' ? 'Tìm tên hoặc mã nhân viên...' : language === 'ja' ? 'スタッフ名・ID検索...' : 'Search staff name or ID...'}
+                value={dailyStaffSearchTerm}
+                onChange={(e) => setDailyStaffSearchTerm(e.target.value)}
+              />
+              <span style={{ position: 'absolute', left: '10px', top: '8px', opacity: 0.5, fontSize: '0.85rem' }}>🔍</span>
+              {dailyStaffSearchTerm && (
+                <button 
+                  onClick={() => setDailyStaffSearchTerm('')}
+                  style={{ position: 'absolute', right: '10px', top: '8px', border: 'none', background: 'transparent', cursor: 'pointer', opacity: 0.5, fontSize: '0.85rem', fontWeight: 'bold' }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {/* Sorting dropdown */}
+              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Sắp xếp:' : language === 'ja' ? '並び替え:' : 'Sort by:'}</label>
+              <select
+                className="form-input"
+                style={{ width: '130px', padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                value={staffSortField}
+                onChange={(e) => setStaffSortField(e.target.value as any)}
+              >
+                <option value="name">{language === 'vi' ? 'Tên' : language === 'ja' ? '名前' : 'Name'}</option>
+                <option value="username">{language === 'vi' ? 'Mã NV' : language === 'ja' ? 'ID' : 'ID'}</option>
+                {staffViewMode === 'today' ? (
+                  <option value="status">{language === 'vi' ? 'Trạng thái' : language === 'ja' ? '出勤状態' : 'Assignment'}</option>
+                ) : (
+                  <option value="role">{language === 'vi' ? 'Vai trò' : language === 'ja' ? '役割' : 'Role'}</option>
+                )}
+              </select>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '0.45rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={() => setStaffSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                aria-label="Toggle sort order"
+              >
+                {staffSortOrder === 'asc' ? '▲' : '▼'}
+              </button>
+
+              {/* Layout switcher */}
+              <div style={{ display: 'flex', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', marginLeft: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setStaffLayout('grid')}
+                  style={{
+                    padding: '0.4rem 0.6rem',
+                    border: 'none',
+                    backgroundColor: staffLayout === 'grid' ? 'var(--primary-color)' : 'transparent',
+                    color: staffLayout === 'grid' ? '#ffffff' : 'inherit',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all var(--transition-fast)'
+                  }}
+                  title={language === 'vi' ? 'Dạng lưới' : language === 'ja' ? 'グリッド表示' : 'Grid view'}
+                >
+                  <LayoutGrid size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStaffLayout('list')}
+                  style={{
+                    padding: '0.4rem 0.6rem',
+                    border: 'none',
+                    backgroundColor: staffLayout === 'list' ? 'var(--primary-color)' : 'transparent',
+                    color: staffLayout === 'list' ? '#ffffff' : 'inherit',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all var(--transition-fast)'
+                  }}
+                  title={language === 'vi' ? 'Dạng danh sách' : language === 'ja' ? 'リスト表示' : 'List view'}
+                >
+                  <List size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+
           {staffViewMode === 'today' ? (
             cleaners.length === 0 ? (
               <p style={{ opacity: 0.6 }}>
                 {language === 'vi' ? 'Chưa có nhân viên dọn phòng nào được đăng ký trong hệ thống.' : language === 'ja' ? 'システムに出勤可能な清掃スタッフが登録されていません。' : 'No housekeeping staff registered in the system.'}
               </p>
             ) : (
-              (() => {
-                const displayedCleaners = cleaners.filter(cleaner => {
-                  const isActive = activeStaffIds.includes(cleaner.id);
-                  if (currentUser?.role === 'front_desk') {
-                    return isActive;
-                  }
-                  return true;
-                });
-
-                if (displayedCleaners.length === 0) {
-                  return (
-                    <p style={{ opacity: 0.6, padding: '1rem 0' }}>
-                      {currentUser?.role === 'front_desk'
-                        ? (language === 'vi' ? 'Chưa có nhân viên dọn phòng nào được phân công làm việc hôm nay.' : language === 'ja' ? '本日出勤予定 of 清掃スタッフは設定されていません。' : 'No housekeeping staff assigned to work today.')
-                        : (language === 'vi' ? 'Chưa có nhân viên dọn phòng nào được đăng ký trong hệ thống.' : language === 'ja' ? 'システムに出勤可能な清掃スタッフが登録されていません。' : 'No housekeeping staff registered in the system.')
-                      }
-                    </p>
-                  );
-                }
-
-                return (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
-                    {displayedCleaners.map(cleaner => {
-                      const isActive = activeStaffIds.includes(cleaner.id);
-                      const isEditable = currentUser?.role === 'checka' || currentUser?.role === 'admin' || currentUser?.role === 'kacho';
-                      const { activeRooms, todayLogs } = getCleanerActivity(cleaner.id);
-                      return (
-                        <div 
-                          key={cleaner.id}
-                          onClick={isEditable ? () => handleStaffToggle(cleaner.id) : undefined}
-                          style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'space-between',
-                            backgroundColor: isActive ? 'rgba(16, 185, 129, 0.06)' : 'rgba(0,0,0,0.02)',
-                            border: isActive ? '1px solid var(--status-clean)' : '1px solid rgba(0,0,0,0.05)',
-                            padding: '1rem',
-                            borderRadius: 'var(--radius-md)',
-                            cursor: isEditable ? 'pointer' : 'default',
-                            opacity: !isEditable && !isActive ? 0.5 : 1, // Dim unassigned cleaners for read-only view
-                            transition: 'all var(--transition-fast)',
-                            userSelect: 'none'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <span style={{ fontSize: '1.5rem' }}>👤</span>
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{cleaner.name}</div>
-                              <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '0.1rem' }}>
-                                {language === 'vi' ? 'Mã NV' : language === 'ja' ? 'スタッフID' : 'ID'}: {cleaner.username}
-                              </div>
-                              {isActive && (
-                                <div style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                  {activeRooms.length > 0 && (
-                                    <span style={{ color: 'var(--status-cleaning)', fontWeight: 600 }}>
-                                      🧹 {language === 'vi' ? 'Đang dọn: ' : language === 'ja' ? '清掃中: ' : 'Cleaning: '}
-                                      {activeRooms.map(r => r.roomNumber).join(', ')}
-                                    </span>
-                                  )}
-                                  {todayLogs.length > 0 && (
-                                    <span style={{ color: 'var(--status-clean)', fontWeight: 600 }}>
-                                      ✓ {language === 'vi' ? `Đã dọn xong: ${todayLogs.length} phòng` : language === 'ja' ? `完了: ${todayLogs.length}部屋` : `Cleaned: ${todayLogs.length} rooms`}
-                                      <span style={{ fontWeight: 400, opacity: 0.7, fontSize: '0.7rem', marginLeft: '0.25rem' }}>
-                                        ({todayLogs.map(l => l.roomNumber).join(', ')})
-                                      </span>
-                                    </span>
-                                  )}
-                                  {activeRooms.length === 0 && todayLogs.length === 0 && (
-                                    <span style={{ color: '#64748b', fontStyle: 'italic' }}>
-                                      💤 {language === 'vi' ? 'Đang sẵn sàng' : language === 'ja' ? '待機中' : 'Ready'}
-                                    </span>
-                                  )}
+              <>
+                {sortedTodayCleaners.length === 0 ? (
+                  <p style={{ opacity: 0.6, padding: '1rem 0' }}>
+                    {currentUser?.role === 'front_desk'
+                      ? (language === 'vi' ? 'Chưa có nhân viên dọn phòng nào được phân công làm việc hôm nay.' : language === 'ja' ? '本日出勤予定の清掃スタッフは設定されていません。' : 'No housekeeping staff assigned to work today.')
+                      : (language === 'vi' ? 'Không tìm thấy nhân viên phù hợp.' : language === 'ja' ? '一致するスタッフが見つかりません。' : 'No matching staff found.')
+                    }
+                  </p>
+                ) : (
+                  <>
+                    <div style={staffLayout === 'grid' 
+                      ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem', marginTop: '1rem' }
+                      : { display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }
+                    }>
+                      {paginatedTodayCleaners.map(cleaner => {
+                        const isActive = activeStaffIds.includes(cleaner.id);
+                        const isEditable = currentUser?.role === 'checka' || currentUser?.role === 'admin' || currentUser?.role === 'kacho';
+                        const { activeRooms, todayLogs } = getCleanerActivity(cleaner.id);
+                        return (
+                          <div 
+                            key={cleaner.id}
+                            onClick={isEditable ? () => handleStaffToggle(cleaner.id) : undefined}
+                            style={staffLayout === 'grid' ? { 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'space-between',
+                              backgroundColor: isActive ? 'rgba(16, 185, 129, 0.06)' : 'rgba(0,0,0,0.02)',
+                              border: isActive ? '1px solid var(--status-clean)' : '1px solid rgba(0,0,0,0.05)',
+                              padding: '1rem',
+                              borderRadius: 'var(--radius-md)',
+                              cursor: isEditable ? 'pointer' : 'default',
+                              opacity: !isEditable && !isActive ? 0.5 : 1, // Dim unassigned cleaners for read-only view
+                              transition: 'all var(--transition-fast)',
+                              userSelect: 'none'
+                            } : {
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'space-between',
+                              backgroundColor: isActive ? 'rgba(16, 185, 129, 0.06)' : 'rgba(0,0,0,0.02)',
+                              border: isActive ? '1px solid var(--status-clean)' : '1px solid rgba(0,0,0,0.05)',
+                              padding: '0.75rem 1.25rem',
+                              borderRadius: 'var(--radius-md)',
+                              cursor: isEditable ? 'pointer' : 'default',
+                              opacity: !isEditable && !isActive ? 0.5 : 1,
+                              transition: 'all var(--transition-fast)',
+                              userSelect: 'none',
+                              width: '100%',
+                              flexWrap: 'wrap',
+                              gap: '1rem'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: staffLayout === 'grid' ? 'none' : '1', minWidth: staffLayout === 'grid' ? 'none' : '200px' }}>
+                              <span style={{ fontSize: '1.5rem' }}>👤</span>
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{cleaner.name}</div>
+                                <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '0.1rem' }}>
+                                  {language === 'vi' ? 'Mã NV' : language === 'ja' ? 'スタッフID' : 'ID'}: {cleaner.username}
                                 </div>
-                              )}
+                                {isActive && staffLayout === 'grid' && (
+                                  <div style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                    {activeRooms.length > 0 && (
+                                      <span style={{ color: 'var(--status-cleaning)', fontWeight: 600 }}>
+                                        🧹 {language === 'vi' ? 'Đang dọn: ' : language === 'ja' ? '清掃中: ' : 'Cleaning: '}
+                                        {activeRooms.map(r => r.roomNumber).join(', ')}
+                                      </span>
+                                    )}
+                                    {todayLogs.length > 0 && (
+                                      <span style={{ color: 'var(--status-clean)', fontWeight: 600 }}>
+                                        ✓ {language === 'vi' ? `Đã dọn xong: ${todayLogs.length} phòng` : language === 'ja' ? `完了: ${todayLogs.length}部屋` : `Cleaned: ${todayLogs.length} rooms`}
+                                        <span style={{ fontWeight: 400, opacity: 0.7, fontSize: '0.7rem', marginLeft: '0.25rem' }}>
+                                          ({todayLogs.map(l => l.roomNumber).join(', ')})
+                                        </span>
+                                      </span>
+                                    )}
+                                    {activeRooms.length === 0 && todayLogs.length === 0 && (
+                                      <span style={{ color: '#64748b', fontStyle: 'italic' }}>
+                                        💤 {language === 'vi' ? 'Đang sẵn sàng' : language === 'ja' ? '待機中' : 'Ready'}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {isActive && staffLayout === 'list' && (
+                              <div style={{ fontSize: '0.75rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', flex: 2, minWidth: '240px', alignItems: 'center' }}>
+                                {activeRooms.length > 0 && (
+                                  <span style={{ color: 'var(--status-cleaning)', fontWeight: 600, backgroundColor: 'rgba(249, 115, 22, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(249, 115, 22, 0.15)' }}>
+                                    🧹 {language === 'vi' ? 'Đang dọn: ' : language === 'ja' ? '清掃中: ' : 'Cleaning: '}
+                                    {activeRooms.map(r => r.roomNumber).join(', ')}
+                                  </span>
+                                )}
+                                {todayLogs.length > 0 && (
+                                  <span style={{ color: 'var(--status-clean)', fontWeight: 600, backgroundColor: 'rgba(16, 185, 129, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
+                                    ✓ {language === 'vi' ? `Đã dọn xong: ${todayLogs.length} phòng` : language === 'ja' ? `完了: ${todayLogs.length}部屋` : `Cleaned: ${todayLogs.length} rooms`}
+                                    <span style={{ fontWeight: 400, opacity: 0.7, fontSize: '0.7rem', marginLeft: '0.25rem' }}>
+                                      ({todayLogs.map(l => l.roomNumber).join(', ')})
+                                    </span>
+                                  </span>
+                                )}
+                                {activeRooms.length === 0 && todayLogs.length === 0 && (
+                                  <span style={{ color: '#64748b', fontStyle: 'italic', backgroundColor: 'rgba(100, 116, 139, 0.08)', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid rgba(100, 116, 139, 0.15)' }}>
+                                    💤 {language === 'vi' ? 'Đang sẵn sàng' : language === 'ja' ? '待機中' : 'Ready'}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            
+                            <div style={{ 
+                              width: '24px', 
+                              height: '24px', 
+                              borderRadius: '50%', 
+                              border: '2px solid',
+                              borderColor: isActive ? 'var(--status-clean)' : 'rgba(0,0,0,0.2)',
+                              backgroundColor: isActive ? 'var(--status-clean)' : 'transparent',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'white',
+                              fontSize: '0.75rem',
+                              fontWeight: 'bold',
+                              transition: 'all var(--transition-fast)'
+                            }}>
+                              {isActive && '✓'}
                             </div>
                           </div>
-                          
-                          <div style={{ 
-                            width: '24px', 
-                            height: '24px', 
-                            borderRadius: '50%', 
-                            border: '2px solid',
-                            borderColor: isActive ? 'var(--status-clean)' : 'rgba(0,0,0,0.2)',
-                            backgroundColor: isActive ? 'var(--status-clean)' : 'transparent',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'white',
-                            fontSize: '0.75rem',
-                            fontWeight: 'bold',
-                            transition: 'all var(--transition-fast)'
-                          }}>
-                            {isActive && '✓'}
-                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Pagination for Today Cleaners */}
+                    {totalTodayPages > 1 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div style={{ fontSize: '0.85rem', opacity: 0.7 }}>
+                          {language === 'vi' 
+                            ? `Hiển thị ${(staffPage - 1) * 12 + 1}-${Math.min(staffPage * 12, sortedTodayCleaners.length)} trên tổng số ${sortedTodayCleaners.length} nhân viên` 
+                            : language === 'ja' 
+                              ? `${sortedTodayCleaners.length}人中 ${(staffPage - 1) * 12 + 1}-${Math.min(staffPage * 12, sortedTodayCleaners.length)}人表示` 
+                              : `Showing ${(staffPage - 1) * 12 + 1}-${Math.min(staffPage * 12, sortedTodayCleaners.length)} of ${sortedTodayCleaners.length} staff`}
                         </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setStaffPage(prev => Math.max(prev - 1, 1))}
+                            disabled={staffPage === 1}
+                            style={{ minWidth: '40px' }}
+                          >
+                            &laquo;
+                          </button>
+                          {getVisiblePages(staffPage, totalTodayPages).map((page, index) => {
+                            if (page === '...') {
+                              return (
+                                <span key={`ellipsis-${index}`} style={{ padding: '0.4rem 0.5rem', opacity: 0.5, fontSize: '0.85rem' }}>
+                                  ...
+                                </span>
+                              );
+                            }
+                            return (
+                              <button
+                                key={page}
+                                type="button"
+                                className={`btn btn-sm ${staffPage === page ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setStaffPage(page as number)}
+                                style={{ minWidth: '32px', fontWeight: staffPage === page ? 'bold' : 'normal' }}
+                              >
+                                {page}
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setStaffPage(prev => Math.min(prev + 1, totalTodayPages))}
+                            disabled={staffPage === totalTodayPages}
+                            style={{ minWidth: '40px' }}
+                          >
+                            &raquo;
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )
           ) : (
             /* Render total active staff directory list */
@@ -1573,85 +1998,191 @@ export const FrontDeskDashboard: React.FC = () => {
                 {language === 'vi' ? 'Chưa có nhân viên nào được đăng ký cho khách sạn này.' : language === 'ja' ? 'このホテルにスタッフが登録されていません。' : 'No staff registered for this hotel.'}
               </p>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
-                {allHotelUsers.map(user => {
-                  let roleLabel = '';
-                  let roleColor = '';
-                  let roleBg = '';
-                  if (user.role === 'admin') {
-                    roleLabel = getTranslation(language, 'roleAdmin');
-                    roleColor = '#ef4444';
-                    roleBg = 'rgba(239, 68, 68, 0.08)';
-                  } else if (user.role === 'front_desk') {
-                    roleLabel = getTranslation(language, 'roleFrontDesk');
-                    roleColor = '#3b82f6';
-                    roleBg = 'rgba(59, 130, 246, 0.08)';
-                  } else if (user.role === 'checka') {
-                    roleLabel = getTranslation(language, 'roleChecker');
-                    roleColor = '#8b5cf6';
-                    roleBg = 'rgba(139, 92, 246, 0.08)';
-                  } else if (user.role === 'kacho') {
-                    roleLabel = getTranslation(language, 'roleKacho');
-                    roleColor = '#f59e0b';
-                    roleBg = 'rgba(245, 158, 11, 0.08)';
-                  } else if (user.role === 'housekeeping') {
-                    roleLabel = getTranslation(language, 'roleHousekeeping');
-                    roleColor = '#10b981';
-                    roleBg = 'rgba(16, 185, 129, 0.08)';
-                  }
+              <>
+                {sortedTotalUsers.length === 0 ? (
+                  <p style={{ opacity: 0.6, fontStyle: 'italic', margin: '1rem 0' }}>
+                    {language === 'vi' ? 'Không tìm thấy nhân viên phù hợp.' : language === 'ja' ? '一致するスタッフが見つかりません。' : 'No matching staff found.'}
+                  </p>
+                ) : (
+                  <>
+                    <div style={staffLayout === 'grid' 
+                      ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem', marginTop: '1rem' }
+                      : { display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem' }
+                    }>
+                      {paginatedTotalUsers.map(user => {
+                        let roleLabel = '';
+                        let roleColor = '';
+                        let roleBg = '';
+                        if (user.role === 'admin') {
+                          roleLabel = getTranslation(language, 'roleAdmin');
+                          roleColor = '#ef4444';
+                          roleBg = 'rgba(239, 68, 68, 0.08)';
+                        } else if (user.role === 'front_desk') {
+                          roleLabel = getTranslation(language, 'roleFrontDesk');
+                          roleColor = '#3b82f6';
+                          roleBg = 'rgba(59, 130, 246, 0.08)';
+                        } else if (user.role === 'checka') {
+                          roleLabel = getTranslation(language, 'roleChecker');
+                          roleColor = '#8b5cf6';
+                          roleBg = 'rgba(139, 92, 246, 0.08)';
+                        } else if (user.role === 'kacho') {
+                          roleLabel = getTranslation(language, 'roleKacho');
+                          roleColor = '#f59e0b';
+                          roleBg = 'rgba(245, 158, 11, 0.08)';
+                        } else if (user.role === 'housekeeping') {
+                          roleLabel = getTranslation(language, 'roleHousekeeping');
+                          roleColor = '#10b981';
+                          roleBg = 'rgba(16, 185, 129, 0.08)';
+                        }
 
-                  return (
-                    <div 
-                      key={user.id}
-                      style={{ 
-                        display: 'flex', 
-                        flexDirection: 'column',
-                        backgroundColor: 'rgba(0,0,0,0.02)',
-                        border: '1px solid rgba(0,0,0,0.05)',
-                        padding: '1.25rem',
-                        borderRadius: 'var(--radius-md)',
-                        position: 'relative',
-                        transition: 'all var(--transition-fast)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                        <span style={{ fontSize: '1.75rem' }}>👤</span>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '1rem' }}>{user.name}</div>
-                          <div style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '0.1rem' }}>
-                            {language === 'vi' ? 'Mã NV' : language === 'ja' ? 'スタッフID' : 'ID'}: {user.username}
+                        const isUserActiveToday = activeStaffIds.includes(user.id);
+
+                        return (
+                          <div 
+                            key={user.id}
+                            style={staffLayout === 'grid' ? { 
+                              display: 'flex', 
+                              flexDirection: 'column',
+                              backgroundColor: 'rgba(0,0,0,0.02)',
+                              border: '1px solid rgba(0,0,0,0.05)',
+                              padding: '1.25rem',
+                              borderRadius: 'var(--radius-md)',
+                              position: 'relative',
+                              transition: 'all var(--transition-fast)'
+                            } : {
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'space-between',
+                              backgroundColor: 'rgba(0,0,0,0.02)',
+                              border: '1px solid rgba(0,0,0,0.05)',
+                              padding: '0.75rem 1.25rem',
+                              borderRadius: 'var(--radius-md)',
+                              position: 'relative',
+                              transition: 'all var(--transition-fast)',
+                              width: '100%',
+                              flexWrap: 'wrap',
+                              gap: '1rem'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: staffLayout === 'grid' ? '0.75rem' : '0', flex: staffLayout === 'grid' ? 'none' : '1', minWidth: staffLayout === 'grid' ? 'none' : '200px' }}>
+                              <span style={{ fontSize: staffLayout === 'grid' ? '1.75rem' : '1.5rem' }}>👤</span>
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: staffLayout === 'grid' ? '1rem' : '0.95rem' }}>{user.name}</div>
+                                <div style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '0.1rem' }}>
+                                  {language === 'vi' ? 'Mã NV' : language === 'ja' ? 'スタッフID' : 'ID'}: {user.username}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div style={staffLayout === 'grid' ? { 
+                              display: 'flex', 
+                              gap: '0.5rem', 
+                              flexWrap: 'wrap', 
+                              marginTop: 'auto' 
+                            } : {
+                              display: 'flex', 
+                              gap: '0.5rem', 
+                              flexWrap: 'wrap', 
+                              alignItems: 'center', 
+                              flex: 2, 
+                              minWidth: '240px'
+                            }}>
+                              <span style={{ 
+                                fontSize: '0.75rem', 
+                                fontWeight: 600, 
+                                color: roleColor, 
+                                backgroundColor: roleBg,
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '4px',
+                                border: `1px solid ${roleColor}25`
+                              }}>
+                                {roleLabel}
+                              </span>
+                              <span style={{ 
+                                fontSize: '0.75rem', 
+                                fontWeight: 600, 
+                                color: 'var(--status-clean)', 
+                                backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '4px',
+                                border: '1px solid rgba(16, 185, 129, 0.15)'
+                              }}>
+                                {language === 'vi' ? 'Đang làm việc' : language === 'ja' ? '在籍' : 'Active'}
+                              </span>
+                              {isUserActiveToday && (
+                                <span style={{ 
+                                  fontSize: '0.75rem', 
+                                  fontWeight: 600, 
+                                  color: 'var(--status-cleaning)', 
+                                  backgroundColor: 'rgba(249, 115, 22, 0.08)',
+                                  padding: '0.2rem 0.5rem',
+                                  borderRadius: '4px',
+                                  border: '1px solid rgba(249, 115, 22, 0.15)'
+                                }}>
+                                  ⚡ {language === 'vi' ? 'Làm hôm nay' : language === 'ja' ? '本日出勤' : 'Duty Today'}
+                                </span>
+                              )}
+                            </div>
                           </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Pagination for Total Users */}
+                    {totalTotalPages > 1 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div style={{ fontSize: '0.85rem', opacity: 0.7 }}>
+                          {language === 'vi' 
+                            ? `Hiển thị ${(staffPage - 1) * 12 + 1}-${Math.min(staffPage * 12, sortedTotalUsers.length)} trên tổng số ${sortedTotalUsers.length} nhân sự` 
+                            : language === 'ja' 
+                              ? `${sortedTotalUsers.length}人中 ${(staffPage - 1) * 12 + 1}-${Math.min(staffPage * 12, sortedTotalUsers.length)}人表示` 
+                              : `Showing ${(staffPage - 1) * 12 + 1}-${Math.min(staffPage * 12, sortedTotalUsers.length)} of ${sortedTotalUsers.length} staff`}
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setStaffPage(prev => Math.max(prev - 1, 1))}
+                            disabled={staffPage === 1}
+                            style={{ minWidth: '40px' }}
+                          >
+                            &laquo;
+                          </button>
+                          {getVisiblePages(staffPage, totalTotalPages).map((page, index) => {
+                            if (page === '...') {
+                              return (
+                                <span key={`ellipsis-${index}`} style={{ padding: '0.4rem 0.5rem', opacity: 0.5, fontSize: '0.85rem' }}>
+                                  ...
+                                </span>
+                              );
+                            }
+                            return (
+                              <button
+                                key={page}
+                                type="button"
+                                className={`btn btn-sm ${staffPage === page ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setStaffPage(page as number)}
+                                style={{ minWidth: '32px', fontWeight: staffPage === page ? 'bold' : 'normal' }}
+                              >
+                                {page}
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setStaffPage(prev => Math.min(prev + 1, totalTotalPages))}
+                            disabled={staffPage === totalTotalPages}
+                            style={{ minWidth: '40px' }}
+                          >
+                            &raquo;
+                          </button>
                         </div>
                       </div>
-                      
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: 'auto' }}>
-                        <span style={{ 
-                          fontSize: '0.75rem', 
-                          fontWeight: 600, 
-                          color: roleColor, 
-                          backgroundColor: roleBg,
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '4px',
-                          border: `1px solid ${roleColor}25`
-                        }}>
-                          {roleLabel}
-                        </span>
-                        <span style={{ 
-                          fontSize: '0.75rem', 
-                          fontWeight: 600, 
-                          color: 'var(--status-clean)', 
-                          backgroundColor: 'rgba(16, 185, 129, 0.08)',
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '4px',
-                          border: '1px solid rgba(16, 185, 129, 0.15)'
-                        }}>
-                          {language === 'vi' ? 'Đang làm việc' : language === 'ja' ? '在籍' : 'Active'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    )}
+                  </>
+                )}
+              </>
             )
           )}
 
@@ -1666,7 +2197,7 @@ export const FrontDeskDashboard: React.FC = () => {
               language === 'vi' 
                 ? '* Lưu ý: Chỉ những nhân viên được chọn tại đây mới có thể đăng nhập để thao tác dọn phòng trong ngày này.' 
                 : language === 'ja'
-                  ? '※ 注意: ここで選択されたスタッフのみが、指定した日付にログインして清掃作業を行えます。' 
+                  ? '※ 注意: ここで選択されたスタッフのみが,指定した日付にログインして清掃作業を行えます。' 
                   : '* Note: Only cleaners selected here will be permitted to log in to perform tasks on this date.'
             )}
           </p>
@@ -1680,211 +2211,252 @@ export const FrontDeskDashboard: React.FC = () => {
         <div className="modal-overlay">
           <div className="modal-content glass-panel" style={{ maxWidth: '440px' }}>
             <h3 className="modal-title" style={{ fontSize: '1.25rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              ⚙️ {language === 'vi' ? `Thiết lập phòng ${selectedRoom.roomNumber}` : language === 'ja' ? `客室 ${selectedRoom.roomNumber} 設定` : `Setup Room ${selectedRoom.roomNumber}`}
+              {gridMode === 'setup' ? '⚙️' : '🔍'} {gridMode === 'setup'
+                ? (language === 'vi' ? `Thiết lập phòng ${selectedRoom.roomNumber}` : language === 'ja' ? `客室 ${selectedRoom.roomNumber} 設定` : `Setup Room ${selectedRoom.roomNumber}`)
+                : (language === 'vi' ? `Chi tiết kiểm phòng ${selectedRoom.roomNumber}` : language === 'ja' ? `客室 ${selectedRoom.roomNumber} 検査詳細` : `Room Inspection Details ${selectedRoom.roomNumber}`)}
             </h3>
             <p style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '-0.5rem', marginBottom: '1rem' }}>
               {selectedRoom.type} - {selectedRoom.floor}F
             </p>
 
-            {/* Quick Actions Panel */}
-            <div style={{ marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.08)', paddingBottom: '1rem' }}>
-              <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-                ⚡ {language === 'vi' ? 'Thiết lập nhanh' : language === 'ja' ? 'クイック設定' : 'Quick Actions'}
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  style={{
-                    backgroundColor: setupForm.status === 'dirty' && !setupForm.isStay ? 'var(--status-dirty)' : 'rgba(0,0,0,0.03)',
-                    color: setupForm.status === 'dirty' && !setupForm.isStay ? '#0f172a' : 'inherit',
-                    border: '1px solid rgba(0,0,0,0.05)',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    padding: '0.5rem'
-                  }}
-                  onClick={() => setSetupForm({ ...setupForm, status: 'dirty', isStay: false })}
-                >
-                  🚪 {language === 'vi' ? 'Khách OUT (Cần dọn)' : language === 'ja' ? '客アウト (要清掃)' : 'Guest OUT (Dirty)'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  style={{
-                    backgroundColor: setupForm.status === 'dirty' && setupForm.isStay ? 'var(--status-dirty)' : 'rgba(0,0,0,0.03)',
-                    color: setupForm.status === 'dirty' && setupForm.isStay ? '#0f172a' : 'inherit',
-                    border: '1px solid rgba(0,0,0,0.05)',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    padding: '0.5rem'
-                  }}
-                  onClick={() => setSetupForm({ ...setupForm, status: 'dirty', isStay: true })}
-                >
-                  🔁 {language === 'vi' ? 'Khách STAY (Cần dọn)' : language === 'ja' ? '連泊要清掃 (Stay)' : 'Guest STAY (Dirty)'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  style={{
-                    backgroundColor: setupForm.status === 'eco' ? 'var(--status-eco)' : 'rgba(0,0,0,0.03)',
-                    color: setupForm.status === 'eco' ? '#ffffff' : 'inherit',
-                    border: '1px solid rgba(0,0,0,0.05)',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    padding: '0.5rem'
-                  }}
-                  onClick={() => setSetupForm({ ...setupForm, status: 'eco', isStay: true })}
-                >
-                  🧺 {language === 'vi' ? 'Chỉ treo đồ (Eco)' : language === 'ja' ? 'アメニティのみ (Eco)' : 'Hang items (Eco)'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  style={{
-                    backgroundColor: setupForm.status === 'dnd' ? 'var(--status-dnd)' : 'rgba(0,0,0,0.03)',
-                    color: setupForm.status === 'dnd' ? '#ffffff' : 'inherit',
-                    border: '1px solid rgba(0,0,0,0.05)',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    padding: '0.5rem'
-                  }}
-                  onClick={() => setSetupForm({ ...setupForm, status: 'dnd', isStay: true })}
-                >
-                  🚫 {language === 'vi' ? 'Không dọn dẹp (DND)' : language === 'ja' ? '起こさないで (DND)' : 'No Clean (DND)'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  style={{
-                    backgroundColor: setupForm.status === 'vacant' ? '#cbd5e1' : 'rgba(0,0,0,0.03)',
-                    color: '#0f172a',
-                    border: '1px solid rgba(0,0,0,0.05)',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    padding: '0.5rem'
-                  }}
-                  onClick={() => setSetupForm({ ...setupForm, status: 'vacant', isStay: false, guestCount: 0 })}
-                >
-                  ✨ {language === 'vi' ? 'Phòng trống (Vacant)' : language === 'ja' ? '空室 (Vacant)' : 'Vacant Room'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  style={{
-                    backgroundColor: setupForm.status === 'maintenance' ? 'var(--status-maintenance)' : 'rgba(0,0,0,0.03)',
-                    color: setupForm.status === 'maintenance' ? '#ffffff' : 'inherit',
-                    border: '1px solid rgba(0,0,0,0.05)',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    padding: '0.5rem'
-                  }}
-                  onClick={() => setSetupForm({ ...setupForm, status: 'maintenance' })}
-                >
-                  🛠️ {language === 'vi' ? 'Sửa chữa (Repair)' : language === 'ja' ? 'メンテナンス (Repair)' : 'Repair (Maint.)'}
-                </button>
-              </div>
-            </div>
-
-            {/* Status Selector */}
-            <div className="form-group">
-              <label className="form-label">{getTranslation(language, 'status')}</label>
-              <select
-                className="form-input"
-                value={setupForm.status}
-                onChange={(e) => setSetupForm({ ...setupForm, status: e.target.value as Room['status'] })}
-              >
-                <option value="vacant">{language === 'vi' ? 'Trống (Vacant) - Không màu' : language === 'ja' ? '空室 (Vacant) - 色なし' : 'Vacant - No color'}</option>
-                <option value="dirty">{getTranslation(language, 'statusDirty')}</option>
-                <option value="eco">{language === 'vi' ? 'Chỉ treo đồ (Eco) - Màu tím' : language === 'ja' ? 'ECO (吊り下げ) - 紫色' : 'Eco (Hang items) - Purple'}</option>
-                <option value="dnd">{language === 'vi' ? 'Không làm phiền (DND) - Màu xám' : language === 'ja' ? '起こさないで (DND) - 灰色' : 'Do Not Disturb (DND) - Slate'}</option>
-                <option value="occupied">{getTranslation(language, 'statusOccupied')}</option>
-                <option value="cleaning">{getTranslation(language, 'statusCleaning')}</option>
-                <option value="clean">{getTranslation(language, 'statusClean')}</option>
-                <option value="maintenance">{getTranslation(language, 'statusMaintenance')}</option>
-              </select>
-            </div>
-
-            {/* Stay checkbox */}
-            <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '1rem 0' }}>
-              <input
-                type="checkbox"
-                id="isStayCheck"
-                checked={setupForm.isStay}
-                onChange={(e) => setSetupForm({ ...setupForm, isStay: e.target.checked })}
-                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-              />
-              <label htmlFor="isStayCheck" style={{ fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer' }}>
-                {language === 'vi' ? 'Khách ở tiếp (Stay / Liên phòng)' : language === 'ja' ? '連泊 (Stay)' : 'Stay / Stay-over guest'}
-              </label>
-            </div>
-
-            {/* Expected Guest Count */}
-            <div className="form-group">
-              <label className="form-label">{language === 'vi' ? 'Số người dọn dẹp cần set' : language === 'ja' ? '清掃セット予定人数' : 'Expected guest count'}</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  style={{ width: '40px', height: '40px', padding: 0 }}
-                  onClick={() => setSetupForm({ ...setupForm, guestCount: Math.max(0, setupForm.guestCount - 1) })}
-                >
-                  -
-                </button>
-                <span style={{ fontSize: '1.25rem', fontWeight: 800, width: '30px', textAlign: 'center' }}>
-                  {setupForm.guestCount}
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  style={{ width: '40px', height: '40px', padding: 0 }}
-                  onClick={() => setSetupForm({ ...setupForm, guestCount: setupForm.guestCount + 1 })}
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
-            {/* Notes textarea */}
-            <div className="form-group" style={{ marginTop: '1rem' }}>
-              <div className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span>
-                  {setupForm.status === 'dirty' && setupForm.isStay 
-                    ? (language === 'vi' ? 'Ghi chú dọn dẹp (yêu cầu dọn dẹp ntn, làm gì...)' : language === 'ja' ? '清掃指示・メモ (清掃方法など)' : 'Stay Cleaning Directives')
-                    : setupForm.status === 'vacant'
-                      ? (language === 'vi' ? 'Yêu cầu phòng trống (Thêm/bớt đồ...)' : language === 'ja' ? '空室リクエスト (追加・回収など)' : 'Vacant Room Requests')
-                      : getTranslation(language, 'notes')}
-                </span>
-                
-                {/* Vacant Quick Actions */}
-                {setupForm.status === 'vacant' && (
-                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+            {gridMode === 'setup' ? (
+              <>
+                {/* Quick Actions Panel */}
+                <div style={{ marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.08)', paddingBottom: '1rem' }}>
+                  <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+                    ⚡ {language === 'vi' ? 'Thiết lập nhanh' : language === 'ja' ? 'クイック設定' : 'Quick Actions'}
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
                     <button
                       type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '0.15rem 0.35rem', fontSize: '0.65rem' }}
-                      onClick={() => setSetupForm(prev => ({ ...prev, notes: prev.notes ? prev.notes + '; Yêu cầu thêm đồ' : 'Yêu cầu thêm đồ' }))}
+                      className="btn btn-sm"
+                      style={{
+                        backgroundColor: setupForm.status === 'dirty' && !setupForm.isStay ? 'var(--status-dirty)' : 'rgba(0,0,0,0.03)',
+                        color: setupForm.status === 'dirty' && !setupForm.isStay ? '#0f172a' : 'inherit',
+                        border: '1px solid rgba(0,0,0,0.05)',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        padding: '0.5rem'
+                      }}
+                      onClick={() => setSetupForm({ ...setupForm, status: 'dirty', isStay: false })}
                     >
-                      ➕ {language === 'vi' ? 'Thêm đồ' : '追加'}
+                      🚪 {language === 'vi' ? 'Khách OUT (Cần dọn)' : language === 'ja' ? '客アウト (要清掃)' : 'Guest OUT (Dirty)'}
                     </button>
                     <button
                       type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '0.15rem 0.35rem', fontSize: '0.65rem' }}
-                      onClick={() => setSetupForm(prev => ({ ...prev, notes: prev.notes ? prev.notes + '; Yêu cầu bớt đồ' : 'Yêu cầu bớt đồ' }))}
+                      className="btn btn-sm"
+                      style={{
+                        backgroundColor: setupForm.status === 'dirty' && setupForm.isStay ? 'var(--status-dirty)' : 'rgba(0,0,0,0.03)',
+                        color: setupForm.status === 'dirty' && setupForm.isStay ? '#0f172a' : 'inherit',
+                        border: '1px solid rgba(0,0,0,0.05)',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        padding: '0.5rem'
+                      }}
+                      onClick={() => setSetupForm({ ...setupForm, status: 'dirty', isStay: true })}
                     >
-                      ➖ {language === 'vi' ? 'Bớt đồ' : '回収'}
+                      🔁 {language === 'vi' ? 'Khách STAY (Cần dọn)' : language === 'ja' ? '連泊要清掃 (Stay)' : 'Guest STAY (Dirty)'}
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{
+                        backgroundColor: setupForm.status === 'eco' ? 'var(--status-eco)' : 'rgba(0,0,0,0.03)',
+                        color: setupForm.status === 'eco' ? '#ffffff' : 'inherit',
+                        border: '1px solid rgba(0,0,0,0.05)',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        padding: '0.5rem'
+                      }}
+                      onClick={() => setSetupForm({ ...setupForm, status: 'eco', isStay: true })}
+                    >
+                      🧺 {language === 'vi' ? 'Chỉ treo đồ (Eco)' : language === 'ja' ? 'アメニティのみ (Eco)' : 'Hang items (Eco)'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{
+                        backgroundColor: setupForm.status === 'dnd' ? 'var(--status-dnd)' : 'rgba(0,0,0,0.03)',
+                        color: setupForm.status === 'dnd' ? '#ffffff' : 'inherit',
+                        border: '1px solid rgba(0,0,0,0.05)',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        padding: '0.5rem'
+                      }}
+                      onClick={() => setSetupForm({ ...setupForm, status: 'dnd', isStay: true })}
+                    >
+                      🚫 {language === 'vi' ? 'Không dọn dẹp (DND)' : language === 'ja' ? '起こさないで (DND)' : 'No Clean (DND)'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{
+                        backgroundColor: setupForm.status === 'vacant' ? '#cbd5e1' : 'rgba(0,0,0,0.03)',
+                        color: '#0f172a',
+                        border: '1px solid rgba(0,0,0,0.05)',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        padding: '0.5rem'
+                      }}
+                      onClick={() => setSetupForm({ ...setupForm, status: 'vacant', isStay: false, guestCount: 0 })}
+                    >
+                      ✨ {language === 'vi' ? 'Phòng trống (Vacant)' : language === 'ja' ? '空室 (Vacant)' : 'Vacant Room'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{
+                        backgroundColor: setupForm.status === 'maintenance' ? 'var(--status-maintenance)' : 'rgba(0,0,0,0.03)',
+                        color: setupForm.status === 'maintenance' ? '#ffffff' : 'inherit',
+                        border: '1px solid rgba(0,0,0,0.05)',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        padding: '0.5rem'
+                      }}
+                      onClick={() => setSetupForm({ ...setupForm, status: 'maintenance' })}
+                    >
+                      🛠️ {language === 'vi' ? 'Sửa chữa (Repair)' : language === 'ja' ? 'メンテナンス (Repair)' : 'Repair (Maint.)'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status Selector */}
+                <div className="form-group">
+                  <label className="form-label">{getTranslation(language, 'status')}</label>
+                  <select
+                    className="form-input"
+                    value={setupForm.status}
+                    onChange={(e) => setSetupForm({ ...setupForm, status: e.target.value as Room['status'] })}
+                  >
+                    <option value="vacant">{language === 'vi' ? 'Trống (Vacant) - Không màu' : language === 'ja' ? '空室 (Vacant) - 色なし' : 'Vacant - No color'}</option>
+                    <option value="dirty">{getTranslation(language, 'statusDirty')}</option>
+                    <option value="eco">{language === 'vi' ? 'Chỉ treo đồ (Eco) - Màu tím' : language === 'ja' ? 'ECO (吊り下げ) - 紫色' : 'Eco (Hang items) - Purple'}</option>
+                    <option value="dnd">{language === 'vi' ? 'Không làm phiền (DND) - Màu xám' : language === 'ja' ? '起こさないで (DND) - 灰色' : 'Do Not Disturb (DND) - Slate'}</option>
+                    <option value="occupied">{getTranslation(language, 'statusOccupied')}</option>
+                    <option value="cleaning">{getTranslation(language, 'statusCleaning')}</option>
+                    <option value="clean">{getTranslation(language, 'statusClean')}</option>
+                    <option value="maintenance">{getTranslation(language, 'statusMaintenance')}</option>
+                  </select>
+                </div>
+
+                {/* Stay checkbox */}
+                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '1rem 0' }}>
+                  <input
+                    type="checkbox"
+                    id="isStayCheck"
+                    checked={setupForm.isStay}
+                    onChange={(e) => setSetupForm({ ...setupForm, isStay: e.target.checked })}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="isStayCheck" style={{ fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer' }}>
+                    {language === 'vi' ? 'Khách ở tiếp (Stay / Liên phòng)' : language === 'ja' ? '連泊 (Stay)' : 'Stay / Stay-over guest'}
+                  </label>
+                </div>
+
+                {/* Expected Guest Count */}
+                <div className="form-group">
+                  <label className="form-label">{language === 'vi' ? 'Số người dọn dẹp cần set' : language === 'ja' ? '清掃セット予定人数' : 'Expected guest count'}</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ width: '40px', height: '40px', padding: 0 }}
+                      onClick={() => setSetupForm({ ...setupForm, guestCount: Math.max(0, setupForm.guestCount - 1) })}
+                    >
+                      -
+                    </button>
+                    <span style={{ fontSize: '1.25rem', fontWeight: 800, width: '30px', textAlign: 'center' }}>
+                      {setupForm.guestCount}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ width: '40px', height: '40px', padding: 0 }}
+                      onClick={() => setSetupForm({ ...setupForm, guestCount: setupForm.guestCount + 1 })}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Notes textarea */}
+                <div className="form-group" style={{ marginTop: '1rem' }}>
+                  <div className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span>
+                      {setupForm.status === 'dirty' && setupForm.isStay 
+                        ? (language === 'vi' ? 'Ghi chú dọn dẹp (yêu cầu dọn dẹp ntn, làm gì...)' : language === 'ja' ? '清掃指示・メモ (清掃方法など)' : 'Stay Cleaning Directives')
+                        : setupForm.status === 'vacant'
+                          ? (language === 'vi' ? 'Yêu cầu phòng trống (Thêm/bớt đồ...)' : language === 'ja' ? '空室リクエスト (追加・回収など)' : 'Vacant Room Requests')
+                          : getTranslation(language, 'notes')}
+                    </span>
+                    
+                    {/* Vacant Quick Actions */}
+                    {setupForm.status === 'vacant' && (
+                      <div style={{ display: 'flex', gap: '0.25rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.15rem 0.35rem', fontSize: '0.65rem' }}
+                          onClick={() => setSetupForm(prev => ({ ...prev, notes: prev.notes ? prev.notes + '; Yêu cầu thêm đồ' : 'Yêu cầu thêm đồ' }))}
+                        >
+                          ➕ {language === 'vi' ? 'Thêm đồ' : '追加'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0.15rem 0.35rem', fontSize: '0.65rem' }}
+                          onClick={() => setSetupForm(prev => ({ ...prev, notes: prev.notes ? prev.notes + '; Yêu cầu bớt đồ' : 'Yêu cầu bớt đồ' }))}
+                        >
+                          ➖ {language === 'vi' ? 'Bớt đồ' : '回収'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <textarea
+                    className="form-input"
+                    style={{ minHeight: '60px', resize: 'vertical' }}
+                    value={setupForm.notes}
+                    onChange={(e) => setSetupForm({ ...setupForm, notes: e.target.value })}
+                    placeholder={getTranslation(language, 'notesPlaceholder')}
+                  />
+                </div>
+              </>
+            ) : (
+              // In Work Mode: show read-only details
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', margin: '0.5rem 0 1.25rem 0' }}>
+                <div style={{ fontSize: '0.9rem' }}>
+                  <strong>{language === 'vi' ? 'Trạng thái phòng:' : 'Room Status:'} </strong>
+                  <span className={`badge badge-${selectedRoom.status}`} style={{ fontSize: '0.65rem', marginLeft: '0.25rem' }}>
+                    {selectedRoom.status.toUpperCase()}
+                  </span>
+                  {selectedRoom.status === 'clean' && (
+                    <span className={`badge badge-${selectedRoom.isChecked ? 'clean' : 'dirty'}`} style={{ fontSize: '0.65rem', marginLeft: '0.25rem' }}>
+                      {selectedRoom.isChecked 
+                        ? (language === 'vi' ? 'Đã duyệt ✓' : 'Checked ✓') 
+                        : (language === 'vi' ? 'Chờ duyệt 🔍' : 'Pending 🔍')}
+                    </span>
+                  )}
+                </div>
+                {selectedRoom.isStay && (
+                  <div style={{ fontSize: '0.9rem' }}>
+                    <strong>{language === 'vi' ? 'Loại khách:' : 'Guest Type:'} </strong>
+                    <span style={{ fontWeight: 600 }}>{language === 'vi' ? 'Khách ở tiếp (Stay)' : 'Stay-over Guest'}</span>
+                  </div>
+                )}
+                {selectedRoom.notes && (
+                  <div style={{
+                    padding: '0.75rem',
+                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                    borderLeft: '4px solid var(--status-maintenance)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '0.85rem'
+                  }}>
+                    <strong>{language === 'vi' ? 'Ghi chú phòng:' : 'Room Notes:'} </strong>
+                    <span style={{ color: 'var(--status-maintenance)', fontWeight: 600 }}>{selectedRoom.notes}</span>
                   </div>
                 )}
               </div>
-              <textarea
-                className="form-input"
-                style={{ minHeight: '60px', resize: 'vertical' }}
-                value={setupForm.notes}
-                onChange={(e) => setSetupForm({ ...setupForm, notes: e.target.value })}
-                placeholder={getTranslation(language, 'notesPlaceholder')}
-              />
-            </div>
+            )}
 
             {/* Housekeeping Report inside modal for clean rooms */}
             {selectedRoom.status === 'clean' && (
@@ -2019,6 +2591,25 @@ export const FrontDeskDashboard: React.FC = () => {
                 {getTranslation(language, 'cancel')}
               </button>
 
+              {gridMode === 'work' && !showRecleanInput && (
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
+                  onClick={() => {
+                    setGridMode('setup');
+                    setSetupForm({
+                      status: selectedRoom.status,
+                      isStay: selectedRoom.isStay,
+                      guestCount: selectedRoom.guestCount,
+                      notes: selectedRoom.notes || ''
+                    });
+                  }}
+                >
+                  ⚙️ {language === 'vi' ? 'Cài đặt phòng' : language === 'ja' ? '客室設定' : 'Room Setup'}
+                </button>
+              )}
+
               {selectedRoom.status === 'clean' && !selectedRoom.isChecked && !showRecleanInput && (
                 <>
                   <button
@@ -2041,7 +2632,7 @@ export const FrontDeskDashboard: React.FC = () => {
                 </>
               )}
 
-              {!showRecleanInput && (
+              {gridMode === 'setup' && !showRecleanInput && (
                 <button
                   type="button"
                   className="btn btn-primary"
@@ -2050,6 +2641,70 @@ export const FrontDeskDashboard: React.FC = () => {
                   {getTranslation(language, 'save')}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* CUSTOM DAILY STAFF ASSIGNMENT CONFIRMATION MODAL */}
+      {confirmStaffModal.open && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="modal-content glass-panel" style={{ maxWidth: '420px', padding: '1.75rem', textAlign: 'center' }}>
+            <div style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              width: '52px', 
+              height: '52px', 
+              borderRadius: '50%', 
+              backgroundColor: confirmStaffModal.isActive ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
+              color: confirmStaffModal.isActive ? 'var(--status-maintenance)' : 'var(--status-clean)',
+              marginBottom: '1rem',
+              fontSize: '1.5rem'
+            }}>
+              {confirmStaffModal.isActive ? '⚠️' : '👤'}
+            </div>
+            
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.75rem' }}>
+              {language === 'vi' 
+                ? 'Xác nhận phân công' 
+                : language === 'ja' 
+                  ? '出勤設定の確認' 
+                  : 'Confirm Staff Assignment'}
+            </h3>
+            
+            <p style={{ fontSize: '0.95rem', opacity: 0.85, lineHeight: 1.5, marginBottom: '1.5rem' }}>
+              {language === 'vi' ? (
+                confirmStaffModal.isActive 
+                  ? `Bạn có chắc chắn muốn HỦY phân công làm việc hôm nay đối với nhân viên ${confirmStaffModal.cleanerName}?`
+                  : `Bạn có chắc chắn muốn PHÂN CÔNG làm việc hôm nay cho nhân viên ${confirmStaffModal.cleanerName}?`
+              ) : language === 'ja' ? (
+                confirmStaffModal.isActive
+                  ? `${confirmStaffModal.cleanerName} を本日の出勤スタッフから除外しますか？`
+                  : `${confirmStaffModal.cleanerName} を本日の出勤スタッフに追加しますか？`
+              ) : (
+                confirmStaffModal.isActive
+                  ? `Are you sure you want to remove ${confirmStaffModal.cleanerName} from today's active staff?`
+                  : `Are you sure you want to assign ${confirmStaffModal.cleanerName} to work today?`
+              )}
+            </p>
+            
+            <div className="modal-actions" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                style={{ flex: 1, padding: '0.5rem 1rem' }}
+                onClick={() => setConfirmStaffModal(prev => ({ ...prev, open: false }))}
+              >
+                {getTranslation(language, 'cancel')}
+              </button>
+              <button 
+                type="button" 
+                className={confirmStaffModal.isActive ? "btn btn-danger" : "btn btn-primary"} 
+                style={{ flex: 1, padding: '0.5rem 1rem' }}
+                onClick={executeStaffToggle}
+              >
+                {language === 'vi' ? 'Xác nhận' : language === 'ja' ? '確定する' : 'Confirm'}
+              </button>
             </div>
           </div>
         </div>

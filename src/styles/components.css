@@ -1134,4 +1134,53 @@
   }
 }
 
+/* User row hoverable style */
+.user-row-hoverable {
+  transition: background-color var(--transition-fast) ease;
+}
+.user-row-hoverable:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+.dark-mode .user-row-hoverable:hover {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* User search input style */
+.user-search-input {
+  color: var(--text-primary-light);
+  background-color: rgba(0, 0, 0, 0.02);
+  transition: all var(--transition-fast) ease;
+}
+.user-search-input:focus {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  background-color: var(--bg-card-light);
+}
+.dark-mode .user-search-input {
+  border-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(15, 23, 42, 0.4);
+  color: var(--text-primary-dark);
+}
+.dark-mode .user-search-input:focus {
+  background-color: rgba(15, 23, 42, 0.6);
+}
+
+/* Responsive subtabs styling */
+.branch-subtabs-desktop {
+  display: flex !important;
+}
+.branch-subtabs-mobile {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .branch-subtabs-desktop {
+    display: none !important;
+  }
+  .branch-subtabs-mobile {
+    display: block !important;
+  }
+}
+
+
 

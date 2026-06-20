@@ -24,10 +24,10 @@ if (
 
 // Function to resolve current hotelId from URL path dynamically
 export function getActiveHotelId(): string {
-  if (typeof window === 'undefined') return 'ks1';
+  if (typeof window === 'undefined') return 'portal';
   // Example path: "/ks1" or "/ks2" -> resolves to "ks1" or "ks2"
   const segments = window.location.pathname.split('/').filter(Boolean);
-  const hotelId = segments[0] || 'ks1';
+  const hotelId = segments[0] || 'portal';
   return hotelId;
 }
 
