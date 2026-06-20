@@ -736,9 +736,11 @@
   .sidebar-menu {
     position: fixed;
     top: 0;
+    bottom: 0;
     left: 0;
     width: 280px;
     height: 100vh;
+    height: 100dvh;
     z-index: 2000;
     transform: translateX(-100%);
     transition: transform var(--transition-medium) cubic-bezier(0.16, 1, 0.3, 1);
@@ -753,12 +755,18 @@
     border-radius: 0 !important;
     margin-bottom: 0 !important;
     box-sizing: border-box;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   
   .dark-mode .sidebar-menu {
     background: rgba(30, 41, 59, 0.85) !important;
     border-right-color: rgba(255, 255, 255, 0.08);
     box-shadow: 10px 0 30px rgba(0, 0, 0, 0.25);
+  }
+  
+  body.mobile-sidebar-open {
+    overflow: hidden;
   }
   
   body.mobile-sidebar-open .sidebar-menu {
