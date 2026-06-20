@@ -217,7 +217,7 @@ export function seedMockDataForDate(hotelId: string, date: string): void {
   const hasActiveStaff = !!localStorage.getItem(activeStaffKey);
 
   const todayStr = getTodayDateString();
-  const isFuture = date > todayStr;
+  const isFutureOrToday = date >= todayStr; // Prevent mock seeding on today or future dates
 
   // 1. Get or seed master rooms
   let masterRooms: Room[] = [];
@@ -250,8 +250,8 @@ export function seedMockDataForDate(hotelId: string, date: string): void {
   );
 
   if (activeStaffIds.length === 0 && !hasActiveStaff) {
-    if (isFuture) {
-      // Future date: no active staff by default
+    if (isFutureOrToday) {
+      // Future date or today: no active staff by default
       activeStaffIds = [];
     } else {
       // Today or past date: randomly assign staff
@@ -298,8 +298,8 @@ export function seedMockDataForDate(hotelId: string, date: string): void {
   // 3. Seed rooms for this date if not existing
   let dailyRooms: Room[] = [];
   if (!hasRooms) {
-    if (isFuture) {
-      // Future dates start all vacant and clean without mock checkins
+    if (isFutureOrToday) {
+      // Future/today dates start all vacant and clean without mock checkins
       dailyRooms = masterRooms.map((room) => ({
         ...room,
         status: 'vacant',
@@ -422,7 +422,7 @@ export function seedMockDataForDate(hotelId: string, date: string): void {
 
   const logsForThisDate = allLogs.filter(log => log.endedAt.startsWith(date));
   
-  if (logsForThisDate.length === 0 && activeStaffIds.length > 0 && !isFuture) {
+  if (logsForThisDate.length === 0 && activeStaffIds.length > 0 && !isFutureOrToday) {
     if (dailyRooms.length === 0) {
       try {
         dailyRooms = JSON.parse(localStorage.getItem(roomsKey) || '[]');
