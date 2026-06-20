@@ -901,17 +901,16 @@ export const FrontDeskDashboard: React.FC = () => {
   return (
     <div className="main-content">
       {/* Sound settings and title */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
           {getTranslation(language, 'fdDashboard')}
         </h2>
         <button
           onClick={() => setSoundEnabled(!soundEnabled)}
-          className={`btn ${soundEnabled ? 'btn-primary' : 'btn-secondary'} btn-sm`}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          title={`${getTranslation(language, 'soundAlert')}: ${soundEnabled ? 'ON' : 'OFF'}`}
+          className={`sound-toggle-btn ${soundEnabled ? 'enabled' : 'disabled'}`}
         >
-          {soundEnabled ? <Bell size={16} /> : <BellOff size={16} />}
-          <span>{getTranslation(language, 'soundAlert')}: {soundEnabled ? 'ON' : 'OFF'}</span>
+          {soundEnabled ? <Bell size={15} /> : <BellOff size={15} />}
         </button>
       </div>
 

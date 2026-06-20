@@ -1598,3 +1598,38 @@
   }
 }
 
+/* Sound Toggle Button Styles */
+.sound-toggle-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  padding: 0;
+}
+
+.sound-toggle-btn.enabled {
+  background-color: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.15);
+  color: var(--primary-color);
+}
+
+.sound-toggle-btn.enabled:hover {
+  background-color: rgba(37, 99, 235, 0.15);
+}
+
+.sound-toggle-btn.disabled {
+  background-color: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444 !important;
+}
+
+.sound-toggle-btn.disabled:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
