@@ -1462,38 +1462,7 @@ export const CheckerDashboard: React.FC = () => {
 
           {activeTab === 'grid' && (
             <>
-              {/* Metrics Panels */}
-              <div className="metrics-grid" style={{ marginBottom: '1.5rem' }}>
-                <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--primary-color)' }}>
-                  <div className="metric-icon" style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary-color)' }}>
-                    <Hotel size={20} />
-                  </div>
-                  <div>
-                    <div className="metric-value">{totalCleaned}</div>
-                    <div className="metric-label">{language === 'vi' ? 'Đã dọn xong' : language === 'ja' ? '清掃完了数' : 'Total Cleaned'}</div>
-                  </div>
-                </div>
 
-                <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-dirty)' }}>
-                  <div className="metric-icon" style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', color: 'var(--status-dirty)' }}>
-                    <AlertTriangle size={20} style={{ color: 'var(--status-dirty)' }} />
-                  </div>
-                  <div>
-                    <div className="metric-value">{pendingCheck}</div>
-                    <div className="metric-label">{language === 'vi' ? 'Chờ phê duyệt' : language === 'ja' ? '要検査待ち' : 'Pending Check'}</div>
-                  </div>
-                </div>
-
-                <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-clean)' }}>
-                  <div className="metric-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)' }}>
-                    <CheckCircle2 size={20} style={{ color: 'var(--status-clean)' }} />
-                  </div>
-                  <div>
-                    <div className="metric-value">{approvedCheck}</div>
-                    <div className="metric-label">{language === 'vi' ? 'Đã phê duyệt' : language === 'ja' ? '検査合格済' : 'Checked & Ready'}</div>
-                  </div>
-                </div>
-              </div>
 
               {/* Filters Panel */}
               <div className="glass-panel" style={{ padding: '1rem', marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1813,6 +1782,39 @@ export const CheckerDashboard: React.FC = () => {
                     );
                   })
               )}
+
+              {/* Metrics Panels */}
+              <div className="metrics-grid" style={{ marginTop: '2rem' }}>
+                <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--primary-color)' }}>
+                  <div className="metric-icon" style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary-color)' }}>
+                    <Hotel size={20} />
+                  </div>
+                  <div>
+                    <div className="metric-value">{totalCleaned}</div>
+                    <div className="metric-label">{language === 'vi' ? 'Đã dọn xong' : language === 'ja' ? '清掃完了数' : 'Total Cleaned'}</div>
+                  </div>
+                </div>
+
+                <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-dirty)' }}>
+                  <div className="metric-icon" style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', color: 'var(--status-dirty)' }}>
+                    <AlertTriangle size={20} style={{ color: 'var(--status-dirty)' }} />
+                  </div>
+                  <div>
+                    <div className="metric-value">{pendingCheck}</div>
+                    <div className="metric-label">{language === 'vi' ? 'Chờ phê duyệt' : language === 'ja' ? '要検査待ち' : 'Pending Check'}</div>
+                  </div>
+                </div>
+
+                <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-clean)' }}>
+                  <div className="metric-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)' }}>
+                    <CheckCircle2 size={20} style={{ color: 'var(--status-clean)' }} />
+                  </div>
+                  <div>
+                    <div className="metric-value">{approvedCheck}</div>
+                    <div className="metric-label">{language === 'vi' ? 'Đã phê duyệt' : language === 'ja' ? '検査合格済' : 'Checked & Ready'}</div>
+                  </div>
+                </div>
+              </div>
             </>
           )}
 
