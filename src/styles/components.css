@@ -1019,34 +1019,37 @@
   background-color: rgba(255, 255, 255, 0.04);
 }
 
-/* Modals turned into Bottom Sheets on mobile devices */
+/* Floating centered modals on mobile devices instead of bottom sheets */
 @media (max-width: 576px) {
   .modal-overlay {
-    align-items: flex-end;
-    padding: 0;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
     height: 100vh;
     height: 100dvh;
   }
   
   .modal-content {
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    margin-bottom: 0;
-    max-height: 82vh;
-    max-height: 82dvh;
+    border-radius: var(--radius-lg);
+    margin: auto;
+    max-height: 85vh;
+    max-height: 85dvh;
     overflow-y: auto;
-    width: 100%;
-    max-width: 100% !important;
-    animation: slideUpMobile 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    width: 92%;
+    max-width: 440px !important;
     box-sizing: border-box;
-    padding: 1.5rem 1.25rem calc(3.5rem + env(safe-area-inset-bottom));
+    padding: 1.75rem 1.5rem;
+    animation: modalPopMobile 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
-  @keyframes slideUpMobile {
+  @keyframes modalPopMobile {
     from {
-      transform: translateY(100%);
+      transform: scale(0.9);
+      opacity: 0;
     }
     to {
-      transform: translateY(0);
+      transform: scale(1);
+      opacity: 1;
     }
   }
 }
