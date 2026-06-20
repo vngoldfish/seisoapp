@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../Common/AppContext';
 import { getTranslation } from '../../i18n/translations';
 import { db } from '../../db/firebaseDB';
@@ -6,7 +6,8 @@ import type { Room, CleaningLog, User } from '../../db/dbInterface';
 import { 
   Hotel, CheckCircle, AlertTriangle, Search, 
   ClipboardList, CheckCircle2, LayoutDashboard, Clock, Building, Users,
-  Sun, Moon, LogOut, User as UserIcon, LayoutGrid, List
+  Sun, Moon, LogOut, User as UserIcon, LayoutGrid, List,
+  Maximize2, Minimize2, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -102,6 +103,42 @@ export const CheckerDashboard: React.FC = () => {
     return localStorage.getItem('hotel_clean_room_grid_columns') || 'auto';
   });
 
+  const [isFullScreenFloorView, setIsFullScreenFloorView] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('fullscreen') === 'true';
+  });
+  const [activeFloorIndex, setActiveFloorIndex] = useState(0);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    if (!isFullScreenFloorView) return;
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isFullScreenFloorView]);
+
+  const getDisplayDateTime = () => {
+    const dateParts = activeDate ? activeDate.split('-') : [];
+    const dayStr = dateParts[2] || '01';
+    const monthStr = dateParts[1] || '01';
+    const yearStr = dateParts[0] || '2026';
+    
+    const hh = String(currentTime.getHours()).padStart(2, '0');
+    const min = String(currentTime.getMinutes()).padStart(2, '0');
+    const ss = String(currentTime.getSeconds()).padStart(2, '0');
+    
+    if (language === 'vi') {
+      return `${dayStr}/${monthStr}/${yearStr} ${hh}:${min}:${ss}`;
+    } else if (language === 'ja') {
+      return `${yearStr}年${monthStr}月${dayStr}日 ${hh}:${min}:${ss}`;
+    } else {
+      return `${dayStr}/${monthStr}/${yearStr} ${hh}:${min}:${ss}`;
+    }
+  };
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+
   const [setupModalOpen, setSetupModalOpen] = useState(false);
   const [setupForm, setSetupForm] = useState({
     status: 'vacant' as Room['status'],
@@ -123,55 +160,7 @@ export const CheckerDashboard: React.FC = () => {
     isActive: false
   });
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    let changed = false;
-
-    if (params.get('tab') !== activeTab) {
-      params.set('tab', activeTab);
-      changed = true;
-    }
-
-    if (params.get('staffLayout') !== staffLayout) {
-      params.set('staffLayout', staffLayout);
-      localStorage.setItem('hotel_clean_staff_layout', staffLayout);
-      changed = true;
-    }
-
-    if (params.get('staffSortField') !== staffSortField) {
-      params.set('staffSortField', staffSortField);
-      localStorage.setItem('hotel_clean_staff_sort_field', staffSortField);
-      changed = true;
-    }
-
-    if (params.get('staffSortOrder') !== staffSortOrder) {
-      params.set('staffSortOrder', staffSortOrder);
-      localStorage.setItem('hotel_clean_staff_sort_order', staffSortOrder);
-      changed = true;
-    }
-
-    if (params.get('staffViewMode') !== staffViewMode) {
-      params.set('staffViewMode', staffViewMode);
-      localStorage.setItem('hotel_clean_staff_view_mode', staffViewMode);
-      changed = true;
-    }
-
-    if (params.get('gridMode') !== gridMode) {
-      params.set('gridMode', gridMode);
-      localStorage.setItem('hotel_clean_grid_mode', gridMode);
-      changed = true;
-    }
-
-    if (params.get('gridCols') !== gridColumns) {
-      params.set('gridCols', gridColumns);
-      localStorage.setItem('hotel_clean_room_grid_columns', gridColumns);
-      changed = true;
-    }
-
-    if (changed) {
-      window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
-    }
-  }, [activeTab, staffLayout, staffSortField, staffSortOrder, staffViewMode, gridMode, gridColumns]);
+  const hasRestoredFloorRef = useRef(false);
 
   useEffect(() => {
     const fetchStaffData = async () => {
@@ -503,6 +492,156 @@ export const CheckerDashboard: React.FC = () => {
       return acc;
     }, {} as Record<number, Room[]>);
   }, [filteredRooms]);
+
+  // Group rooms for full-screen carousel (ignores floor filter, respects search and checkStatus)
+  const carouselRoomsByFloor = useMemo(() => {
+    const filteredForCarousel = rooms.filter(room => {
+      const matchesSearch = room.roomNumber.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      let matchesCheck = true;
+      if (checkFilter === 'pending') {
+        matchesCheck = room.status === 'clean' && !room.isChecked;
+      } else if (checkFilter === 'approved') {
+        matchesCheck = room.status === 'clean' && !!room.isChecked;
+      }
+      
+      return matchesSearch && matchesCheck;
+    });
+
+    return filteredForCarousel.reduce((acc, room) => {
+      if (!acc[room.floor]) {
+        acc[room.floor] = [];
+      }
+      acc[room.floor].push(room);
+      return acc;
+    }, {} as Record<number, Room[]>);
+  }, [rooms, searchTerm, checkFilter]);
+
+  const carouselSortedFloors = useMemo(() => {
+    return Object.keys(carouselRoomsByFloor)
+      .map(Number)
+      .sort((a, b) => a - b);
+  }, [carouselRoomsByFloor]);
+
+  useEffect(() => {
+    if (!hasRestoredFloorRef.current && carouselSortedFloors.length > 0) {
+      if (isFullScreenFloorView) {
+        const params = new URLSearchParams(window.location.search);
+        const floorStr = params.get('fullscreenFloor');
+        if (floorStr) {
+          const targetFloor = Number(floorStr);
+          const idx = carouselSortedFloors.indexOf(targetFloor);
+          if (idx !== -1) {
+            setActiveFloorIndex(idx);
+          }
+        }
+      }
+      hasRestoredFloorRef.current = true;
+    }
+  }, [carouselSortedFloors, isFullScreenFloorView]);
+
+  useEffect(() => {
+    if (!hasRestoredFloorRef.current) return;
+
+    const params = new URLSearchParams(window.location.search);
+    let changed = false;
+
+    if (params.get('tab') !== activeTab) {
+      params.set('tab', activeTab);
+      changed = true;
+    }
+
+    if (params.get('staffLayout') !== staffLayout) {
+      params.set('staffLayout', staffLayout);
+      localStorage.setItem('hotel_clean_staff_layout', staffLayout);
+      changed = true;
+    }
+
+    if (params.get('staffSortField') !== staffSortField) {
+      params.set('staffSortField', staffSortField);
+      localStorage.setItem('hotel_clean_staff_sort_field', staffSortField);
+      changed = true;
+    }
+
+    if (params.get('staffSortOrder') !== staffSortOrder) {
+      params.set('staffSortOrder', staffSortOrder);
+      localStorage.setItem('hotel_clean_staff_sort_order', staffSortOrder);
+      changed = true;
+    }
+
+    if (params.get('staffViewMode') !== staffViewMode) {
+      params.set('staffViewMode', staffViewMode);
+      localStorage.setItem('hotel_clean_staff_view_mode', staffViewMode);
+      changed = true;
+    }
+
+    if (params.get('gridMode') !== gridMode) {
+      params.set('gridMode', gridMode);
+      localStorage.setItem('hotel_clean_grid_mode', gridMode);
+      changed = true;
+    }
+
+    if (params.get('gridCols') !== gridColumns) {
+      params.set('gridCols', gridColumns);
+      localStorage.setItem('hotel_clean_room_grid_columns', gridColumns);
+      changed = true;
+    }
+
+    const fullscreenParam = isFullScreenFloorView ? 'true' : null;
+    if (params.get('fullscreen') !== fullscreenParam) {
+      if (fullscreenParam) {
+        params.set('fullscreen', fullscreenParam);
+      } else {
+        params.delete('fullscreen');
+      }
+      changed = true;
+    }
+
+    const currentFloor = isFullScreenFloorView && carouselSortedFloors[activeFloorIndex] !== undefined
+      ? String(carouselSortedFloors[activeFloorIndex])
+      : null;
+    if (params.get('fullscreenFloor') !== currentFloor) {
+      if (currentFloor) {
+        params.set('fullscreenFloor', currentFloor);
+      } else {
+        params.delete('fullscreenFloor');
+      }
+      changed = true;
+    }
+
+    if (changed) {
+      window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
+    }
+  }, [
+    activeTab, staffLayout, staffSortField, staffSortOrder, staffViewMode, gridMode, gridColumns,
+    isFullScreenFloorView, activeFloorIndex, carouselSortedFloors
+  ]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+    setTouchStartY(e.touches[0].clientY);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null || touchStartY === null) return;
+    
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    
+    const diffX = touchStartX - touchEndX;
+    const diffY = touchStartY - touchEndY;
+    
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+      if (diffX > 0) {
+        setActiveFloorIndex(prev => Math.min(prev + 1, carouselSortedFloors.length - 1));
+      } else {
+        setActiveFloorIndex(prev => Math.max(prev - 1, 0));
+      }
+    }
+    
+    setTouchStartX(null);
+    setTouchStartY(null);
+  };
 
   const { totalCleaned, pendingCheck, approvedCheck } = useMemo(() => {
     return {
@@ -1457,6 +1596,35 @@ export const CheckerDashboard: React.FC = () => {
                     </button>
                   </div>
                 </div>
+
+                {/* Full Screen Carousel View trigger */}
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.4rem 0.75rem',
+                      borderColor: 'var(--primary-color)',
+                      color: 'var(--primary-color)',
+                      fontWeight: 600,
+                      fontSize: '0.8rem',
+                      borderRadius: 'var(--radius-sm)'
+                    }}
+                    onClick={() => {
+                      const initialFloor = floorFilter !== 'all' ? Number(floorFilter) : carouselSortedFloors[0] || 0;
+                      const idx = carouselSortedFloors.indexOf(initialFloor);
+                      setActiveFloorIndex(idx !== -1 ? idx : 0);
+                      setIsFullScreenFloorView(true);
+                    }}
+                    disabled={carouselSortedFloors.length === 0}
+                  >
+                    <Maximize2 size={14} />
+                    <span>{language === 'vi' ? 'Xem full tầng' : language === 'ja' ? '全画面表示' : 'Full Screen'}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Room Grid grouped by Floor */}
@@ -1480,7 +1648,7 @@ export const CheckerDashboard: React.FC = () => {
                         </h3>
 
                         <div 
-                          className="room-grid"
+                          className={`room-grid cols-${gridColumns}`}
                           style={gridColumns !== 'auto' ? {
                             gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
                             ['--room-card-min-height' as any]: Number(gridColumns) >= 12 ? '80px' : Number(gridColumns) >= 8 ? '95px' : '120px',
@@ -1489,6 +1657,17 @@ export const CheckerDashboard: React.FC = () => {
                             ['--room-type-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
                             ['--room-guest-font-size' as any]: Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 8 ? '0.6rem' : '0.7rem',
                             ['--room-assignee-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                            ['--room-note-icon-size' as any]: Number(gridColumns) >= 12 ? '0.65rem' : Number(gridColumns) >= 8 ? '0.8rem' : '1rem',
+                            
+                            // Mobile responsive scaling variables
+                            ['--room-card-min-height-mobile' as any]: Number(gridColumns) >= 16 ? '40px' : Number(gridColumns) >= 12 ? '50px' : Number(gridColumns) >= 10 ? '60px' : Number(gridColumns) >= 8 ? '70px' : Number(gridColumns) >= 6 ? '80px' : '90px',
+                            ['--room-card-padding-mobile' as any]: Number(gridColumns) >= 12 ? '0.15rem 0.1rem' : Number(gridColumns) >= 8 ? '0.25rem 0.15rem' : Number(gridColumns) >= 6 ? '0.35rem 0.25rem' : '0.5rem 0.35rem',
+                            ['--room-number-font-size-mobile' as any]: Number(gridColumns) >= 16 ? '0.5rem' : Number(gridColumns) >= 12 ? '0.6rem' : Number(gridColumns) >= 10 ? '0.7rem' : Number(gridColumns) >= 8 ? '0.8rem' : Number(gridColumns) >= 6 ? '0.95rem' : '1.1rem',
+                            ['--room-type-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
+                            ['--room-guest-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.3rem' : Number(gridColumns) >= 8 ? '0.4rem' : Number(gridColumns) >= 6 ? '0.45rem' : '0.5rem',
+                            ['--room-assignee-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
+                            ['--room-assignee-max-width-mobile' as any]: Number(gridColumns) >= 12 ? '20px' : Number(gridColumns) >= 8 ? '35px' : Number(gridColumns) >= 6 ? '45px' : '55px',
+                            ['--room-note-icon-size-mobile' as any]: Number(gridColumns) >= 16 ? '0.45rem' : Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 10 ? '0.6rem' : Number(gridColumns) >= 8 ? '0.7rem' : '0.8rem',
                           } : undefined}
                         >
                           {floorRooms
@@ -1507,10 +1686,12 @@ export const CheckerDashboard: React.FC = () => {
                                 statusText = language === 'vi' ? 'ĐÃ DUYỆT ✓' : language === 'ja' ? '合格 ✓' : 'APPROVED ✓';
                               }
 
+                              const isCompact = gridColumns !== 'auto';
+
                               return (
                                 <div 
                                   key={room.id} 
-                                  className={`room-card ${cardClass}`}
+                                  className={`room-card ${cardClass} ${isCompact ? 'compact' : ''}`}
                                   onClick={() => handleRoomCardClick(room)}
                                   style={{ 
                                     cursor: 'pointer',
@@ -1520,24 +1701,42 @@ export const CheckerDashboard: React.FC = () => {
                                   }}
                                   title={room.notes ? `Notes: ${room.notes}` : undefined}
                                 >
-                                  {room.isStay && <span className="stay-badge">Stay</span>}
-                                  <div>
-                                    <div className="room-type-text">{room.type}</div>
-                                    <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                      {room.roomNumber}
+                                  {isCompact ? (
+                                    <div className="room-card-compact-wrapper">
+                                      <div className="room-card-compact-row">
+                                        <span className="room-card-compact-number">{room.roomNumber}</span>
+                                      </div>
+                                      <div className="room-card-compact-guests">
+                                        <span className="room-card-compact-guests-icon">👤</span>
+                                        <span className="room-card-compact-guests-count">{room.guestCount}</span>
+                                        {room.notes && <span className="room-card-compact-note-icon" title={room.notes}>📝</span>}
+                                      </div>
                                     </div>
-                                  </div>
+                                  ) : (
+                                    <>
+                                      {room.isStay && <span className="stay-badge">Stay</span>}
+                                      <div>
+                                        <div className="room-type-text">{room.type}</div>
+                                        <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                          {room.roomNumber}
+                                        </div>
+                                      </div>
 
-                                  <div className="room-info-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '0.5rem' }}>
-                                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: isApproved ? 'var(--status-clean)' : isPending ? 'var(--status-dirty)' : 'inherit' }}>
-                                      {statusText}
-                                    </span>
-                                    {room.cleanerName && (
-                                      <span className="room-assignee" title={room.cleanerName}>
-                                        👤 {room.cleanerName.split(' ')[0]}
-                                      </span>
-                                    )}
-                                  </div>
+                                      <div className="room-info-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '0.5rem' }}>
+                                        <span 
+                                          className="room-status-text"
+                                          style={{ fontSize: '0.65rem', fontWeight: 700, color: isApproved ? 'var(--status-clean)' : isPending ? 'var(--status-dirty)' : 'inherit' }}
+                                        >
+                                          {statusText}
+                                        </span>
+                                        {room.cleanerName && (
+                                          <span className="room-assignee" title={room.cleanerName}>
+                                            👤 {room.cleanerName.split(' ')[0]}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
                               );
                             })}
@@ -2714,6 +2913,200 @@ export const CheckerDashboard: React.FC = () => {
                 {language === 'vi' ? 'Xác nhận' : language === 'ja' ? '確定する' : 'Confirm'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* FULL SCREEN FLOOR CAROUSEL VIEW */}
+      {isFullScreenFloorView && carouselSortedFloors.length > 0 && (
+        <div 
+          className="fullscreen-floor-overlay"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Header */}
+          <div className="fullscreen-floor-header">
+            <div className="floor-selector-container">
+              <button 
+                type="button"
+                className="btn btn-outline btn-icon"
+                style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
+                onClick={() => setActiveFloorIndex(prev => Math.max(prev - 1, 0))}
+                disabled={activeFloorIndex === 0}
+              >
+                <ChevronLeft size={20} />
+              </button>
+              
+              <select 
+                className="form-input floor-dropdown"
+                value={carouselSortedFloors[activeFloorIndex]}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  const idx = carouselSortedFloors.indexOf(val);
+                  if (idx !== -1) setActiveFloorIndex(idx);
+                }}
+              >
+                {carouselSortedFloors.map(floorNum => (
+                  <option key={floorNum} value={floorNum}>
+                    {language === 'vi' ? `Tầng ${floorNum}F` : language === 'ja' ? `${floorNum}階` : `Floor ${floorNum}F`}
+                  </option>
+                ))}
+              </select>
+
+              <button 
+                type="button"
+                className="btn btn-outline btn-icon"
+                style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
+                onClick={() => setActiveFloorIndex(prev => Math.min(prev + 1, carouselSortedFloors.length - 1))}
+                disabled={activeFloorIndex === carouselSortedFloors.length - 1}
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {/* Columns Selector inside full screen */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Col:</span>
+                <select 
+                  className="form-input" 
+                  style={{ width: '70px', padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                  value={gridColumns}
+                  onChange={e => setGridColumns(e.target.value)}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="4">4</option>
+                  <option value="6">6</option>
+                  <option value="8">8</option>
+                  <option value="10">10</option>
+                  <option value="12">12</option>
+                  <option value="16">16</option>
+                </select>
+              </div>
+
+              <button 
+                type="button"
+                className="btn btn-outline btn-icon"
+                style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
+                onClick={() => setIsFullScreenFloorView(false)}
+              >
+                <Minimize2 size={20} />
+              </button>
+            </div>
+          </div>
+
+          {/* Content Area */}
+          <div className="fullscreen-floor-body">
+            <div 
+              className={`room-grid cols-${gridColumns}`}
+              style={gridColumns !== 'auto' ? {
+                gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
+                ['--room-card-min-height' as any]: Number(gridColumns) >= 12 ? '80px' : Number(gridColumns) >= 8 ? '95px' : '120px',
+                ['--room-card-padding' as any]: Number(gridColumns) >= 12 ? '0.5rem 0.4rem 0.4rem' : Number(gridColumns) >= 8 ? '0.8rem 0.6rem 0.5rem' : '1.25rem 1rem 0.75rem',
+                ['--room-number-font-size' as any]: Number(gridColumns) >= 12 ? '1.1rem' : Number(gridColumns) >= 8 ? '1.35rem' : '1.75rem',
+                ['--room-type-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                ['--room-guest-font-size' as any]: Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 8 ? '0.6rem' : '0.7rem',
+                ['--room-assignee-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                
+                // Mobile responsive scaling variables
+                ['--room-card-min-height-mobile' as any]: Number(gridColumns) >= 16 ? '40px' : Number(gridColumns) >= 12 ? '50px' : Number(gridColumns) >= 10 ? '60px' : Number(gridColumns) >= 8 ? '70px' : Number(gridColumns) >= 6 ? '80px' : '90px',
+                ['--room-card-padding-mobile' as any]: Number(gridColumns) >= 12 ? '0.15rem 0.1rem' : Number(gridColumns) >= 8 ? '0.25rem 0.15rem' : Number(gridColumns) >= 6 ? '0.35rem 0.25rem' : '0.5rem 0.35rem',
+                ['--room-number-font-size-mobile' as any]: Number(gridColumns) >= 16 ? '0.5rem' : Number(gridColumns) >= 12 ? '0.6rem' : Number(gridColumns) >= 10 ? '0.7rem' : Number(gridColumns) >= 8 ? '0.8rem' : Number(gridColumns) >= 6 ? '0.95rem' : '1.1rem',
+                ['--room-type-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
+                ['--room-guest-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.3rem' : Number(gridColumns) >= 8 ? '0.4rem' : Number(gridColumns) >= 6 ? '0.45rem' : '0.5rem',
+                ['--room-assignee-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
+                ['--room-assignee-max-width-mobile' as any]: Number(gridColumns) >= 12 ? '20px' : Number(gridColumns) >= 8 ? '35px' : Number(gridColumns) >= 6 ? '45px' : '55px',
+                ['--room-note-icon-size' as any]: Number(gridColumns) >= 12 ? '0.65rem' : Number(gridColumns) >= 8 ? '0.8rem' : '1rem',
+                ['--room-note-icon-size-mobile' as any]: Number(gridColumns) >= 16 ? '0.45rem' : Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 10 ? '0.6rem' : Number(gridColumns) >= 8 ? '0.7rem' : '0.8rem',
+              } : undefined}
+            >
+              {(carouselRoomsByFloor[carouselSortedFloors[activeFloorIndex]] || [])
+                .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber))
+                .map((room) => {
+                  const isClean = room.status === 'clean';
+                  const isPending = isClean && !room.isChecked;
+                  const isApproved = isClean && !!room.isChecked;
+                  
+                  let statusText = room.status.toUpperCase();
+                  let cardClass = room.status;
+
+                  if (isPending) {
+                    statusText = language === 'vi' ? 'CHỜ DUYỆT 🔍' : language === 'ja' ? '要検査 🔍' : 'PENDING 🔍';
+                  } else if (isApproved) {
+                    statusText = language === 'vi' ? 'ĐÃ DUYỆT ✓' : language === 'ja' ? '合格 ✓' : 'APPROVED ✓';
+                  }
+
+                   const isCompact = gridColumns !== 'auto';
+
+                   return (
+                     <div 
+                       key={room.id} 
+                       className={`room-card ${cardClass} ${isCompact ? 'compact' : ''}`}
+                       onClick={() => handleRoomCardClick(room)}
+                       style={{ 
+                         cursor: 'pointer',
+                         position: 'relative',
+                         border: isPending ? '2px dashed var(--status-dirty)' : undefined,
+                         animation: isPending ? 'pulseBorder 2s infinite' : undefined
+                       }}
+                       title={room.notes ? `Notes: ${room.notes}` : undefined}
+                     >
+                       {isCompact ? (
+                         <div className="room-card-compact-wrapper">
+                           <div className="room-card-compact-row">
+                             <span className="room-card-compact-number">{room.roomNumber}</span>
+                           </div>
+                           <div className="room-card-compact-guests">
+                             <span className="room-card-compact-guests-icon">👤</span>
+                             <span className="room-card-compact-guests-count">{room.guestCount}</span>
+                             {room.notes && <span className="room-card-compact-note-icon" title={room.notes}>📝</span>}
+                           </div>
+                         </div>
+                       ) : (
+                         <>
+                           {room.isStay && <span className="stay-badge">Stay</span>}
+                           <div>
+                             <div className="room-type-text">{room.type}</div>
+                             <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                               {room.roomNumber}
+                             </div>
+                           </div>
+
+                           <div className="room-info-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '0.5rem' }}>
+                             <span 
+                               className="room-status-text"
+                               style={{ fontSize: 'var(--room-type-font-size, 0.65rem)', fontWeight: 700, color: isApproved ? 'var(--status-clean)' : isPending ? 'var(--status-dirty)' : 'inherit' }}
+                             >
+                               {statusText}
+                             </span>
+                             {room.cleanerName && (
+                               <span className="room-assignee" title={room.cleanerName}>
+                                 👤 {room.cleanerName.split(' ')[0]}
+                               </span>
+                             )}
+                           </div>
+                         </>
+                       )}
+                     </div>
+                   );
+                  })}
+            </div>
+          </div>
+
+          {/* Dots Indicator */}
+          <div className="fullscreen-floor-dots">
+            {carouselSortedFloors.map((floorNum, idx) => (
+              <span 
+                key={floorNum}
+                className={`dot ${idx === activeFloorIndex ? 'active' : ''}`}
+                onClick={() => setActiveFloorIndex(idx)}
+              />
+            ))}
+          </div>
+
+          {/* Running Clock / Date at the very bottom */}
+          <div className="fullscreen-footer-clock">
+            {getDisplayDateTime()}
           </div>
         </div>
       )}

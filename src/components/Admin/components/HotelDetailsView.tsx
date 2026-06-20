@@ -1132,7 +1132,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                       </h3>
                       
                       <div 
-                        className="room-grid"
+                        className={`room-grid cols-${gridColumns}`}
                         style={gridColumns !== 'auto' ? {
                           gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
                           ['--room-card-min-height' as any]: Number(gridColumns) >= 12 ? '80px' : Number(gridColumns) >= 8 ? '95px' : '120px',
@@ -1141,15 +1141,32 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                           ['--room-type-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
                           ['--room-guest-font-size' as any]: Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 8 ? '0.6rem' : '0.7rem',
                           ['--room-assignee-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                          ['--delete-btn-size' as any]: Number(gridColumns) >= 12 ? '10px' : Number(gridColumns) >= 8 ? '14px' : '18px',
+                          ['--delete-btn-font-size' as any]: Number(gridColumns) >= 12 ? '8px' : Number(gridColumns) >= 8 ? '9px' : '11px',
+                          
+                          // Mobile responsive scaling variables
+                          ['--room-card-min-height-mobile' as any]: Number(gridColumns) >= 16 ? '40px' : Number(gridColumns) >= 12 ? '50px' : Number(gridColumns) >= 10 ? '60px' : Number(gridColumns) >= 8 ? '70px' : Number(gridColumns) >= 6 ? '80px' : '90px',
+                          ['--room-card-padding-mobile' as any]: Number(gridColumns) >= 12 ? '0.15rem 0.1rem' : Number(gridColumns) >= 8 ? '0.25rem 0.15rem' : Number(gridColumns) >= 6 ? '0.35rem 0.25rem' : '0.5rem 0.35rem',
+                          ['--room-number-font-size-mobile' as any]: Number(gridColumns) >= 16 ? '0.5rem' : Number(gridColumns) >= 12 ? '0.6rem' : Number(gridColumns) >= 10 ? '0.7rem' : Number(gridColumns) >= 8 ? '0.8rem' : Number(gridColumns) >= 6 ? '0.95rem' : '1.1rem',
+                          ['--room-type-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
+                          ['--room-guest-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.3rem' : Number(gridColumns) >= 8 ? '0.4rem' : Number(gridColumns) >= 6 ? '0.45rem' : '0.5rem',
+                          ['--room-assignee-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
+                          ['--room-assignee-max-width-mobile' as any]: Number(gridColumns) >= 12 ? '20px' : Number(gridColumns) >= 8 ? '35px' : Number(gridColumns) >= 6 ? '45px' : '55px',
+                          ['--delete-btn-size-mobile' as any]: Number(gridColumns) >= 16 ? '8px' : Number(gridColumns) >= 12 ? '10px' : Number(gridColumns) >= 8 ? '12px' : '14px',
+                          ['--delete-btn-font-size-mobile' as any]: Number(gridColumns) >= 16 ? '6px' : Number(gridColumns) >= 12 ? '8px' : Number(gridColumns) >= 8 ? '9px' : '10px',
+                          ['--delete-btn-top-mobile' as any]: Number(gridColumns) >= 8 ? '2px' : '4px',
+                          ['--delete-btn-right-mobile' as any]: Number(gridColumns) >= 8 ? '2px' : '4px',
                         } : undefined}
                       >
                         {floorRooms
                           .sort((a: Room, b: Room) => a.roomNumber.localeCompare(b.roomNumber))
                           .map((room: Room) => {
+                            const isCompact = gridColumns !== 'auto';
+
                             return (
                               <div 
                                 key={room.id} 
-                                className="room-card vacant"
+                                className={`room-card vacant ${isCompact ? 'compact' : ''}`}
                                 onClick={() => handleEditRoomClick(room)}
                                 style={{ cursor: 'pointer', position: 'relative' }}
                                 title={language === 'vi' ? 'Nhấp để sửa thông tin phòng' : language === 'ja' ? 'クリックして部屋設定を編集' : 'Click to edit room details'}
@@ -1162,10 +1179,10 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                                   }}
                                   style={{
                                     position: 'absolute',
-                                    top: '4px',
-                                    right: '4px',
-                                    width: '18px',
-                                    height: '18px',
+                                    top: 'var(--delete-btn-top-mobile, 4px)',
+                                    right: 'var(--delete-btn-right-mobile, 4px)',
+                                    width: 'var(--delete-btn-size-mobile, var(--delete-btn-size, 18px))',
+                                    height: 'var(--delete-btn-size-mobile, var(--delete-btn-size, 18px))',
                                     borderRadius: '50%',
                                     backgroundColor: 'rgba(239, 68, 68, 0.1)',
                                     color: '#ef4444',
@@ -1173,7 +1190,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    fontSize: '11px',
+                                    fontSize: 'var(--delete-btn-font-size-mobile, var(--delete-btn-font-size, 11px))',
                                     fontWeight: 'bold',
                                     cursor: 'pointer',
                                     transition: 'background-color 0.2s',
@@ -1186,12 +1203,20 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                                   ×
                                 </button>
                                 
-                                <div>
-                                  <div className="room-type-text">{getFormattedRoomType(room.type)}</div>
-                                  <div className="room-number">
-                                    {room.roomNumber}
+                                {isCompact ? (
+                                  <div className="room-card-compact-wrapper" style={{ justifyContent: 'center' }}>
+                                    <div className="room-card-compact-row">
+                                      <span className="room-card-compact-number">{room.roomNumber}</span>
+                                    </div>
                                   </div>
-                                </div>
+                                ) : (
+                                  <div>
+                                    <div className="room-type-text">{getFormattedRoomType(room.type)}</div>
+                                    <div className="room-number">
+                                      {room.roomNumber}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}

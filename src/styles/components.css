@@ -130,6 +130,7 @@
   flex-direction: column;
   justify-content: space-between;
   min-height: var(--room-card-min-height, 120px);
+  min-width: 0;
   cursor: pointer;
   transition: all var(--transition-normal);
   border: 1px solid rgba(0, 0, 0, 0.05);
@@ -293,9 +294,20 @@
   font-weight: 600;
   letter-spacing: 0.025em;
   margin-top: 0.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .dark-mode .room-type-text {
   color: var(--text-secondary-dark);
+}
+
+.room-status-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* Stay Badge (S) */
@@ -655,23 +667,24 @@
   }
   
   body .room-card {
-    min-height: 95px;
-    padding: 0.75rem 0.5rem 0.5rem;
+    min-width: 0;
+    min-height: var(--room-card-min-height-mobile, var(--room-card-min-height, 95px));
+    padding: var(--room-card-padding-mobile, var(--room-card-padding, 0.75rem 0.5rem 0.5rem));
     border-radius: var(--radius-sm);
   }
   
   body .room-number {
-    font-size: 1.25rem;
+    font-size: var(--room-number-font-size-mobile, var(--room-number-font-size, 1.25rem));
   }
   
   body .room-type-text {
-    font-size: 0.65rem;
+    font-size: var(--room-type-font-size-mobile, var(--room-type-font-size, 0.65rem));
   }
   
   body .room-card .stay-badge {
     top: 5px;
     right: 5px;
-    font-size: 0.55rem;
+    font-size: var(--room-badge-font-size-mobile, var(--room-badge-font-size, 0.55rem));
     padding: 0.05rem 0.2rem;
   }
   
@@ -680,12 +693,12 @@
   }
   
   body .room-guest-count {
-    font-size: 0.6rem;
+    font-size: var(--room-guest-font-size-mobile, var(--room-guest-font-size, 0.6rem));
   }
   
   body .room-assignee {
-    font-size: 0.65rem;
-    max-width: 60px;
+    font-size: var(--room-assignee-font-size-mobile, var(--room-assignee-font-size, 0.65rem));
+    max-width: var(--room-assignee-max-width-mobile, var(--room-assignee-max-width, 60px));
   }
 }
 
@@ -988,7 +1001,7 @@
   }
   
   /* Override inline gridTemplateColumns on mobile to prevent overflow */
-  div[style*="grid-template-columns"] {
+  div[style*="grid-template-columns"]:not(.room-grid) {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)) !important;
   }
 }
@@ -1213,5 +1226,293 @@
   }
 }
 
+.fullscreen-floor-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  background-color: var(--bg-light, #f8fafc);
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 1rem;
+}
 
+.dark-mode .fullscreen-floor-overlay {
+  background-color: var(--bg-dark, #0f172a);
+}
+
+.fullscreen-floor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dark-mode .fullscreen-floor-header {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.floor-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.floor-dropdown {
+  font-weight: 700;
+  font-size: 1.1rem;
+  text-align: center;
+  padding: 0.25rem 0.5rem;
+  width: auto;
+  min-width: 100px;
+}
+
+.fullscreen-floor-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.fullscreen-floor-dots {
+  position: absolute;
+  bottom: 2.25rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.fullscreen-floor-dots .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: all var(--transition-fast);
+}
+
+.dark-mode .fullscreen-floor-dots .dot {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.fullscreen-floor-dots .dot.active {
+  background-color: var(--primary-color);
+  transform: scale(1.2);
+}
+
+/* Custom grid columns display overrides for clean layout */
+.guest-label-compact {
+  display: none;
+}
+
+/* Hide full guest label when columns count is high or on custom grids */
+.room-grid.cols-6 .guest-label-full,
+.room-grid.cols-8 .guest-label-full,
+.room-grid.cols-10 .guest-label-full,
+.room-grid.cols-12 .guest-label-full,
+.room-grid.cols-16 .guest-label-full {
+  display: none !important;
+}
+
+.room-grid.cols-6 .guest-label-compact,
+.room-grid.cols-8 .guest-label-compact,
+.room-grid.cols-10 .guest-label-compact,
+.room-grid.cols-12 .guest-label-compact,
+.room-grid.cols-16 .guest-label-compact {
+  display: inline !important;
+}
+
+/* Hide elements when column counts are extremely high on all screens */
+.room-grid.cols-12 .room-type-text,
+.room-grid.cols-16 .room-type-text,
+.room-grid.cols-12 .room-assignee,
+.room-grid.cols-16 .room-assignee,
+.room-grid.cols-12 .room-status-text,
+.room-grid.cols-16 .room-status-text {
+  display: none !important;
+}
+
+/* Mobile responsive layout optimizations for high columns */
+@media (max-width: 480px) {
+  /* On mobile, if 4 columns or more, show compact guest label */
+  .room-grid.cols-4 .guest-label-full,
+  .room-grid.cols-6 .guest-label-full,
+  .room-grid.cols-8 .guest-label-full,
+  .room-grid.cols-10 .guest-label-full,
+  .room-grid.cols-12 .guest-label-full,
+  .room-grid.cols-16 .guest-label-full {
+    display: none !important;
+  }
+  
+  .room-grid.cols-4 .guest-label-compact,
+  .room-grid.cols-6 .guest-label-compact,
+  .room-grid.cols-8 .guest-label-compact,
+  .room-grid.cols-10 .guest-label-compact {
+    display: inline !important;
+  }
+  
+  /* For 8 columns or more on mobile: hide type text, assignee and status text */
+  .room-grid.cols-8 .room-type-text,
+  .room-grid.cols-10 .room-type-text,
+  .room-grid.cols-12 .room-type-text,
+  .room-grid.cols-16 .room-type-text,
+  .room-grid.cols-8 .room-assignee,
+  .room-grid.cols-10 .room-assignee,
+  .room-grid.cols-12 .room-assignee,
+  .room-grid.cols-16 .room-assignee,
+  .room-grid.cols-8 .room-status-text,
+  .room-grid.cols-10 .room-status-text,
+  .room-grid.cols-12 .room-status-text,
+  .room-grid.cols-16 .room-status-text {
+    display: none !important;
+  }
+  
+  /* For 12 columns or more on mobile: hide guest count completely and center room number */
+  .room-grid.cols-12 .room-guest-count,
+  .room-grid.cols-16 .room-guest-count,
+  .room-grid.cols-12 .room-info-row,
+  .room-grid.cols-16 .room-info-row {
+    display: none !important;
+  }
+  
+  .room-grid.cols-12 .room-card,
+  .room-grid.cols-16 .room-card {
+    justify-content: center !important;
+    align-items: center !important;
+    padding: 0.25rem !important;
+    min-height: var(--room-card-min-height-mobile, 50px) !important;
+  }
+  
+  .room-grid.cols-12 .room-number,
+  .room-grid.cols-16 .room-number {
+    justify-content: center !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+}
+
+/* Compact Square Room Cards (gridColumns !== 'auto') */
+.room-card.compact {
+  aspect-ratio: 1 / 1 !important;
+  min-height: 0 !important;
+  padding: var(--room-card-padding, 0.4rem) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-around !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+}
+
+.room-card-compact-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-around;
+  height: 100%;
+  width: 100%;
+}
+
+.room-card-compact-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+}
+
+.room-card-compact-number {
+  font-weight: 800;
+  font-size: var(--room-number-font-size, 1.1rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.room-card-compact-note-icon {
+  font-size: var(--room-note-icon-size, 0.65rem);
+  flex-shrink: 0;
+  margin-left: 3px;
+}
+
+.room-card-compact-guests {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  font-size: var(--room-guest-font-size, 0.75rem);
+  opacity: 0.9;
+  width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.room-card-compact-guests-icon {
+  font-size: 0.9em;
+}
+
+.room-card-compact-guests-count {
+  font-weight: 700;
+}
+
+/* Desktop: hide guest icon on cols-12 and cols-16 */
+.room-grid.cols-12 .room-card-compact-guests-icon,
+.room-grid.cols-16 .room-card-compact-guests-icon {
+  display: none !important;
+}
+
+/* Mobile responsive compact styling overrides */
+@media (max-width: 480px) {
+  body .room-card.compact {
+    padding: var(--room-card-padding-mobile, 0.2rem) !important;
+  }
+
+  body .room-card-compact-number {
+    font-size: var(--room-number-font-size-mobile, var(--room-number-font-size, 0.85rem));
+  }
+  
+  body .room-card-compact-note-icon {
+    font-size: var(--room-note-icon-size-mobile, var(--room-note-icon-size, 0.55rem));
+  }
+  
+  body .room-card-compact-guests {
+    font-size: var(--room-guest-font-size-mobile, var(--room-guest-font-size, 0.65rem));
+  }
+
+  /* Hide guests icon on mobile when columns are high */
+  .room-grid.cols-10 .room-card-compact-guests-icon,
+  .room-grid.cols-12 .room-card-compact-guests-icon,
+  .room-grid.cols-16 .room-card-compact-guests-icon {
+    display: none !important;
+  }
+}
+
+.fullscreen-footer-clock {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-secondary-light);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.dark-mode .fullscreen-footer-clock {
+  color: var(--text-secondary-dark);
+}
 

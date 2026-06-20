@@ -5,9 +5,13 @@
   font-family: var(--font-sans);
 }
 
-html, body {
+html {
   max-width: 100%;
-  overflow-x: hidden;
+}
+
+body {
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 body {
