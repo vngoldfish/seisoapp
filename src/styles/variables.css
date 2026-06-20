@@ -1,0 +1,63 @@
+:root {
+  /* Design Tokens / Brand Colors (Modern Premium Aesthetics) */
+  --primary-color: #2563eb;       /* Sleek royal blue */
+  --primary-hover: #1d4ed8;
+  --bg-dark: #0f172a;             /* Dark Slate background */
+  --bg-card-dark: #1e293b;
+  --text-primary-dark: #f8fafc;
+  --text-secondary-dark: #94a3b8;
+  
+  --bg-light: #f8fafc;            /* Clean light gray background */
+  --bg-card-light: #ffffff;
+  --text-primary-light: #0f172a;
+  --text-secondary-light: #64748b;
+
+  /* Status Colors */
+  --status-occupied: #64748b;     /* Gray/Slate */
+  --status-occupied-light: #f1f5f9;
+  --status-occupied-border: #cbd5e1;
+
+  --status-dirty: #eab308;        /* Warm Amber/Yellow */
+  --status-dirty-light: #fef9c3;
+  --status-dirty-border: #fef08a;
+
+  --status-cleaning: #f97316;     /* Orange */
+  --status-cleaning-light: #ffedd5;
+  --status-cleaning-border: #fed7aa;
+
+  --status-clean: #10b981;        /* Emerald Green */
+  --status-clean-light: #d1fae5;
+  --status-clean-border: #a7f3d0;
+
+  --status-maintenance: #ef4444;  /* Red */
+  --status-maintenance-light: #fee2e2;
+  --status-maintenance-border: #fecaca;
+
+  --status-eco: #8b5cf6;          /* Violet/Purple */
+  --status-eco-light: #f3e8ff;
+  --status-eco-border: #e9d5ff;
+
+  --status-dnd: #475569;          /* Slate/Gray */
+  --status-dnd-light: #f1f5f9;
+  --status-dnd-border: #e2e8f0;
+
+  /* Typography */
+  --font-sans: 'Outfit', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  
+  /* Layout & Shadows */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-full: 9999px;
+  
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-glow-clean: 0 0 15px rgba(16, 185, 129, 0.3);
+  --shadow-glow-dirty: 0 0 15px rgba(234, 179, 8, 0.3);
+  --shadow-glow-cleaning: 0 0 15px rgba(249, 115, 22, 0.3);
+
+  /* Transition */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}

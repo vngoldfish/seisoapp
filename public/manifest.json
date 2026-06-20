@@ -1,0 +1,19 @@
+{
+  "short_name": "客室清掃 / Housekeep",
+  "name": "Hotel Room Cleaning Management System (客室清掃管理)",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
+  "description": "Hotel room cleaning management system for tracking housekeeping operations"
+}

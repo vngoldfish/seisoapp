@@ -1,0 +1,9 @@
+@import './styles/variables.css';
+@import './styles/main.css';
+@import './styles/components.css';
+
+/* Extra custom global tweaks if necessary */
+body {
+  margin: 0;
+  padding: 0;
+}
