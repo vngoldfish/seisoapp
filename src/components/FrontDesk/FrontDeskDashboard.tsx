@@ -69,7 +69,8 @@ export const FrontDeskDashboard: React.FC = () => {
     notes: ''
   });
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [showStatsAndStaff, setShowStatsAndStaff] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [showActiveStaff, setShowActiveStaff] = useState(false);
   const [cleaners, setCleaners] = useState<User[]>([]);
   const [activeStaffIds, setActiveStaffIds] = useState<string[]>([]);
   const [allHotelUsers, setAllHotelUsers] = useState<User[]>([]);
@@ -1891,22 +1892,22 @@ export const FrontDeskDashboard: React.FC = () => {
               })
           )}
 
-          {/* Collapsible Stats & Staff Section */}
-          <div className="glass-panel" style={{ padding: '0.75rem 1rem', marginTop: '2rem', marginBottom: '1.25rem', borderRadius: 'var(--radius-md)' }}>
+          {/* Collapsible Stats Section */}
+          <div className="glass-panel" style={{ padding: '0.75rem 1rem', marginTop: '2rem', marginBottom: '1rem', borderRadius: 'var(--radius-md)' }}>
             <div 
               style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
-              onClick={() => setShowStatsAndStaff(!showStatsAndStaff)}
+              onClick={() => setShowStats(!showStats)}
             >
               <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                📊 {language === 'vi' ? 'Xem thống kê & nhân sự hôm nay' : language === 'ja' ? '本日の統計とスタッフ表示' : 'View Today\'s Stats & Staff'}
+                📊 {language === 'vi' ? 'Xem thống kê hôm nay' : language === 'ja' ? '本日の統計表示' : 'View Today\'s Stats'}
               </span>
               <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>
-                {showStatsAndStaff ? '▲' : '▼'}
+                {showStats ? '▲' : '▼'}
               </span>
             </div>
 
-            {showStatsAndStaff && (
-              <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {showStats && (
+              <div style={{ marginTop: '1rem' }}>
                 {/* Metrics Row */}
                 <div className="metrics-grid" style={{ marginTop: '0.5rem' }}>
                   <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--primary-color)' }}>
@@ -1959,61 +1960,74 @@ export const FrontDeskDashboard: React.FC = () => {
                     </div>
                   </div>
                 </div>
-
-                {/* Active Staff Bar */}
-                {(currentUser?.role === 'front_desk' || currentUser?.role === 'checka' || currentUser?.role === 'kacho') && (
-                  <div className="glass-panel" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', fontSize: '0.9rem' }}>
-                    <span style={{ fontWeight: 700, color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap' }}>
-                      👥 {language === 'vi' ? 'Nhân sự dọn phòng hôm nay:' : language === 'ja' ? '本日の清掃スタッフ:' : 'Cleaners on duty today:'}
-                    </span>
-                    {cleaners.filter(c => activeStaffIds.includes(c.id)).length === 0 ? (
-                      <span style={{ opacity: 0.6, fontStyle: 'italic' }}>
-                        {language === 'vi' ? 'Chưa có nhân sự nào được phân công' : language === 'ja' ? 'スタッフ未設定' : 'No staff assigned yet'}
-                      </span>
-                    ) : (
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                        {cleaners.filter(c => activeStaffIds.includes(c.id)).map(c => {
-                          const { activeRooms, todayLogs } = getCleanerActivity(c.id);
-                          const isCleaning = activeRooms.length > 0;
-                          
-                          return (
-                            <span 
-                              key={c.id} 
-                              style={{ 
-                                backgroundColor: isCleaning ? 'rgba(249, 115, 22, 0.08)' : 'rgba(16, 185, 129, 0.08)', 
-                                color: isCleaning ? 'var(--status-cleaning)' : 'var(--status-clean)', 
-                                padding: '0.25rem 0.6rem', 
-                                borderRadius: '6px', 
-                                fontWeight: 600,
-                                fontSize: '0.8rem',
-                                border: isCleaning ? '1px solid rgba(249, 115, 22, 0.15)' : '1px solid rgba(16, 185, 129, 0.15)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.35rem'
-                              }}
-                            >
-                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isCleaning ? 'var(--status-cleaning)' : 'var(--status-clean)' }}></span>
-                              {c.name}
-                              {activeRooms.length > 0 && (
-                                <span style={{ fontSize: '0.75rem', fontWeight: 500, opacity: 0.9 }}>
-                                  (🧹 {activeRooms.map(r => r.roomNumber).join(', ')})
-                                </span>
-                              )}
-                              {todayLogs.length > 0 && (
-                                <span style={{ fontSize: '0.75rem', fontWeight: 500, opacity: 0.8 }}>
-                                  (✓ {todayLogs.length})
-                                </span>
-                              )}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             )}
           </div>
+
+          {/* Collapsible Active Staff Section */}
+          {(currentUser?.role === 'front_desk' || currentUser?.role === 'checka' || currentUser?.role === 'kacho') && (
+            <div className="glass-panel" style={{ padding: '0.75rem 1rem', marginBottom: '1.25rem', marginTop: '1rem', borderRadius: 'var(--radius-md)' }}>
+              <div 
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => setShowActiveStaff(!showActiveStaff)}
+              >
+                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  👥 {language === 'vi' ? 'Xem nhân sự dọn phòng hôm nay' : language === 'ja' ? '本日の清掃スタッフ表示' : 'View Cleaners on Duty Today'}
+                </span>
+                <span style={{ fontSize: '0.8rem', opacity: 0.7 }}>
+                  {showActiveStaff ? '▲' : '▼'}
+                </span>
+              </div>
+
+              {showActiveStaff && (
+                <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', fontSize: '0.9rem' }}>
+                  {cleaners.filter(c => activeStaffIds.includes(c.id)).length === 0 ? (
+                    <span style={{ opacity: 0.6, fontStyle: 'italic' }}>
+                      {language === 'vi' ? 'Chưa có nhân sự nào được phân công' : language === 'ja' ? 'スタッフ未設定' : 'No staff assigned yet'}
+                    </span>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {cleaners.filter(c => activeStaffIds.includes(c.id)).map(c => {
+                        const { activeRooms, todayLogs } = getCleanerActivity(c.id);
+                        const isCleaning = activeRooms.length > 0;
+                        
+                        return (
+                          <span 
+                            key={c.id} 
+                            style={{ 
+                              backgroundColor: isCleaning ? 'rgba(249, 115, 22, 0.08)' : 'rgba(16, 185, 129, 0.08)', 
+                              color: isCleaning ? 'var(--status-cleaning)' : 'var(--status-clean)', 
+                              padding: '0.25rem 0.6rem', 
+                              borderRadius: '6px', 
+                              fontWeight: 600,
+                              fontSize: '0.8rem',
+                              border: isCleaning ? '1px solid rgba(249, 115, 22, 0.15)' : '1px solid rgba(16, 185, 129, 0.15)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.35rem'
+                            }}
+                          >
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isCleaning ? 'var(--status-cleaning)' : 'var(--status-clean)' }}></span>
+                            {c.name}
+                            {activeRooms.length > 0 && (
+                              <span style={{ fontSize: '0.75rem', fontWeight: 500, opacity: 0.9 }}>
+                                (🧹 {activeRooms.map(r => r.roomNumber).join(', ')})
+                              </span>
+                            )}
+                            {todayLogs.length > 0 && (
+                              <span style={{ fontSize: '0.75rem', fontWeight: 500, opacity: 0.8 }}>
+                                (✓ {todayLogs.length})
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
