@@ -2199,7 +2199,12 @@ export const AdminDashboard: React.FC = () => {
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{getTranslation(language, 'hotelManagement')}</h3>
             <button className="btn btn-primary btn-sm" onClick={handleAddHotelClick}>
               <Plus size={16} />
-              {getTranslation(language, 'addHotel')}
+              <span className="desktop-only-inline">
+                {getTranslation(language, 'addHotel')}
+              </span>
+              <span className="mobile-only-inline">
+                {language === 'vi' ? 'Thêm' : language === 'ja' ? '追加' : 'Add'}
+              </span>
             </button>
           </div>
 
@@ -3112,7 +3117,12 @@ export const AdminDashboard: React.FC = () => {
                   </h4>
                   <button className="btn btn-primary btn-sm" onClick={handleAddRoomClick}>
                     <Plus size={16} />
-                    {getTranslation(language, 'addRoom')}
+                    <span className="desktop-only-inline">
+                      {getTranslation(language, 'addRoom')}
+                    </span>
+                    <span className="mobile-only-inline">
+                      {language === 'vi' ? 'Thêm' : language === 'ja' ? '追加' : 'Add'}
+                    </span>
                   </button>
                 </div>
 
@@ -3554,7 +3564,12 @@ export const AdminDashboard: React.FC = () => {
             
             <button className="btn btn-primary btn-sm" onClick={handleAddUserClick}>
               <Plus size={16} />
-              {language === 'vi' ? 'Thêm nhân viên' : language === 'ja' ? 'スタッフ登録' : getTranslation(language, 'addUser')}
+              <span className="desktop-only-inline">
+                {language === 'vi' ? 'Thêm nhân viên' : language === 'ja' ? 'スタッフ登録' : getTranslation(language, 'addUser')}
+              </span>
+              <span className="mobile-only-inline">
+                {language === 'vi' ? 'Thêm' : language === 'ja' ? '追加' : 'Add'}
+              </span>
             </button>
           </div>
 
