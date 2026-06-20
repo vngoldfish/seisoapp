@@ -1,0 +1,17 @@
+version: '3.3'
+
+services:
+  seisoapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: seisoapp
+    restart: always
+    expose:
+      - "80"
+    networks:
+      - bawui-net
+
+networks:
+  bawui-net:
+    external: true
