@@ -334,3 +334,38 @@ body.dark-mode {
   }
 }
 
+/* Inline display responsive helpers */
+.desktop-only-inline {
+  display: inline !important;
+}
+.mobile-only-inline {
+  display: none !important;
+}
+
+@media (max-width: 480px) {
+  .desktop-only-inline {
+    display: none !important;
+  }
+  .mobile-only-inline {
+    display: inline !important;
+  }
+}
+
+/* Tab Switch Button Group styling */
+.tab-switch-btn {
+  border: none;
+  padding: 0.4rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+@media (max-width: 480px) {
+  .tab-switch-btn {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.75rem;
+  }
+}
+

@@ -3518,36 +3518,36 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => { setUserViewMode('global'); setUsersPage(1); }}
+                  className="tab-switch-btn"
                   style={{
-                    border: 'none',
-                    padding: '0.4rem 1rem',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    borderRadius: '6px',
-                    cursor: 'pointer',
                     backgroundColor: userViewMode === 'global' ? 'var(--primary-color)' : 'transparent',
-                    color: userViewMode === 'global' ? 'white' : 'inherit',
-                    transition: 'all var(--transition-fast)'
+                    color: userViewMode === 'global' ? 'white' : 'inherit'
                   }}
                 >
-                  🌐 {language === 'vi' ? 'Nhân sự hệ thống (Tổng thể)' : language === 'ja' ? 'システム全スタッフ' : 'All System Staff'}
+                  🌐{' '}
+                  <span className="desktop-only-inline">
+                    {language === 'vi' ? 'Nhân sự hệ thống (Tổng thể)' : language === 'ja' ? 'システム全スタッフ' : 'All System Staff'}
+                  </span>
+                  <span className="mobile-only-inline">
+                    {language === 'vi' ? 'Hệ thống' : language === 'ja' ? '全体' : 'System'}
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => { setUserViewMode('local'); setUsersPage(1); }}
+                  className="tab-switch-btn"
                   style={{
-                    border: 'none',
-                    padding: '0.4rem 1rem',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    borderRadius: '6px',
-                    cursor: 'pointer',
                     backgroundColor: userViewMode === 'local' ? 'var(--primary-color)' : 'transparent',
-                    color: userViewMode === 'local' ? 'white' : 'inherit',
-                    transition: 'all var(--transition-fast)'
+                    color: userViewMode === 'local' ? 'white' : 'inherit'
                   }}
                 >
-                  🏨 {language === 'vi' ? 'Nhân sự của khách sạn này' : language === 'ja' ? '当ホテルのスタッフ' : 'Current Hotel Staff'}
+                  🏨{' '}
+                  <span className="desktop-only-inline">
+                    {language === 'vi' ? 'Nhân sự của khách sạn này' : language === 'ja' ? '当ホテルのスタッフ' : 'Current Hotel Staff'}
+                  </span>
+                  <span className="mobile-only-inline">
+                    {language === 'vi' ? 'Chi nhánh' : language === 'ja' ? '当ホテル' : 'This Hotel'}
+                  </span>
                 </button>
               </div>
             </div>
