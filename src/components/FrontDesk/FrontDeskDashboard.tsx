@@ -1526,7 +1526,13 @@ export const FrontDeskDashboard: React.FC = () => {
 
             {/* Floor filter */}
             <div className="filter-item-wrapper floor-filter">
-              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{getTranslation(language, 'filterFloor')}:</label>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                {language === 'vi' ? (
+                  <>
+                    <span className="desktop-only-inline">Theo </span>tầng
+                  </>
+                ) : getTranslation(language, 'filterFloor')}:
+              </label>
               <select 
                 className="form-input" 
                 style={{ width: '120px', padding: '0.5rem 0.75rem' }}
@@ -1542,7 +1548,13 @@ export const FrontDeskDashboard: React.FC = () => {
 
             {/* Status filter */}
             <div className="filter-item-wrapper status-filter">
-              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{getTranslation(language, 'filterStatus')}:</label>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                {language === 'vi' ? (
+                  <>
+                    <span className="desktop-only-inline">Theo </span>trạng thái
+                  </>
+                ) : getTranslation(language, 'filterStatus')}:
+              </label>
               <select 
                 className="form-input" 
                 style={{ width: '180px', padding: '0.5rem 0.75rem' }}
@@ -1560,7 +1572,13 @@ export const FrontDeskDashboard: React.FC = () => {
 
              {/* Grid Columns filter */}
             <div className="filter-item-wrapper columns-filter">
-              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Số cột:' : language === 'ja' ? 'グリッド列:' : 'Columns:'}</label>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                {language === 'vi' ? (
+                  <>
+                    <span className="desktop-only-inline">Số </span>cột
+                  </>
+                ) : (language === 'ja' ? 'グリッド列' : 'Columns')}:
+              </label>
               <select 
                 className="form-input" 
                 style={{ width: '100px', padding: '0.5rem 0.75rem' }}

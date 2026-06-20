@@ -1512,15 +1512,15 @@
 @media (max-width: 576px) {
   .dashboard-filter-panel {
     display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 0.75rem !important;
-    padding: 0.75rem !important;
+    grid-template-columns: 1fr 1fr 1fr !important;
+    gap: 0.5rem !important;
+    padding: 0.5rem !important;
     margin-top: 1rem !important;
     margin-bottom: 1.5rem !important;
   }
 
   .filter-search-wrapper {
-    grid-column: span 2 !important;
+    grid-column: span 3 !important;
     width: 100% !important;
   }
 
@@ -1532,12 +1532,20 @@
     width: 100% !important;
   }
 
+  .filter-item-wrapper.floor-filter {
+    grid-column: span 1 !important;
+  }
+
   .filter-item-wrapper.status-filter {
-    grid-column: span 2 !important;
+    grid-column: span 1 !important;
+  }
+
+  .filter-item-wrapper.columns-filter {
+    grid-column: span 1 !important;
   }
 
   .filter-item-wrapper.mode-selector {
-    grid-column: span 1 !important;
+    grid-column: span 2 !important;
   }
 
   .filter-item-wrapper.full-screen-btn {
@@ -1546,16 +1554,19 @@
   }
 
   .dashboard-filter-panel label {
-    font-size: 0.75rem !important;
+    font-size: 0.72rem !important;
     font-weight: 600 !important;
     margin-bottom: 0.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .dashboard-filter-panel select,
   .dashboard-filter-panel .form-input {
     width: 100% !important;
-    padding: 0.35rem 0.5rem !important;
-    font-size: 0.8rem !important;
+    padding: 0.3rem 0.4rem !important;
+    font-size: 0.75rem !important;
     height: 32px !important;
     line-height: normal !important;
   }
@@ -1564,8 +1575,8 @@
   .dashboard-filter-panel button,
   .dashboard-filter-panel .btn-outline {
     height: 32px !important;
-    padding: 0.35rem 0.5rem !important;
-    font-size: 0.8rem !important;
+    padding: 0.3rem 0.4rem !important;
+    font-size: 0.75rem !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -1580,6 +1591,10 @@
 
   .dashboard-filter-panel .mode-selector button {
     flex: 1 !important;
+  }
+
+  .desktop-only-inline {
+    display: none !important;
   }
 }
 

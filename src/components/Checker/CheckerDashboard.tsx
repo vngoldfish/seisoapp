@@ -1480,7 +1480,13 @@ export const CheckerDashboard: React.FC = () => {
 
                 {/* Floor Filter */}
                 <div className="filter-item-wrapper floor-filter">
-                  <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{getTranslation(language, 'filterFloor')}:</label>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                    {language === 'vi' ? (
+                      <>
+                        <span className="desktop-only-inline">Theo </span>tầng
+                      </>
+                    ) : getTranslation(language, 'filterFloor')}:
+                  </label>
                   <select 
                     className="form-input" 
                     style={{ width: '110px', padding: '0.4rem 0.75rem' }}
@@ -1496,7 +1502,13 @@ export const CheckerDashboard: React.FC = () => {
 
                 {/* Checked Status Filter */}
                 <div className="filter-item-wrapper status-filter">
-                  <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Trạng thái check' : language === 'ja' ? '検査別' : 'Check Status'}:</label>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                    {language === 'vi' ? (
+                      <>
+                        <span className="desktop-only-inline">Trạng thái </span>check
+                      </>
+                    ) : (language === 'ja' ? '検査別' : 'Check Status')}:
+                  </label>
                   <select 
                     className="form-input" 
                     style={{ width: '160px', padding: '0.4rem 0.75rem' }}
@@ -1511,7 +1523,13 @@ export const CheckerDashboard: React.FC = () => {
 
                 {/* Grid Columns Filter */}
                 <div className="filter-item-wrapper columns-filter">
-                  <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Số cột:' : language === 'ja' ? 'グリッド列:' : 'Columns:'}</label>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                    {language === 'vi' ? (
+                      <>
+                        <span className="desktop-only-inline">Số </span>cột
+                      </>
+                    ) : (language === 'ja' ? 'グリッド列' : 'Columns')}:
+                  </label>
                   <select 
                     className="form-input" 
                     style={{ width: '100px', padding: '0.4rem 0.75rem' }}
