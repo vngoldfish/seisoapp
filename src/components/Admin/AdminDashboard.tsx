@@ -41,6 +41,27 @@ const getActiveStaffForHotelAndDate = (hotelId: string, date: string): string[] 
   return [];
 };
 
+const getVisiblePages = (current: number, total: number) => {
+  if (total <= 5) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const pages: (number | string)[] = [];
+  pages.push(1);
+  if (current > 3) {
+    pages.push('...');
+  }
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let i = start; i <= end; i++) {
+    pages.push(i);
+  }
+  if (current < total - 2) {
+    pages.push('...');
+  }
+  pages.push(total);
+  return pages;
+};
+
 export const AdminDashboard: React.FC = () => {
   const { language, addToast, hotelId, activeDate, selectHotel, currentUser, logout, darkMode, toggleDarkMode, setLanguage } = useApp();
   const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'logs' | 'hotels'>(() => {
@@ -2086,16 +2107,25 @@ export const AdminDashboard: React.FC = () => {
                   >
                     &laquo;
                   </button>
-                  {Array.from({ length: processedHotelsData.totalPages }, (_, idx) => idx + 1).map(page => (
-                    <button
-                      key={page}
-                      className={`btn btn-sm ${processedHotelsData.currentPage === page ? 'btn-primary' : 'btn-secondary'}`}
-                      onClick={() => setHotelPage(page)}
-                      style={{ minWidth: '32px', fontWeight: processedHotelsData.currentPage === page ? 'bold' : 'normal' }}
-                    >
-                      {page}
-                    </button>
-                  ))}
+                  {getVisiblePages(processedHotelsData.currentPage, processedHotelsData.totalPages).map((page, idx) => {
+                    if (page === '...') {
+                      return (
+                        <span key={`ellipsis-${idx}`} style={{ padding: '0.2rem 0.4rem', opacity: 0.5, fontSize: '0.85rem' }}>
+                          ...
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        key={page}
+                        className={`btn btn-sm ${processedHotelsData.currentPage === page ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setHotelPage(page as number)}
+                        style={{ minWidth: '32px', fontWeight: processedHotelsData.currentPage === page ? 'bold' : 'normal' }}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
                   <button
                     className="btn btn-sm btn-secondary"
                     onClick={() => setHotelPage(prev => Math.min(prev + 1, processedHotelsData.totalPages))}
@@ -3622,17 +3652,26 @@ export const AdminDashboard: React.FC = () => {
                 >
                   &laquo;
                 </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                  <button
-                    key={page}
-                    type="button"
-                    className={`btn btn-sm ${usersPage === page ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setUsersPage(page)}
-                    style={{ minWidth: '32px', fontWeight: usersPage === page ? 'bold' : 'normal' }}
-                  >
-                    {page}
-                  </button>
-                ))}
+                {getVisiblePages(usersPage, totalPages).map((page, index) => {
+                  if (page === '...') {
+                    return (
+                      <span key={`ellipsis-${index}`} style={{ padding: '0.4rem 0.5rem', opacity: 0.5, fontSize: '0.85rem' }}>
+                        ...
+                      </span>
+                    );
+                  }
+                  return (
+                    <button
+                      key={page}
+                      type="button"
+                      className={`btn btn-sm ${usersPage === page ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => setUsersPage(page as number)}
+                      style={{ minWidth: '32px', fontWeight: usersPage === page ? 'bold' : 'normal' }}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
