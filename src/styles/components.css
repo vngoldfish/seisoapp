@@ -154,125 +154,101 @@
 
 /* Room Card Status Variations */
 .room-card.vacant {
-  background-color: var(--bg-card-light);
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
 }
-.dark-mode .room-card.vacant {
-  background-color: var(--bg-card-dark);
+.room-card.vacant .room-number {
+  color: #0f172a !important;
 }
-.room-card.vacant::after {
-  background-color: transparent;
+.room-card.vacant .room-type-text,
+.room-card.vacant .room-assignee {
+  color: #64748b !important;
 }
+
+/* 1. Phòng out cần vệ sinh (dirty/cleaning checkout) -> màu đỏ */
+.room-card.dirty:not(.stay),
+.room-card.cleaning:not(.stay) {
+  background-color: #ef4444 !important;
+  border-color: #dc2626 !important;
+}
+
+/* 2. Phòng vệ sinh xong rồi (clean checkout unchecked) -> đỏ 1/2, xanh da trời 1/2 */
+.room-card.clean:not(.stay):not(.checked) {
+  background: linear-gradient(135deg, #ef4444 50%, #38bdf8 50%) !important;
+  border-color: #38bdf8 !important;
+}
+
+/* 3. Phòng check xong (clean checkout checked) -> xanh da trời 1/2, xanh lá 1/2 */
+.room-card.clean:not(.stay).checked {
+  background: linear-gradient(135deg, #38bdf8 50%, #22c55e 50%) !important;
+  border-color: #22c55e !important;
+}
+
+/* 4. Phòng đang sửa chữa (maintenance) -> màu đen nhẹ */
+.room-card.maintenance {
+  background-color: #334155 !important;
+  border-color: #1e293b !important;
+}
+
+/* 5. Phòng stay -> màu tím */
+.room-card.stay:not(.dnd) {
+  background-color: #8b5cf6 !important;
+  border-color: #7c3aed !important;
+}
+
+/* 6. DD (DND) -> tím 1/2, xanh da trời 1/2 */
+.room-card.dnd {
+  background: linear-gradient(135deg, #8b5cf6 50%, #38bdf8 50%) !important;
+  border-color: #38bdf8 !important;
+}
+
+/* 7. Phổ biến màu chữ trắng cho các thẻ phòng có màu nền */
+.room-card:not(.vacant) {
+  color: #ffffff !important;
+}
+.room-card:not(.vacant) .room-number,
+.room-card:not(.vacant) .room-type-text,
+.room-card:not(.vacant) .room-assignee,
+.room-card:not(.vacant) .room-guest-count,
+.room-card:not(.vacant) .room-card-compact-number,
+.room-card:not(.vacant) .room-card-compact-guests,
+.room-card:not(.vacant) .room-card-compact-guests-count {
+  color: #ffffff !important;
+}
+.room-card:not(.vacant) .stay-badge {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  color: #ffffff !important;
+}
+
+/* Ẩn các thanh màu bar dưới cùng (sau card) do đã đổ màu toàn card */
+.room-card::after {
+  background-color: transparent !important;
+}
+
+/* Hiệu ứng hover và bóng đổ tương ứng */
 .room-card.vacant:hover {
   transform: translateY(-4px);
   box-shadow: var(--shadow-md);
 }
-
-.room-card.occupied {
-  background-color: var(--bg-card-light);
-}
-.dark-mode .room-card.occupied {
-  background-color: var(--bg-card-dark);
-}
-.room-card.occupied::after {
-  background-color: var(--status-occupied);
-}
-.room-card.occupied:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
-}
-
-.room-card.dirty {
-  background-color: var(--status-dirty-light);
-  border-color: var(--status-dirty-border);
-}
-.dark-mode .room-card.dirty {
-  background-color: rgba(234, 179, 8, 0.1);
-  border-color: rgba(234, 179, 8, 0.2);
-}
-.room-card.dirty::after {
-  background-color: var(--status-dirty);
-}
-.room-card.dirty:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-glow-dirty);
-}
-
-.room-card.cleaning {
-  background-color: var(--status-cleaning-light);
-  border-color: var(--status-cleaning-border);
-}
-.dark-mode .room-card.cleaning {
-  background-color: rgba(249, 115, 22, 0.10);
-  border-color: rgba(249, 115, 22, 0.2);
-}
-.room-card.cleaning::after {
-  background-color: var(--status-cleaning);
-}
+.room-card.dirty:hover,
 .room-card.cleaning:hover {
   transform: translateY(-4px);
-  box-shadow: var(--shadow-glow-cleaning);
-}
-
-.room-card.clean {
-  background-color: var(--status-clean-light);
-  border-color: var(--status-clean-border);
-}
-.dark-mode .room-card.clean {
-  background-color: rgba(16, 185, 129, 0.1);
-  border-color: rgba(16, 185, 129, 0.2);
-}
-.room-card.clean::after {
-  background-color: var(--status-clean);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
 }
 .room-card.clean:hover {
   transform: translateY(-4px);
-  box-shadow: var(--shadow-glow-clean);
-}
-
-.room-card.maintenance {
-  background-color: var(--status-maintenance-light);
-  border-color: var(--status-maintenance-border);
-}
-.dark-mode .room-card.maintenance {
-  background-color: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.2);
-}
-.room-card.maintenance::after {
-  background-color: var(--status-maintenance);
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
 }
 .room-card.maintenance:hover {
   transform: translateY(-4px);
+  box-shadow: 0 0 15px rgba(51, 65, 85, 0.4);
 }
-
-.room-card.eco {
-  background-color: var(--status-eco-light);
-  border-color: var(--status-eco-border);
-}
-.dark-mode .room-card.eco {
-  background-color: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.2);
-}
-.room-card.eco::after {
-  background-color: var(--status-eco);
-}
-.room-card.eco:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
-}
-
-.room-card.dnd {
-  background-color: var(--status-dnd-light);
-  border-color: var(--status-dnd-border);
-}
-.dark-mode .room-card.dnd {
-  background-color: rgba(71, 85, 105, 0.1);
-  border-color: rgba(71, 85, 105, 0.2);
-}
-.room-card.dnd::after {
-  background-color: var(--status-dnd);
-}
+.room-card.stay:hover,
 .room-card.dnd:hover {
   transform: translateY(-4px);
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
 }
 
 /* Room details typography */

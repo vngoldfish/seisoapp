@@ -135,6 +135,7 @@ export const FrontDeskDashboard: React.FC = () => {
     return params.get('fullscreen') === 'true';
   });
   const [activeFloorIndex, setActiveFloorIndex] = useState(0);
+  const [showLegend, setShowLegend] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -1749,6 +1750,73 @@ export const FrontDeskDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* Chú thích màu sắc phòng cho nhân viên (Color Legend) */}
+          <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1.5rem', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setShowLegend(!showLegend)}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '0.9rem', color: 'var(--primary-color)' }}>
+                <span>💡</span>
+                <span>{language === 'vi' ? 'Hướng dẫn màu sắc phòng cho nhân viên' : language === 'ja' ? '客室カラー表示の説明' : 'Room Color Guide for Staff'}</span>
+              </div>
+              <button type="button" className="btn btn-outline" style={{ padding: '0.15rem 0.5rem', fontSize: '0.75rem' }}>
+                {showLegend ? (language === 'vi' ? 'Ẩn' : language === 'ja' ? '閉じる' : 'Hide') : (language === 'vi' ? 'Xem' : language === 'ja' ? '表示' : 'Show')}
+              </button>
+            </div>
+            
+            {showLegend && (
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', 
+                gap: '0.75rem', 
+                marginTop: '1rem', 
+                borderTop: '1px solid rgba(0,0,0,0.06)', 
+                paddingTop: '0.75rem' 
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.1)', backgroundColor: '#ffffff' }}></div>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {language === 'vi' ? 'Phòng trống (Trắng)' : language === 'ja' ? '空室 (白)' : 'Vacant (White)'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#ef4444' }}></div>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {language === 'vi' ? 'Phòng out cần dọn (Đỏ)' : language === 'ja' ? 'アウト清掃必要 (赤)' : 'Checkout Dirty (Red)'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #ef4444 50%, #38bdf8 50%)' }}></div>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {language === 'vi' ? 'Vệ sinh xong (Đỏ / Xanh da trời)' : language === 'ja' ? '清掃完了 (赤 / 水色)' : 'Cleaned (Red / Sky Blue)'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #38bdf8 50%, #22c55e 50%)' }}></div>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {language === 'vi' ? 'Đã duyệt (Xanh da trời / Xanh lá)' : language === 'ja' ? '客室検査合格 (水色 / 緑)' : 'Approved (Sky Blue / Green)'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#8b5cf6' }}></div>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {language === 'vi' ? 'Phòng stay - dọn (Tím)' : language === 'ja' ? '滞在清掃 (紫)' : 'Stay Room (Purple)'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #8b5cf6 50%, #38bdf8 50%)' }}></div>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {language === 'vi' ? 'Phòng stay DND - DD (Tím / Xanh da trời)' : language === 'ja' ? '滞在 DND (紫 / 水色)' : 'Stay DND (Purple / Sky Blue)'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#334155' }}></div>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                    {language === 'vi' ? 'Đang sửa chữa (Đen nhẹ)' : language === 'ja' ? '故障・修繕中 (薄黒)' : 'Maintenance (Charcoal)'}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Rooms Floor Grid */}
           {Object.keys(roomsByFloor).length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem', opacity: 0.6 }} className="glass-panel">
@@ -1821,7 +1889,7 @@ export const FrontDeskDashboard: React.FC = () => {
                           return (
                             <div 
                               key={room.id} 
-                              className={`room-card ${room.status} ${isCompact ? 'compact' : ''}`}
+                              className={`room-card ${room.status} ${room.isStay ? 'stay' : ''} ${room.isChecked ? 'checked' : ''} ${isCompact ? 'compact' : ''}`}
                               onClick={() => handleRoomClick(room)}
                               title={room.notes ? `Ghi chú: ${room.notes}` : undefined}
                               style={cardStyle}
@@ -3075,7 +3143,7 @@ export const FrontDeskDashboard: React.FC = () => {
                   return (
                     <div 
                       key={room.id} 
-                      className={`room-card ${room.status} ${isCompact ? 'compact' : ''}`}
+                      className={`room-card ${room.status} ${room.isStay ? 'stay' : ''} ${room.isChecked ? 'checked' : ''} ${isCompact ? 'compact' : ''}`}
                       onClick={() => handleRoomClick(room)}
                       title={room.notes ? `Ghi chú: ${room.notes}` : undefined}
                       style={cardStyle}
