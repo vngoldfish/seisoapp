@@ -155,32 +155,12 @@
 /* Room Card Status Variations */
 .room-card.vacant {
   background-color: #f1f5f9 !important; /* light slate/gray */
-  color: #000000 !important;
   border: 1px solid rgba(0, 0, 0, 0.18) !important; /* light black border */
-}
-.room-card.vacant .room-number,
-.room-card.vacant .room-type-text,
-.room-card.vacant .room-assignee,
-.room-card.vacant .room-guest-count,
-.room-card.vacant .room-card-compact-number,
-.room-card.vacant .room-card-compact-guests,
-.room-card.vacant .room-card-compact-guests-count {
-  color: #000000 !important;
 }
 
 .room-card.occupied {
   background-color: var(--status-occupied-light) !important;
   border: 1px solid var(--status-occupied-border) !important;
-  color: var(--status-occupied) !important;
-}
-.room-card.occupied .room-number,
-.room-card.occupied .room-type-text,
-.room-card.occupied .room-assignee,
-.room-card.occupied .room-guest-count,
-.room-card.occupied .room-card-compact-number,
-.room-card.occupied .room-card-compact-guests,
-.room-card.occupied .room-card-compact-guests-count {
-  color: var(--status-occupied) !important;
 }
 
 /* 1. Phòng out cần vệ sinh (dirty/cleaning checkout) -> màu đỏ */
@@ -237,6 +217,29 @@
   background-color: rgba(255, 255, 255, 0.25) !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
   color: #ffffff !important;
+}
+
+/* Override text color to black/slate for vacant and occupied rooms (not stay) to prevent white text on light background */
+.room-card.vacant,
+.room-card.vacant .room-number,
+.room-card.vacant .room-type-text,
+.room-card.vacant .room-assignee,
+.room-card.vacant .room-guest-count,
+.room-card.vacant .room-card-compact-number,
+.room-card.vacant .room-card-compact-guests,
+.room-card.vacant .room-card-compact-guests-count {
+  color: #000000 !important;
+}
+
+.room-card.occupied:not(.stay),
+.room-card.occupied:not(.stay) .room-number,
+.room-card.occupied:not(.stay) .room-type-text,
+.room-card.occupied:not(.stay) .room-assignee,
+.room-card.occupied:not(.stay) .room-guest-count,
+.room-card.occupied:not(.stay) .room-card-compact-number,
+.room-card.occupied:not(.stay) .room-card-compact-guests,
+.room-card.occupied:not(.stay) .room-card-compact-guests-count {
+  color: var(--status-occupied) !important;
 }
 
 /* Ẩn các thanh màu bar dưới cùng (sau card) do đã đổ màu toàn card */
