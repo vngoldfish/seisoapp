@@ -617,9 +617,9 @@ export const HousekeepingDashboard: React.FC = () => {
             paddingTop: '0.75rem' 
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.1)', backgroundColor: '#ffffff' }}></div>
+              <div style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.18)', backgroundColor: '#f1f5f9' }}></div>
               <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                {language === 'vi' ? 'Phòng trống (Trắng)' : language === 'ja' ? '空室 (白)' : 'Vacant (White)'}
+                {language === 'vi' ? 'Phòng trống (Trắng nhạt)' : language === 'ja' ? '空室 (薄白)' : 'Vacant (Off-White)'}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
