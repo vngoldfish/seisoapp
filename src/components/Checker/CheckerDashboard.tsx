@@ -862,7 +862,7 @@ export const CheckerDashboard: React.FC = () => {
   return (
     <div className="main-content">
       {/* Title Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
           {language === 'vi' ? 'Màn hình Giám sát / Kiểm phòng' : language === 'ja' ? '客室検査ダッシュボード' : 'Room Checker Dashboard'}
         </h2>

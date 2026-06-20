@@ -1495,7 +1495,7 @@
 /* Dashboard Filter Panel Styles */
 .dashboard-filter-panel {
   padding: 1rem;
-  margin-top: 1.5rem;
+  margin-top: 0;
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
@@ -1515,7 +1515,7 @@
     grid-template-columns: 1fr 1fr 1fr !important;
     gap: 0.5rem !important;
     padding: 0.5rem !important;
-    margin-top: 1rem !important;
+    margin-top: 0 !important;
     margin-bottom: 1.5rem !important;
   }
 

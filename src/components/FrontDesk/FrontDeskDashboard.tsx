@@ -901,7 +901,7 @@ export const FrontDeskDashboard: React.FC = () => {
   return (
     <div className="main-content">
       {/* Sound settings and title */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '1rem' }}>
         <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
           {getTranslation(language, 'fdDashboard')}
         </h2>
