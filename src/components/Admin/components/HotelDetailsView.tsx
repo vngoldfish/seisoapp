@@ -9,9 +9,6 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Play,
-  CheckCircle,
-  AlertTriangle,
   User as UserIcon
 } from 'lucide-react';
 import type { Room, User, CleaningLog, Hotel as HotelType } from '../../../db/dbInterface';
@@ -1149,22 +1146,14 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                         {floorRooms
                           .sort((a: Room, b: Room) => a.roomNumber.localeCompare(b.roomNumber))
                           .map((room: Room) => {
-                            const guestLabel = language === 'vi' 
-                              ? `Set: ${room.guestCount} người` 
-                              : language === 'ja' 
-                                ? `セット: ${room.guestCount}人` 
-                                : `Set: ${room.guestCount} Pax`;
-
                             return (
                               <div 
                                 key={room.id} 
-                                className={`room-card ${room.status}`}
+                                className="room-card vacant"
                                 onClick={() => handleEditRoomClick(room)}
                                 style={{ cursor: 'pointer', position: 'relative' }}
-                                title={room.notes ? `Ghi chú: ${room.notes}` : undefined}
+                                title={language === 'vi' ? 'Nhấp để sửa thông tin phòng' : language === 'ja' ? 'クリックして部屋設定を編集' : 'Click to edit room details'}
                               >
-                                {room.isStay && <span className="stay-badge" style={{ right: '24px' }}>Stay</span>}
-                                
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -1199,51 +1188,10 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                                 
                                 <div>
                                   <div className="room-type-text">{getFormattedRoomType(room.type)}</div>
-                                  <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <div className="room-number">
                                     {room.roomNumber}
-                                    {(() => {
-                                      const iconSize = gridColumns !== 'auto' && Number(gridColumns) >= 12 ? 10 : gridColumns !== 'auto' && Number(gridColumns) >= 8 ? 12 : 14;
-                                      return (
-                                        <>
-                                          {room.status === 'dirty' && <Play size={iconSize} style={{ color: 'var(--status-dirty)' }} fill="var(--status-dirty)" />}
-                                          {room.status === 'eco' && <Play size={iconSize} style={{ color: 'var(--status-eco)' }} fill="var(--status-eco)" />}
-                                          {room.status === 'cleaning' && <CheckCircle size={iconSize} style={{ color: 'var(--status-cleaning)' }} />}
-                                          {room.notes && <AlertTriangle size={iconSize} style={{ color: 'var(--status-maintenance)' }} className="animate-pulse" />}
-                                        </>
-                                      );
-                                    })()}
                                   </div>
                                 </div>
-                                
-                                <div className="room-info-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '0.5rem' }}>
-                                  <span className="room-guest-count">
-                                    ※ {guestLabel}
-                                  </span>
-                                  {(room.status === 'cleaning' || room.status === 'clean') && room.cleanerName && (
-                                    <span className="room-assignee" title={room.cleanerName}>
-                                      👤 {room.cleanerName.split(' ')[0]}
-                                    </span>
-                                  )}
-                                </div>
-                                
-                                {room.notes && (
-                                  <div style={{ 
-                                    fontSize: '0.65rem', 
-                                    opacity: 0.9, 
-                                    maxWidth: '100%', 
-                                    overflow: 'hidden', 
-                                    textOverflow: 'ellipsis', 
-                                    whiteSpace: 'nowrap', 
-                                    marginTop: '0.25rem', 
-                                    borderTop: '1px dashed rgba(0,0,0,0.1)', 
-                                    paddingTop: '0.25rem', 
-                                    textAlign: 'left',
-                                    color: 'var(--status-maintenance)',
-                                    fontWeight: 700
-                                  }}>
-                                    ⚠️ {room.notes}
-                                  </div>
-                                )}
                               </div>
                             );
                           })}
