@@ -93,6 +93,7 @@ export const AdminDashboard: React.FC = () => {
   const [hotelFilterStatus, setHotelFilterStatus] = useState<'all' | 'completed' | 'in_progress'>('all');
   const [hotelPage, setHotelPage] = useState(1);
   const [hotelPerPage, setHotelPerPage] = useState(5);
+  const [hotelManagePage, setHotelManagePage] = useState(1);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1405,6 +1406,12 @@ export const AdminDashboard: React.FC = () => {
     };
   }, [globalStats.hotelBreakdowns, hotelSearchTerm, hotelFilterStatus, hotelPage, hotelPerPage]);
 
+  const hotelManagePerPage = 5;
+  const totalManageHotelsPages = Math.ceil(hotels.length / hotelManagePerPage) || 1;
+  const currentManageHotelsPage = Math.min(Math.max(1, hotelManagePage), totalManageHotelsPages);
+  const startHotelIndex = (currentManageHotelsPage - 1) * hotelManagePerPage;
+  const displayedHotels = hotels.slice(startHotelIndex, startHotelIndex + hotelManagePerPage);
+
   return (
     <div className="main-content">
 
@@ -2209,7 +2216,7 @@ export const AdminDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {hotels.map(h => (
+                  {displayedHotels.map(h => (
                     <tr key={h.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
                       <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>{h.id}</td>
                       <td 
@@ -2256,7 +2263,7 @@ export const AdminDashboard: React.FC = () => {
 
             {/* Mobile view: Cards */}
             <div className="mobile-only-block" style={{ width: '100%' }}>
-              {hotels.map(h => (
+              {displayedHotels.map(h => (
                 <div key={h.id} className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: '4px solid var(--primary-color)', position: 'relative' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                     <span 
@@ -2305,6 +2312,59 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {/* Pagination Controls */}
+            {totalManageHotelsPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', padding: '1rem 0.5rem 0 0.5rem', borderTop: '1px solid rgba(0,0,0,0.05)', flexWrap: 'wrap', gap: '1rem' }}>
+                <div style={{ fontSize: '0.85rem', opacity: 0.6 }}>
+                  {language === 'vi' 
+                    ? `Hiển thị ${startHotelIndex + 1}-${Math.min(startHotelIndex + hotelManagePerPage, hotels.length)} trên tổng số ${hotels.length} khách sạn` 
+                    : language === 'ja'
+                      ? `${hotels.length}軒中 ${startHotelIndex + 1}-${Math.min(startHotelIndex + hotelManagePerPage, hotels.length)}軒を表示`
+                      : `Showing ${startHotelIndex + 1}-${Math.min(startHotelIndex + hotelManagePerPage, hotels.length)} of ${hotels.length} hotels`}
+                </div>
+                <div style={{ display: 'flex', gap: '0.25rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setHotelManagePage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentManageHotelsPage === 1}
+                    style={{ minWidth: '40px' }}
+                  >
+                    &laquo;
+                  </button>
+                  {getVisiblePages(currentManageHotelsPage, totalManageHotelsPages).map((page, index) => {
+                    if (page === '...') {
+                      return (
+                        <span key={`ellipsis-${index}`} style={{ padding: '0.4rem 0.5rem', opacity: 0.5, fontSize: '0.85rem' }}>
+                          ...
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        key={page}
+                        type="button"
+                        className={`btn btn-sm ${currentManageHotelsPage === page ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setHotelManagePage(page as number)}
+                        style={{ minWidth: '32px', fontWeight: currentManageHotelsPage === page ? 'bold' : 'normal' }}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setHotelManagePage(prev => Math.min(prev + 1, totalManageHotelsPages))}
+                    disabled={currentManageHotelsPage === totalManageHotelsPages}
+                    style={{ minWidth: '40px' }}
+                  >
+                    &raquo;
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         </div>
       )}
