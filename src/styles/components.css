@@ -125,11 +125,11 @@
 /* Room Card (Modern Premium Style) */
 .room-card {
   border-radius: var(--radius-md);
-  padding: 1.25rem 1rem 0.75rem;
+  padding: var(--room-card-padding, 1.25rem 1rem 0.75rem);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 120px;
+  min-height: var(--room-card-min-height, 120px);
   cursor: pointer;
   transition: all var(--transition-normal);
   border: 1px solid rgba(0, 0, 0, 0.05);
@@ -276,7 +276,7 @@
 
 /* Room details typography */
 .room-number {
-  font-size: 1.75rem;
+  font-size: var(--room-number-font-size, 1.75rem);
   font-weight: 800;
   line-height: 1.1;
   color: var(--text-primary-light);
@@ -287,7 +287,7 @@
 }
 
 .room-type-text {
-  font-size: 0.75rem;
+  font-size: var(--room-type-font-size, 0.75rem);
   color: var(--text-secondary-light);
   text-transform: uppercase;
   font-weight: 600;
@@ -314,7 +314,7 @@
 
 /* Expected guest count and notes */
 .room-guest-count {
-  font-size: 0.7rem;
+  font-size: var(--room-guest-font-size, 0.7rem);
   font-weight: 600;
   opacity: 0.8;
   margin-top: 0.35rem;
@@ -329,7 +329,7 @@
 }
 
 .room-assignee {
-  font-size: 0.75rem;
+  font-size: var(--room-assignee-font-size, 0.75rem);
   font-weight: 600;
   color: var(--text-secondary-light);
   display: flex;

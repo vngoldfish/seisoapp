@@ -95,6 +95,13 @@ export const CheckerDashboard: React.FC = () => {
     return 'work';
   });
 
+  const [gridColumns, setGridColumns] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlVal = params.get('gridCols');
+    if (urlVal) return urlVal;
+    return localStorage.getItem('hotel_clean_room_grid_columns') || 'auto';
+  });
+
   const [setupModalOpen, setSetupModalOpen] = useState(false);
   const [setupForm, setSetupForm] = useState({
     status: 'vacant' as Room['status'],
@@ -155,10 +162,16 @@ export const CheckerDashboard: React.FC = () => {
       changed = true;
     }
 
+    if (params.get('gridCols') !== gridColumns) {
+      params.set('gridCols', gridColumns);
+      localStorage.setItem('hotel_clean_room_grid_columns', gridColumns);
+      changed = true;
+    }
+
     if (changed) {
       window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
     }
-  }, [activeTab, staffLayout, staffSortField, staffSortOrder, staffViewMode, gridMode]);
+  }, [activeTab, staffLayout, staffSortField, staffSortOrder, staffViewMode, gridMode, gridColumns]);
 
   useEffect(() => {
     const fetchStaffData = async () => {
@@ -1387,6 +1400,25 @@ export const CheckerDashboard: React.FC = () => {
                   </select>
                 </div>
 
+                {/* Grid Columns Filter */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Số cột:' : language === 'ja' ? 'グリッド列:' : 'Columns:'}</label>
+                  <select 
+                    className="form-input" 
+                    style={{ width: '100px', padding: '0.4rem 0.75rem' }}
+                    value={gridColumns}
+                    onChange={e => setGridColumns(e.target.value)}
+                  >
+                    <option value="auto">{language === 'vi' ? 'Tự động' : language === 'ja' ? '自動' : 'Auto'}</option>
+                    <option value="4">4</option>
+                    <option value="6">6</option>
+                    <option value="8">8</option>
+                    <option value="10">10</option>
+                    <option value="12">12</option>
+                    <option value="16">16</option>
+                  </select>
+                </div>
+
                 {/* Mode Selector */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Chế độ:' : language === 'ja' ? 'モード:' : 'Mode:'}</label>
@@ -1447,7 +1479,18 @@ export const CheckerDashboard: React.FC = () => {
                           </span>
                         </h3>
 
-                        <div className="room-grid">
+                        <div 
+                          className="room-grid"
+                          style={gridColumns !== 'auto' ? {
+                            gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
+                            ['--room-card-min-height' as any]: Number(gridColumns) >= 12 ? '80px' : Number(gridColumns) >= 8 ? '95px' : '120px',
+                            ['--room-card-padding' as any]: Number(gridColumns) >= 12 ? '0.5rem 0.4rem 0.4rem' : Number(gridColumns) >= 8 ? '0.8rem 0.6rem 0.5rem' : '1.25rem 1rem 0.75rem',
+                            ['--room-number-font-size' as any]: Number(gridColumns) >= 12 ? '1.1rem' : Number(gridColumns) >= 8 ? '1.35rem' : '1.75rem',
+                            ['--room-type-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                            ['--room-guest-font-size' as any]: Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 8 ? '0.6rem' : '0.7rem',
+                            ['--room-assignee-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                          } : undefined}
+                        >
                           {floorRooms
                             .sort((a: Room, b: Room) => a.roomNumber.localeCompare(b.roomNumber))
                             .map((room: Room) => {
@@ -1458,7 +1501,6 @@ export const CheckerDashboard: React.FC = () => {
                               let statusText = room.status.toUpperCase();
                               let cardClass = room.status;
 
-                              // Custom visual highlight for unchecked rooms
                               if (isPending) {
                                 statusText = language === 'vi' ? 'CHỜ DUYỆT 🔍' : language === 'ja' ? '要検査 🔍' : 'PENDING 🔍';
                               } else if (isApproved) {
