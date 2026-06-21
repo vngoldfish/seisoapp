@@ -46,6 +46,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - VITE_USE_POSTGRES=${VITE_USE_POSTGRES:-true}
+        - VITE_BACKEND_URL=${VITE_BACKEND_URL:-https://app.bawui.com}
     container_name: seisoapp
     restart: always
     ports:
