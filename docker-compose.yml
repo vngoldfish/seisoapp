@@ -61,4 +61,4 @@ volumes:
 
 networks:
   bawui-net:
-    driver: bridge
+    external: true
