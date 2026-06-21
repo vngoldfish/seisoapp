@@ -1115,7 +1115,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
             </div>
 
             {/* Productivity Leaderboard */}
-            <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
+            <div className="glass-panel grid-span-2" style={{ padding: '1.5rem' }}>
               <h4 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
                 {language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Hôm nay)' : language === 'ja' ? 'スタッフ清掃実績ランキング (本日)' : 'Housekeeper Leaderboard (Today)'}
               </h4>
@@ -1309,7 +1309,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
             </div>
 
             {/* Defects Panel */}
-            <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
+            <div className="glass-panel grid-span-2" style={{ padding: '1.5rem' }}>
               <h4 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
                 ⚠️ {language === 'vi' ? 'Thống Kê Lỗi Dọn Dẹp (Hôm nay)' : language === 'ja' ? '清掃不備インスペクション統計 (本日)' : 'Cleaning Defects Inspection Stats (Today)'}
               </h4>

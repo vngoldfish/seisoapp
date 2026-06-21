@@ -1445,7 +1445,7 @@ export const CheckerDashboard: React.FC = () => {
                 </div>
 
                 {/* Housekeeper Leaderboard */}
-                <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
+                <div className="glass-panel grid-span-2" style={{ padding: '1.5rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
                     <h4 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
                       {statsTimeRange === 'today' 
@@ -1683,7 +1683,7 @@ export const CheckerDashboard: React.FC = () => {
                 </div>
 
                 {/* Defects Analytics Panel */}
-                <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
+                <div className="glass-panel grid-span-2" style={{ padding: '1.5rem' }}>
                   <h4 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
                     ⚠️ {statsTimeRange === 'today'
                       ? (language === 'vi' ? 'Thống Kê Lỗi Dọn Dẹp (Hôm nay)' : language === 'ja' ? '清掃不備インスペクション統計 (本日)' : 'Cleaning Defects Inspection Stats (Today)')
