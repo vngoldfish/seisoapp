@@ -1305,7 +1305,7 @@ export const FrontDeskDashboard: React.FC = () => {
           </div>
 
           {/* Charts Section */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
             
             {/* Donut Chart and Status Legend */}
             <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
@@ -1522,14 +1522,14 @@ export const FrontDeskDashboard: React.FC = () => {
                     onClick={() => setLeaderboardSortBy('count')}
                     className={`capsule-button ${leaderboardSortBy === 'count' ? 'active' : ''}`}
                   >
-                    <span>{language === 'vi' ? '🧹 Số lượng phòng' : language === 'ja' ? '🧹 清掃室数' : '🧹 Room Count'}</span>
+                    <span>{language === 'vi' ? '🧹 Số phòng' : language === 'ja' ? '🧹 室数' : '🧹 Rooms'}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setLeaderboardSortBy('time')}
                     className={`capsule-button ${leaderboardSortBy === 'time' ? 'active' : ''}`}
                   >
-                    <span>{language === 'vi' ? '⏱️ Thời gian dọn TB' : language === 'ja' ? '⏱️ 平均清掃時間' : '⏱️ Avg Clean Time'}</span>
+                    <span>{language === 'vi' ? '⏱️ T.gian TB' : language === 'ja' ? '⏱️ 平均時間' : '⏱️ Avg Time'}</span>
                   </button>
                 </div>
 
@@ -1752,7 +1752,7 @@ export const FrontDeskDashboard: React.FC = () => {
                         : (language === 'vi' ? 'Không phát hiện lỗi dọn dẹp nào trong năm nay!' : language === 'ja' ? '今年は清掃不備の指摘はありません！' : 'No cleaning defects reported this year!')}
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
                   {/* KPI cards and housekeeper breakdown */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
