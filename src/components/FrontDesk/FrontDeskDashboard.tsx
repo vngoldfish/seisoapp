@@ -29,7 +29,7 @@ const getVisiblePages = (current: number, total: number) => {
 };
 
 export const FrontDeskDashboard: React.FC = () => {
-  const { currentUser, language, addToast, triggerSoundAlert, activeDate, logout, darkMode, toggleDarkMode, setLanguage } = useApp();
+  const { currentUser, language, addToast, triggerSoundAlert, activeDate, logout, darkMode, toggleDarkMode, setLanguage, hotelId } = useApp();
   const isEditDisabled = useMemo(() => {
     return (activeDate < getTodayDateString()) && (currentUser?.role === 'kacho');
   }, [activeDate, currentUser]);
@@ -229,7 +229,7 @@ export const FrontDeskDashboard: React.FC = () => {
       }
     };
     fetchStaffData();
-  }, [activeDate]);
+  }, [activeDate, hotelId]);
 
   // daily staff search state
   const [dailyStaffSearchTerm, setDailyStaffSearchTerm] = useState<string>('');
@@ -333,7 +333,7 @@ export const FrontDeskDashboard: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [hotelId]);
 
   useEffect(() => {
     // Subscribe to logs updates
@@ -343,7 +343,7 @@ export const FrontDeskDashboard: React.FC = () => {
     return () => {
       unsubscribeLogs();
     };
-  }, []);
+  }, [hotelId]);
 
   // Fetch cleaning log for the selected room when the modal opens
   useEffect(() => {

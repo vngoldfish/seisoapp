@@ -50,7 +50,7 @@ const compressImage = (file: File): Promise<string> => {
 };
 
 export const HousekeepingDashboard: React.FC = () => {
-  const { currentUser, language, addToast, activeDate, logout, darkMode, toggleDarkMode, setLanguage } = useApp();
+  const { currentUser, language, addToast, activeDate, logout, darkMode, toggleDarkMode, setLanguage, hotelId } = useApp();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [floorFilter, setFloorFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -98,7 +98,7 @@ export const HousekeepingDashboard: React.FC = () => {
     }
 
     return () => unsubscribe();
-  }, []);
+  }, [hotelId]);
 
   const saveStartedTimestamps = (newTimestamps: Record<string, string>) => {
     setStartedTimestamps(newTimestamps);

@@ -34,7 +34,7 @@ const getVisiblePages = (current: number, total: number) => {
 };
 
 export const CheckerDashboard: React.FC = () => {
-  const { currentUser, language, addToast, activeDate, logout, darkMode, toggleDarkMode, setLanguage } = useApp();
+  const { currentUser, language, addToast, activeDate, logout, darkMode, toggleDarkMode, setLanguage, hotelId } = useApp();
   const isEditDisabled = useMemo(() => {
     return (activeDate < getTodayDateString()) && (currentUser?.role === 'checka');
   }, [activeDate, currentUser]);
@@ -201,7 +201,7 @@ export const CheckerDashboard: React.FC = () => {
       }
     };
     fetchStaffData();
-  }, [activeDate]);
+  }, [activeDate, hotelId]);
 
   // STAFF TOGGLE FOR TODAY'S DUTY
   const handleStaffToggle = (userId: string) => {
@@ -286,7 +286,7 @@ export const CheckerDashboard: React.FC = () => {
       unsubscribeRooms();
       unsubscribeLogs();
     };
-  }, []);
+  }, [hotelId]);
 
   // Fetch cleaning log for the selected room when the modal opens
   useEffect(() => {
