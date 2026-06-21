@@ -75,7 +75,7 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
       </div>
 
       {/* Search, Filter, Sort, Page Size Controls */}
-      <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', backgroundColor: 'rgba(255, 255, 255, 0.4)', marginBottom: '1.5rem' }}>
+      <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', backgroundColor: 'var(--panel-bg-subtle)', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <input
             type="text"

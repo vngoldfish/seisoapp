@@ -1076,7 +1076,7 @@ export const HousekeepingDashboard: React.FC = () => {
                       style={{ 
                         background: 'none', 
                         border: 'none', 
-                        color: 'var(--text-secondary-light)', 
+                        color: 'var(--text-secondary)', 
                         fontSize: '0.75rem',
                         cursor: 'pointer',
                         textDecoration: 'underline',
@@ -1089,7 +1089,7 @@ export const HousekeepingDashboard: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <div style={{ textAlign: 'center', color: 'var(--text-secondary-light)' }}>
+                  <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
                     <Camera size={32} style={{ marginBottom: '0.5rem', opacity: 0.6 }} />
                     <p style={{ fontSize: '0.85rem', fontWeight: 600 }}>{getTranslation(language, 'takePhoto')}</p>
                     <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>({language === 'vi' ? 'Nhấp để chụp hoặc chọn ảnh mẫu' : 'クリックして撮影・デモ選択'})</span>

@@ -12,6 +12,17 @@
   --text-primary-light: #0f172a;
   --text-secondary-light: #64748b;
 
+  /* Responsive Semantic Theme Variables (Light mode defaults) */
+  --text-color: var(--text-primary-light);
+  --text-secondary: var(--text-secondary-light);
+  --bg-card: var(--bg-card-light);
+  --bg-app: var(--bg-light);
+  --border-color: rgba(0, 0, 0, 0.08);
+  --panel-bg: rgba(255, 255, 255, 0.7);
+  --panel-bg-subtle: rgba(255, 255, 255, 0.4);
+  --panel-bg-medium: rgba(255, 255, 255, 0.2);
+  --panel-bg-strong: rgba(255, 255, 255, 0.6);
+
   /* Status Colors */
   --status-occupied: #64748b;     /* Gray/Slate */
   --status-occupied-light: #f1f5f9;

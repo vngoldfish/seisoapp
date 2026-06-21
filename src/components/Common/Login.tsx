@@ -66,7 +66,7 @@ export const Login: React.FC = () => {
           <h2 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.025em', lineHeight: '1.2' }}>
             {getTranslation(language, 'loginTitle')}
           </h2>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary-light)', marginTop: '0.25rem' }}>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
             {getTranslation(language, 'loginSubtitle')}
           </p>
         </div>

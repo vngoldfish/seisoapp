@@ -26,6 +26,29 @@ body {
 body.dark-mode {
   background-color: var(--bg-dark);
   color: var(--text-primary-dark);
+
+  /* Override Semantic Variables in Dark Mode */
+  --text-color: var(--text-primary-dark);
+  --text-secondary: var(--text-secondary-dark);
+  --bg-card: var(--bg-card-dark);
+  --bg-app: var(--bg-dark);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --panel-bg: rgba(30, 41, 59, 0.7);
+  --panel-bg-subtle: rgba(30, 41, 59, 0.4);
+  --panel-bg-medium: rgba(30, 41, 59, 0.2);
+  --panel-bg-strong: rgba(30, 41, 59, 0.6);
+}
+
+/* Global Select Option Contrast fixes */
+select {
+  background-color: var(--bg-card);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+
+select option {
+  background-color: var(--bg-card);
+  color: var(--text-color);
 }
 
 /* Glassmorphism Panel */

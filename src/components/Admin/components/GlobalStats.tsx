@@ -450,7 +450,7 @@ export const GlobalStats: React.FC<GlobalStatsProps> = ({
           </h3>
 
           {/* Search, Filter, Page Size Controls */}
-          <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', backgroundColor: 'rgba(255, 255, 255, 0.4)', marginBottom: '1rem' }}>
+          <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', backgroundColor: 'var(--panel-bg-subtle)', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               <input
                 type="text"
@@ -603,7 +603,7 @@ export const GlobalStats: React.FC<GlobalStatsProps> = ({
           </h3>
 
           {/* Search, Filter, Sort and Page size for Issues */}
-          <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', backgroundColor: 'rgba(255,255,255,0.4)', marginBottom: '1rem', alignItems: 'center' }}>
+          <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', backgroundColor: 'var(--panel-bg-subtle)', marginBottom: '1rem', alignItems: 'center' }}>
             <input
               type="text"
               placeholder={language === 'vi' ? 'Tìm sự cố, số phòng, chi nhánh...' : language === 'ja' ? '問題、客室、ホテル検索...' : 'Search issues, room, hotel...'}

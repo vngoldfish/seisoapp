@@ -397,7 +397,7 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
         </div>
 
         {/* Toolbar: Filters, Sorting and Page Size */}
-        <div className="glass-panel" style={{ padding: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', backgroundColor: 'rgba(255,255,255,0.4)', marginBottom: '1.25rem', alignItems: 'center' }}>
+        <div className="glass-panel" style={{ padding: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', backgroundColor: 'var(--panel-bg-subtle)', marginBottom: '1.25rem', alignItems: 'center' }}>
           {/* Role Filter */}
           <select
             value={roleFilter}

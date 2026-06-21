@@ -1189,14 +1189,14 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                           className="glass-panel" 
                           style={{ 
                             padding: '1rem', 
-                            backgroundColor: 'rgba(255, 255, 255, 0.3)', 
+                            backgroundColor: 'var(--panel-bg-medium)', 
                             display: 'flex', 
                             alignItems: 'center', 
                             gap: '1rem',
                             borderLeft: overallIndex < 3 ? `4px solid ${overallIndex === 0 ? '#fbbf24' : overallIndex === 1 ? '#94a3b8' : '#b45309'}` : '1px solid rgba(0,0,0,0.05)'
                           }}
                         >
-                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', fontWeight: 800 }}>
+                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--panel-bg-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', fontWeight: 800 }}>
                             {rankMedal}
                           </div>
                           <div style={{ flex: 1 }}>
@@ -1272,7 +1272,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                       📊 {language === 'vi' ? 'Biểu Đồ So Sánh Tốc Độ Dọn Dẹp (Thời gian trung bình)' : language === 'ja' ? 'スタッフ清掃速度比較グラフ (平均時間)' : 'Housekeeper Speed Comparison Chart (Avg Duration)'}
                     </h5>
                     
-                    <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
+                    <div style={{ backgroundColor: 'var(--panel-bg-medium)', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
                       {(() => {
                         const maxAvgTime = Math.max(...filteredLeaderboard.map(c => c.avgTime), 50);
                         return (
@@ -1340,7 +1340,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="glass-panel" style={{ padding: '1rem', backgroundColor: 'rgba(255, 255, 255, 0.2)' }}>
+                    <div className="glass-panel" style={{ padding: '1rem', backgroundColor: 'var(--panel-bg-medium)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <h5 style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>
                           👤 {language === 'vi' ? 'Chi tiết lỗi theo nhân viên:' : language === 'ja' ? 'スタッフ別指摘詳細:' : 'Defects by Housekeeper:'}
@@ -1425,7 +1425,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="glass-panel" style={{ padding: '1rem', backgroundColor: 'rgba(255, 255, 255, 0.2)' }}>
+                  <div className="glass-panel" style={{ padding: '1rem', backgroundColor: 'var(--panel-bg-medium)' }}>
                     <h5 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem' }}>
                       📊 {language === 'vi' ? 'Tần suất các loại lỗi:' : language === 'ja' ? '指摘項目別頻度:' : 'Defect Frequencies:'}
                     </h5>
@@ -1629,7 +1629,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
             </div>
 
             {/* Search, Filter, Sort, Page Size Controls for Rooms */}
-            <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', backgroundColor: 'rgba(255, 255, 255, 0.4)', marginBottom: '1rem' }}>
+            <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', backgroundColor: 'var(--panel-bg-subtle)', marginBottom: '1rem' }}>
               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                 <input
                   type="text"

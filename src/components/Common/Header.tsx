@@ -108,7 +108,7 @@ export const Header: React.FC = () => {
               {hotelsList
                 .filter(h => currentUser.hotelIds?.includes(h.id))
                 .map(h => (
-                  <option key={h.id} value={h.id} style={{ color: 'var(--text-primary-light)' }}>
+                  <option key={h.id} value={h.id} style={{ color: 'var(--text-color)' }}>
                     {h.id === 'ks2' ? '🗻 ' : h.id === 'ks1' ? '🌸 ' : '🏨 '}{h.name}
                   </option>
                 ))}

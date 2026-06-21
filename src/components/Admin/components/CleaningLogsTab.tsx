@@ -200,7 +200,7 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
       </div>
 
       {/* Toolbar: Search, Filters, Sort, Page Size */}
-      <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', backgroundColor: 'rgba(255, 255, 255, 0.4)', marginBottom: '1.5rem' }}>
+      <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', backgroundColor: 'var(--panel-bg-subtle)', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           {/* Search Input */}
           <div style={{ flex: '2 1 200px', position: 'relative' }}>
