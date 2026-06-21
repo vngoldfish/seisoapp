@@ -131,8 +131,13 @@ export const CheckerDashboard: React.FC = () => {
 
   // DB States
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [fullscreenMode, setFullscreenMode] = useState<'single' | 'all' | 'custom'>('single');
-  const [customSelectedFloors, setCustomSelectedFloors] = useState<number[]>([]);
+  const [fullscreenMode, setFullscreenMode] = useState<'single' | 'all' | 'custom'>(() => {
+    return (localStorage.getItem('hotel_clean_fullscreen_mode') as 'single' | 'all' | 'custom') || 'single';
+  });
+  const [customSelectedFloors, setCustomSelectedFloors] = useState<number[]>(() => {
+    const stored = localStorage.getItem('hotel_clean_fullscreen_custom_floors');
+    return stored ? JSON.parse(stored) : [];
+  });
   const [logs, setLogs] = useState<CleaningLog[]>([]);
   const [cleaners, setCleaners] = useState<User[]>([]);
   const [activeStaffIds, setActiveStaffIds] = useState<string[]>([]);
@@ -201,11 +206,31 @@ export const CheckerDashboard: React.FC = () => {
 
   const [isFullScreenFloorView, setIsFullScreenFloorView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('fullscreen') === 'true';
+    if (params.get('fullscreen') === 'true') return true;
+    return localStorage.getItem('hotel_clean_is_fullscreen_floor_view') === 'true';
   });
-  const [activeFloorIndex, setActiveFloorIndex] = useState(0);
+  const [activeFloorIndex, setActiveFloorIndex] = useState(() => {
+    const stored = localStorage.getItem('hotel_clean_fullscreen_active_floor_index');
+    return stored ? Number(stored) : 0;
+  });
   const [showLegend, setShowLegend] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    localStorage.setItem('hotel_clean_is_fullscreen_floor_view', isFullScreenFloorView ? 'true' : 'false');
+  }, [isFullScreenFloorView]);
+
+  useEffect(() => {
+    localStorage.setItem('hotel_clean_fullscreen_mode', fullscreenMode);
+  }, [fullscreenMode]);
+
+  useEffect(() => {
+    localStorage.setItem('hotel_clean_fullscreen_custom_floors', JSON.stringify(customSelectedFloors));
+  }, [customSelectedFloors]);
+
+  useEffect(() => {
+    localStorage.setItem('hotel_clean_fullscreen_active_floor_index', String(activeFloorIndex));
+  }, [activeFloorIndex]);
 
   useEffect(() => {
     if (!isFullScreenFloorView) return;

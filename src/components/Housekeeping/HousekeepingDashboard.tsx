@@ -110,11 +110,37 @@ export const HousekeepingDashboard: React.FC<HousekeepingDashboardProps> = ({ is
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [assignedFilter, setAssignedFilter] = useState<'all' | 'mine'>('all');
   const [showLegend, setShowLegend] = useState(false);
-  const [isFullScreenFloorView, setIsFullScreenFloorView] = useState(false);
-  const [activeFloorIndex, setActiveFloorIndex] = useState(0);
+  const [isFullScreenFloorView, setIsFullScreenFloorView] = useState(() => {
+    return localStorage.getItem('hotel_clean_is_fullscreen_floor_view') === 'true';
+  });
+  const [activeFloorIndex, setActiveFloorIndex] = useState(() => {
+    const stored = localStorage.getItem('hotel_clean_fullscreen_active_floor_index');
+    return stored ? Number(stored) : 0;
+  });
   const [gridColumns, setGridColumns] = useState<string>('6');
-  const [fullscreenMode, setFullscreenMode] = useState<'single' | 'all' | 'custom'>('single');
-  const [customSelectedFloors, setCustomSelectedFloors] = useState<number[]>([]);
+  const [fullscreenMode, setFullscreenMode] = useState<'single' | 'all' | 'custom'>(() => {
+    return (localStorage.getItem('hotel_clean_fullscreen_mode') as 'single' | 'all' | 'custom') || 'single';
+  });
+  const [customSelectedFloors, setCustomSelectedFloors] = useState<number[]>(() => {
+    const stored = localStorage.getItem('hotel_clean_fullscreen_custom_floors');
+    return stored ? JSON.parse(stored) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('hotel_clean_is_fullscreen_floor_view', isFullScreenFloorView ? 'true' : 'false');
+  }, [isFullScreenFloorView]);
+
+  useEffect(() => {
+    localStorage.setItem('hotel_clean_fullscreen_mode', fullscreenMode);
+  }, [fullscreenMode]);
+
+  useEffect(() => {
+    localStorage.setItem('hotel_clean_fullscreen_custom_floors', JSON.stringify(customSelectedFloors));
+  }, [customSelectedFloors]);
+
+  useEffect(() => {
+    localStorage.setItem('hotel_clean_fullscreen_active_floor_index', String(activeFloorIndex));
+  }, [activeFloorIndex]);
 
   // Swipe handlers for fullscreen floor carousel
   const [touchStart, setTouchStart] = useState<number | null>(null);
