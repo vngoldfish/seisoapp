@@ -3,6 +3,7 @@ import { useApp } from '../Common/AppContext';
 import { getTranslation } from '../../i18n/translations';
 import { db } from '../../db/firebaseDB';
 import type { Room, User, CleaningLog } from '../../db/dbInterface';
+import { getTodayDateString } from '../../db/localDB';
 import { Search, Bell, BellOff, CheckCircle2, Info, Play, CheckCircle, AlertTriangle, Hotel, Users, LayoutDashboard, Clock, Building, Sun, Moon, LogOut, User as UserIcon, LayoutGrid, List, Maximize2, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -29,6 +30,10 @@ const getVisiblePages = (current: number, total: number) => {
 
 export const FrontDeskDashboard: React.FC = () => {
   const { currentUser, language, addToast, triggerSoundAlert, activeDate, logout, darkMode, toggleDarkMode, setLanguage } = useApp();
+  const isEditDisabled = useMemo(() => {
+    return (activeDate < getTodayDateString()) && (currentUser?.role === 'kacho');
+  }, [activeDate, currentUser]);
+  const [statsTimeRange, setStatsTimeRange] = useState<'today' | 'week' | 'month'>('today');
   const [rooms, setRooms] = useState<Room[]>([]);
   const [logs, setLogs] = useState<CleaningLog[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -124,6 +129,12 @@ export const FrontDeskDashboard: React.FC = () => {
     if (localVal === 'work' || localVal === 'setup') return localVal;
     return 'work';
   });
+
+  useEffect(() => {
+    if (isEditDisabled && gridMode === 'setup') {
+      setGridMode('work');
+    }
+  }, [isEditDisabled, gridMode]);
 
   const [gridColumns, setGridColumns] = useState<string>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -712,17 +723,40 @@ export const FrontDeskDashboard: React.FC = () => {
     const stayRooms = rooms.filter(r => r.isStay).length;
     const checkoutRooms = rooms.filter(r => !r.isStay).length;
 
-    const activeWorkers = activeStaffIds.length;
+    // Filter logs based on statsTimeRange
+    const activeDateObj = new Date(activeDate);
+    const rangeLogs = logs.filter(log => {
+      if (!log.endedAt || log.durationMinutes <= 0) return false;
+      const logDateStr = log.endedAt.split('T')[0];
+      
+      if (statsTimeRange === 'today') {
+        return logDateStr === activeDate;
+      }
+      
+      const logDateObj = new Date(logDateStr);
+      if (isNaN(logDateObj.getTime())) return false;
+      
+      const diffTime = activeDateObj.getTime() - logDateObj.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (statsTimeRange === 'week') {
+        return diffDays >= 0 && diffDays < 7;
+      } else { // statsTimeRange === 'month'
+        return diffDays >= 0 && diffDays < 30;
+      }
+    });
 
-    // Filter logs for today
-    const todayLogs = logs.filter(log => log.endedAt.startsWith(activeDate) && log.durationMinutes > 0);
-    const totalDuration = todayLogs.reduce((acc, log) => acc + log.durationMinutes, 0);
-    const finishedCount = todayLogs.length;
+    const activeWorkers = statsTimeRange === 'today'
+      ? activeStaffIds.length
+      : new Set(rangeLogs.map(l => l.cleanerId)).size;
+
+    const totalDuration = rangeLogs.reduce((acc, log) => acc + log.durationMinutes, 0);
+    const finishedCount = rangeLogs.length;
     const avgCleaningTime = finishedCount > 0 ? Math.round(totalDuration / finishedCount) : 0;
 
     // Cleaner productivity leaderboard
     const cleanerMap: Record<string, { name: string; count: number; totalDuration: number }> = {};
-    todayLogs.forEach(log => {
+    rangeLogs.forEach(log => {
       const key = log.cleanerName || log.cleanerId || 'Unknown';
       if (!cleanerMap[key]) {
         cleanerMap[key] = { name: key, count: 0, totalDuration: 0 };
@@ -750,7 +784,7 @@ export const FrontDeskDashboard: React.FC = () => {
     const errorTypeMap: Record<string, number> = {};
     const cleanerErrorMap: Record<string, { name: string; count: number; errorList: string[] }> = {};
 
-    todayLogs.forEach(log => {
+    rangeLogs.forEach(log => {
       if (log.errors && log.errors.length > 0) {
         totalErrors += log.errors.length;
         log.errors.forEach(err => {
@@ -767,7 +801,7 @@ export const FrontDeskDashboard: React.FC = () => {
     });
 
     const defectRate = finishedCount > 0
-      ? Math.round((todayLogs.filter(l => l.errors && l.errors.length > 0).length / finishedCount) * 100)
+      ? Math.round((rangeLogs.filter(l => l.errors && l.errors.length > 0).length / finishedCount) * 100)
       : 0;
 
     const errorBreakdown = Object.entries(errorTypeMap)
@@ -782,7 +816,7 @@ export const FrontDeskDashboard: React.FC = () => {
     for (let h = 8; h <= 18; h++) {
       hourlyBins[h] = 0;
     }
-    todayLogs.forEach(log => {
+    rangeLogs.forEach(log => {
       try {
         const dateObj = new Date(log.endedAt);
         if (!isNaN(dateObj.getTime())) {
@@ -822,9 +856,10 @@ export const FrontDeskDashboard: React.FC = () => {
       totalErrors,
       defectRate,
       errorBreakdown,
-      cleanerErrorLeaderboard
+      cleanerErrorLeaderboard,
+      finishedCount
     };
-  }, [rooms, logs, activeStaffIds, activeDate]);
+  }, [rooms, logs, activeStaffIds, activeDate, statsTimeRange]);
 
   const sortedTodayCleaners = useMemo(() => {
     const filtered = cleaners.filter(cleaner => {
@@ -1058,19 +1093,62 @@ export const FrontDeskDashboard: React.FC = () => {
 
       {activeTab === 'stats' && branchStats && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '2rem' }}>
+          {/* Stats Time Range Switcher */}
+          <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '0.5rem' }}>
+            <div className="capsule-switcher" style={{ display: 'inline-flex' }}>
+              <button 
+                type="button"
+                onClick={() => setStatsTimeRange('today')}
+                className={`capsule-button ${statsTimeRange === 'today' ? 'active' : ''}`}
+              >
+                <span>📅</span>
+                <span>{language === 'vi' ? 'Hôm nay' : language === 'ja' ? '本日' : 'Today'}</span>
+              </button>
+              <button 
+                type="button"
+                onClick={() => setStatsTimeRange('week')}
+                className={`capsule-button ${statsTimeRange === 'week' ? 'active' : ''}`}
+              >
+                <span>📊</span>
+                <span>{language === 'vi' ? 'Tuần này' : language === 'ja' ? '今週' : 'This Week'}</span>
+              </button>
+              <button 
+                type="button"
+                onClick={() => setStatsTimeRange('month')}
+                className={`capsule-button ${statsTimeRange === 'month' ? 'active' : ''}`}
+              >
+                <span>📈</span>
+                <span>{language === 'vi' ? 'Tháng này' : language === 'ja' ? '今月' : 'This Month'}</span>
+              </button>
+            </div>
+          </div>
+
           {/* Metrics Row */}
           <div className="metrics-grid">
-            {/* Progress Card */}
+            {/* Progress Card / Total Cleaned Card */}
             <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-clean)' }}>
               <div className="metric-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)' }}>
                 <CheckCircle2 size={20} />
               </div>
               <div style={{ flex: 1 }}>
-                <div className="metric-value">{branchStats.percentClean}%</div>
-                <div className="metric-label">{language === 'vi' ? 'Tiến độ dọn phòng' : language === 'ja' ? '清縮進捗率' : 'Cleaning Progress'}</div>
-                <div style={{ width: '100%', height: '6px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '99px', overflow: 'hidden', marginTop: '0.4rem' }}>
-                  <div style={{ width: `${branchStats.percentClean}%`, height: '100%', backgroundColor: 'var(--status-clean)' }} />
-                </div>
+                {statsTimeRange === 'today' ? (
+                  <>
+                    <div className="metric-value">{branchStats.percentClean}%</div>
+                    <div className="metric-label">{language === 'vi' ? 'Tiến độ dọn phòng' : language === 'ja' ? '清縮進捗率' : 'Cleaning Progress'}</div>
+                    <div style={{ width: '100%', height: '6px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '99px', overflow: 'hidden', marginTop: '0.4rem' }}>
+                      <div style={{ width: `${branchStats.percentClean}%`, height: '100%', backgroundColor: 'var(--status-clean)' }} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="metric-value">{branchStats.finishedCount} <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{language === 'vi' ? 'phòng' : language === 'ja' ? '室' : 'rooms'}</span></div>
+                    <div className="metric-label">
+                      {statsTimeRange === 'week' 
+                        ? (language === 'vi' ? 'Tổng phòng dọn tuần qua' : language === 'ja' ? '週間清掃完了合計' : 'Weekly Total Cleaned')
+                        : (language === 'vi' ? 'Tổng phòng dọn tháng qua' : language === 'ja' ? '月間清掃完了合計' : 'Monthly Total Cleaned')}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1083,7 +1161,7 @@ export const FrontDeskDashboard: React.FC = () => {
                 <div className="metric-value">{branchStats.avgCleaningTime} <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{language === 'vi' ? 'phút' : language === 'ja' ? '分' : 'm'}</span></div>
                 <div className="metric-label">{language === 'vi' ? 'T.gian dọn TB' : language === 'ja' ? '平均清掃時間' : 'Avg Cleaning Time'}</div>
                 <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>
-                  {language === 'vi' ? `Tính từ ${branchStats.leaderboard.reduce((acc, c) => acc + c.count, 0)} lượt hoàn thành` : language === 'ja' ? `完了${branchStats.leaderboard.reduce((acc, c) => acc + c.count, 0)}件に基づく` : `Based on ${branchStats.leaderboard.reduce((acc, c) => acc + c.count, 0)} completions`}
+                  {language === 'vi' ? `Tính từ ${branchStats.finishedCount} lượt hoàn thành` : language === 'ja' ? `完了${branchStats.finishedCount}件に基づく` : `Based on ${branchStats.finishedCount} completions`}
                 </div>
               </div>
             </div>
@@ -1095,24 +1173,49 @@ export const FrontDeskDashboard: React.FC = () => {
               </div>
               <div>
                 <div className="metric-value">{branchStats.activeWorkers}</div>
-                <div className="metric-label">{language === 'vi' ? 'Nhân sự làm việc hôm nay' : language === 'ja' ? '本日の出勤スタッフ数' : 'Active Staff Today'}</div>
+                <div className="metric-label">
+                  {statsTimeRange === 'today'
+                    ? (language === 'vi' ? 'Nhân sự làm việc hôm nay' : language === 'ja' ? '本日の出勤スタッフ数' : 'Active Staff Today')
+                    : (language === 'vi' ? 'Nhân sự hoạt động trong kì' : language === 'ja' ? '出動スタッフ数' : 'Active Staff in Period')}
+                </div>
                 <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>
-                  {language === 'vi' ? `Trên tổng số ${cleaners.length} nhân viên` : language === 'ja' ? `登録スタッフ数: ${cleaners.length}名` : `Out of ${cleaners.length} cleaners`}
+                  {statsTimeRange === 'today' ? (
+                    language === 'vi' ? `Trên tổng số ${cleaners.length} nhân viên` : language === 'ja' ? `登録スタッフ数: ${cleaners.length}名` : `Out of ${cleaners.length} cleaners`
+                  ) : (
+                    language === 'vi' ? `Tổng số nhân viên đã thực hiện dọn dẹp` : language === 'ja' ? `実際に稼働した清掃スタッフの合計` : `Total active housekeepers`
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Setup Card */}
-            <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-dirty)' }}>
-              <div className="metric-icon" style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', color: 'var(--status-dirty)' }}>
-                <Building size={20} />
+            {/* Setup / Defects Card */}
+            <div className="metric-card glass-panel" style={{ borderLeft: statsTimeRange === 'today' ? '4px solid var(--status-dirty)' : '4px solid var(--status-maintenance)' }}>
+              <div className="metric-icon" style={{ 
+                backgroundColor: statsTimeRange === 'today' ? 'rgba(234, 179, 8, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+                color: statsTimeRange === 'today' ? 'var(--status-dirty)' : 'var(--status-maintenance)' 
+              }}>
+                {statsTimeRange === 'today' ? <Building size={20} /> : <AlertTriangle size={20} />}
               </div>
               <div>
-                <div className="metric-value">{branchStats.total} <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{language === 'vi' ? 'phòng' : language === 'ja' ? '室' : 'rooms'}</span></div>
-                <div className="metric-label">{language === 'vi' ? 'Tỉ lệ Stay / Checkout' : language === 'ja' ? '滞在 / アウト比率' : 'Stay / Checkout Ratio'}</div>
-                <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>
-                  🏠 {branchStats.stayRooms} {language === 'vi' ? 'Stay' : language === 'ja' ? '滞在' : 'Stay'} | 🚪 {branchStats.checkoutRooms} Checkout
-                </div>
+                {statsTimeRange === 'today' ? (
+                  <>
+                    <div className="metric-value">{branchStats.total} <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{language === 'vi' ? 'phòng' : language === 'ja' ? '室' : 'rooms'}</span></div>
+                    <div className="metric-label">{language === 'vi' ? 'Tỉ lệ Stay / Checkout' : language === 'ja' ? '滞an / アウト比率' : 'Stay / Checkout Ratio'}</div>
+                    <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>
+                      🏠 {branchStats.stayRooms} {language === 'vi' ? 'Stay' : language === 'ja' ? '滞在' : 'Stay'} | 🚪 {branchStats.checkoutRooms} Checkout
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="metric-value" style={{ color: 'var(--status-maintenance)' }}>
+                      {branchStats.totalErrors} <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-color)' }}>{language === 'vi' ? 'lỗi' : language === 'ja' ? '不備' : 'defects'}</span>
+                    </div>
+                    <div className="metric-label">{language === 'vi' ? 'Thống kê lỗi trong kì' : language === 'ja' ? '期間中の不備指摘数' : 'Defects in Period'}</div>
+                    <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>
+                      ⚠️ {language === 'vi' ? `Tỉ lệ lỗi phòng: ${branchStats.defectRate}%` : language === 'ja' ? `部屋指摘率: ${branchStats.defectRate}%` : `Defect rate: ${branchStats.defectRate}%`}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1307,12 +1410,20 @@ export const FrontDeskDashboard: React.FC = () => {
             {/* Housekeeper Leaderboard */}
             <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
               <h4 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                {language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Hôm nay)' : language === 'ja' ? 'スタッフ清掃実績ランキング (本日)' : 'Housekeeper Leaderboard (Today)'}
+                {statsTimeRange === 'today' 
+                  ? (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Hôm nay)' : language === 'ja' ? 'スタッフ清掃実績ランキング (本日)' : 'Housekeeper Leaderboard (Today)')
+                  : statsTimeRange === 'week'
+                    ? (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Tuần này)' : language === 'ja' ? 'スタッフ清掃実績ランキング (今週)' : 'Housekeeper Leaderboard (This Week)')
+                    : (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Tháng này)' : language === 'ja' ? 'スタッフ清掃実績ランキング (今月)' : 'Housekeeper Leaderboard (This Month)')}
               </h4>
               
               {branchStats.leaderboard.length === 0 ? (
                 <div style={{ padding: '3rem', textAlign: 'center', opacity: 0.6, fontSize: '0.9rem' }}>
-                  🧹 {language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong ngày hôm nay' : language === 'ja' ? '本日のこの店舗 của清掃実績はまだありません' : 'No cleaning logs recorded for this branch today'}
+                  🧹 {statsTimeRange === 'today'
+                    ? (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong ngày hôm nay' : language === 'ja' ? '本日のこの店舗の清掃実績はまだありません' : 'No cleaning logs recorded for this branch today')
+                    : statsTimeRange === 'week'
+                      ? (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong tuần này' : language === 'ja' ? '今週のこの店舗の清掃実績はまだありません' : 'No cleaning logs recorded for this branch this week')
+                      : (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong tháng này' : language === 'ja' ? '今月のこの店舗の清掃実績はまだありません' : 'No cleaning logs recorded for this branch this month')}
                 </div>
               ) : (
                 <div>
@@ -1420,12 +1531,20 @@ export const FrontDeskDashboard: React.FC = () => {
             {/* Defects Analytics Panel */}
             <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
               <h4 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                ⚠️ {language === 'vi' ? 'Thống Kê Lỗi Dọn Dẹp (Hôm nay)' : language === 'ja' ? '清掃不備インスペクション統計 (本日)' : 'Cleaning Defects Inspection Stats (Today)'}
+                ⚠️ {statsTimeRange === 'today' 
+                  ? (language === 'vi' ? 'Thống Kê Lỗi Dọn Dẹp (Hôm nay)' : language === 'ja' ? '清掃不備インスペクション統計 (本日)' : 'Cleaning Defects Inspection Stats (Today)')
+                  : statsTimeRange === 'week'
+                    ? (language === 'vi' ? 'Thống Kê Lỗi Dọn Dẹp (Tuần này)' : language === 'ja' ? '清掃不備インスペクション統計 (今週)' : 'Cleaning Defects Inspection Stats (This Week)')
+                    : (language === 'vi' ? 'Thống Kê Lỗi Dọn Dẹp (Tháng này)' : language === 'ja' ? '清掃不備インスペクション統計 (今月)' : 'Cleaning Defects Inspection Stats (This Month)')}
               </h4>
 
               {branchStats.totalErrors === 0 ? (
                 <div style={{ padding: '3rem', textAlign: 'center', opacity: 0.6, fontSize: '0.9rem' }}>
-                  ✨ {language === 'vi' ? 'Không phát hiện lỗi dọn dẹp nào trong ngày hôm nay!' : language === 'ja' ? '本日は清掃不備の指摘はありません！' : 'No cleaning defects reported today!'}
+                  ✨ {statsTimeRange === 'today'
+                    ? (language === 'vi' ? 'Không phát hiện lỗi dọn dẹp nào trong ngày hôm nay!' : language === 'ja' ? '本日は清掃不備の指摘はありません！' : 'No cleaning defects reported today!')
+                    : statsTimeRange === 'week'
+                      ? (language === 'vi' ? 'Không phát hiện lỗi dọn dẹp nào trong tuần này!' : language === 'ja' ? '今週は清掃不備の指摘はありません！' : 'No cleaning defects reported this week!')
+                      : (language === 'vi' ? 'Không phát hiện lỗi dọn dẹp nào trong tháng này!' : language === 'ja' ? '今月は清掃不備の指摘はありません！' : 'No cleaning defects reported this month!')}
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
@@ -1597,43 +1716,45 @@ export const FrontDeskDashboard: React.FC = () => {
             </div>
 
             {/* Mode Selector */}
-            <div className="filter-item-wrapper mode-selector">
-              <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Chế độ:' : language === 'ja' ? 'モード:' : 'Mode:'}</label>
-              <div style={{ display: 'flex', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-                <button
-                  type="button"
-                  onClick={() => setGridMode('work')}
-                  style={{
-                    padding: '0.4rem 0.75rem',
-                    border: 'none',
-                    backgroundColor: gridMode === 'work' ? 'var(--primary-color)' : 'transparent',
-                    color: gridMode === 'work' ? '#ffffff' : 'inherit',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    transition: 'all var(--transition-fast)'
-                  }}
-                >
-                  💼 {language === 'vi' ? 'Làm việc' : language === 'ja' ? '通常業務' : 'Work'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGridMode('setup')}
-                  style={{
-                    padding: '0.4rem 0.75rem',
-                    border: 'none',
-                    backgroundColor: gridMode === 'setup' ? 'var(--primary-color)' : 'transparent',
-                    color: gridMode === 'setup' ? '#ffffff' : 'inherit',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    transition: 'all var(--transition-fast)'
-                  }}
-                >
-                  ⚙️ {language === 'vi' ? 'Cài đặt' : language === 'ja' ? '客室設定' : 'Setup'}
-                </button>
+            {!isEditDisabled && (
+              <div className="filter-item-wrapper mode-selector">
+                <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>{language === 'vi' ? 'Chế độ:' : language === 'ja' ? 'モード:' : 'Mode:'}</label>
+                <div style={{ display: 'flex', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                  <button
+                    type="button"
+                    onClick={() => setGridMode('work')}
+                    style={{
+                      padding: '0.4rem 0.75rem',
+                      border: 'none',
+                      backgroundColor: gridMode === 'work' ? 'var(--primary-color)' : 'transparent',
+                      color: gridMode === 'work' ? '#ffffff' : 'inherit',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '0.8rem',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                  >
+                    💼 {language === 'vi' ? 'Làm việc' : language === 'ja' ? '通常業務' : 'Work'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGridMode('setup')}
+                    style={{
+                      padding: '0.4rem 0.75rem',
+                      border: 'none',
+                      backgroundColor: gridMode === 'setup' ? 'var(--primary-color)' : 'transparent',
+                      color: gridMode === 'setup' ? '#ffffff' : 'inherit',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '0.8rem',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                  >
+                    ⚙️ {language === 'vi' ? 'Cài đặt' : language === 'ja' ? '客室設定' : 'Setup'}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Full Screen Carousel View trigger */}
             <div className="filter-item-wrapper full-screen-btn">
@@ -2175,7 +2296,7 @@ export const FrontDeskDashboard: React.FC = () => {
                     }>
                       {paginatedTodayCleaners.map(cleaner => {
                         const isActive = activeStaffIds.includes(cleaner.id);
-                        const isEditable = currentUser?.role === 'checka' || currentUser?.role === 'admin' || currentUser?.role === 'kacho';
+                        const isEditable = (currentUser?.role === 'checka' || currentUser?.role === 'admin' || currentUser?.role === 'kacho') && !isEditDisabled;
                         const { activeRooms, todayLogs } = getCleanerActivity(cleaner.id);
                         return (
                           <div 
@@ -2856,35 +2977,35 @@ export const FrontDeskDashboard: React.FC = () => {
                 </div>
                 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-color)' }}>
-                    <input type="checkbox" checked={defectFloor} onChange={e => setDefectFloor(e.target.checked)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                    <input type="checkbox" checked={defectFloor} onChange={e => setDefectFloor(e.target.checked)} disabled={isEditDisabled} />
                     <span>{language === 'vi' ? 'Chưa lau sàn / hút bụi' : language === 'ja' ? '床掃除・掃除機未実施' : 'Floor dusty/dirty'}</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-color)' }}>
-                    <input type="checkbox" checked={defectAmenities} onChange={e => setDefectAmenities(e.target.checked)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                    <input type="checkbox" checked={defectAmenities} onChange={e => setDefectAmenities(e.target.checked)} disabled={isEditDisabled} />
                     <span>{language === 'vi' ? 'Thiếu đồ dùng / khăn' : language === 'ja' ? 'アメニティ・タオル不足' : 'Missing towels/amenities'}</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-color)' }}>
-                    <input type="checkbox" checked={defectBathroom} onChange={e => setDefectBathroom(e.target.checked)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                    <input type="checkbox" checked={defectBathroom} onChange={e => setDefectBathroom(e.target.checked)} disabled={isEditDisabled} />
                     <span>{language === 'vi' ? 'Bần nhà vệ sinh / bồn tắm' : language === 'ja' ? '水回り・浴室汚れ' : 'Dirty bathroom'}</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-color)' }}>
-                    <input type="checkbox" checked={defectBed} onChange={e => setDefectBed(e.target.checked)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                    <input type="checkbox" checked={defectBed} onChange={e => setDefectBed(e.target.checked)} disabled={isEditDisabled} />
                     <span>{language === 'vi' ? 'Ga giường nhăn / bẩn' : language === 'ja' ? 'シーツしわ・汚れ' : 'Wrinkled/dirty sheet'}</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-color)' }}>
-                    <input type="checkbox" checked={defectTrash} onChange={e => setDefectTrash(e.target.checked)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                    <input type="checkbox" checked={defectTrash} onChange={e => setDefectTrash(e.target.checked)} disabled={isEditDisabled} />
                     <span>{language === 'vi' ? 'Chưa đổ rác' : language === 'ja' ? 'ゴミ未回収' : 'Trash not emptied'}</span>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-color)' }}>
-                    <input type="checkbox" checked={defectDust} onChange={e => setDefectDust(e.target.checked)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                    <input type="checkbox" checked={defectDust} onChange={e => setDefectDust(e.target.checked)} disabled={isEditDisabled} />
                     <span>{language === 'vi' ? 'Còn bụi trên bàn / tủ' : language === 'ja' ? '家具ほこり残り' : 'Dust on furniture'}</span>
                   </label>
                 </div>
 
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-color)', marginBottom: '0.25rem' }}>
-                    <input type="checkbox" checked={defectOther} onChange={e => setDefectOther(e.target.checked)} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)', marginBottom: '0.25rem' }}>
+                    <input type="checkbox" checked={defectOther} onChange={e => setDefectOther(e.target.checked)} disabled={isEditDisabled} />
                     <span>{language === 'vi' ? 'Lỗi khác' : language === 'ja' ? 'その他指摘事項' : 'Other defect'}</span>
                   </label>
                   {defectOther && (
@@ -2895,6 +3016,7 @@ export const FrontDeskDashboard: React.FC = () => {
                       onChange={e => setDefectOtherText(e.target.value)} 
                       placeholder={language === 'vi' ? 'Nhập mô tả lỗi khác...' : language === 'ja' ? '指摘内容を入力...' : 'Enter details...'}
                       style={{ fontSize: '0.8rem', padding: '0.35rem 0.5rem', height: 'auto' }}
+                      disabled={isEditDisabled}
                     />
                   )}
                 </div>
@@ -2945,7 +3067,7 @@ export const FrontDeskDashboard: React.FC = () => {
                 {getTranslation(language, 'cancel')}
               </button>
 
-              {gridMode === 'work' && !showRecleanInput && (
+              {gridMode === 'work' && !showRecleanInput && !isEditDisabled && (
                 <button
                   type="button"
                   className="btn"
@@ -2964,7 +3086,7 @@ export const FrontDeskDashboard: React.FC = () => {
                 </button>
               )}
 
-              {selectedRoom.status === 'clean' && !selectedRoom.isChecked && !showRecleanInput && (
+              {selectedRoom.status === 'clean' && !selectedRoom.isChecked && !showRecleanInput && !isEditDisabled && (
                 <>
                   <button
                     type="button"
