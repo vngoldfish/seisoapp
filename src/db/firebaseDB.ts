@@ -394,6 +394,27 @@ class FirebaseDB implements DBInterface {
     const staffDocPath = `hotels/${this.hotelId}/dates/${date}/activeStaff/list`;
     await setDoc(doc(firestore, staffDocPath), { userIds });
   }
+
+  async isDateLocked(date: string): Promise<boolean> {
+    if (!firestore) return false;
+    try {
+      const docPath = `hotels/${this.hotelId}/dates/${date}/status/lock`;
+      const docSnap = await getDoc(doc(firestore, docPath));
+      if (docSnap.exists()) {
+        return docSnap.data().locked || false;
+      }
+      return false;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  }
+
+  async setDateLocked(date: string, locked: boolean): Promise<void> {
+    if (!firestore) throw new Error('Firebase not configured');
+    const docPath = `hotels/${this.hotelId}/dates/${date}/status/lock`;
+    await setDoc(doc(firestore, docPath), { locked });
+  }
 }
 
 const firebaseDBs: Record<string, FirebaseDB> = {};
@@ -480,6 +501,9 @@ class DatabaseProxy implements DBInterface {
     assignedTo?: string,
     cleanerName?: string
   ): Promise<void> {
+    if (await this.isDateLocked(this.getDate())) {
+      throw new Error('DATE_LOCKED');
+    }
     return this.activeDB.updateRoomStatus(roomId, status, updatedBy, assignedTo, cleanerName);
   }
 
@@ -488,6 +512,9 @@ class DatabaseProxy implements DBInterface {
   }
 
   async updateRoom(room: Room): Promise<void> {
+    if (await this.isDateLocked(this.getDate())) {
+      throw new Error('DATE_LOCKED');
+    }
     return this.activeDB.updateRoom(room);
   }
 
@@ -505,10 +532,16 @@ class DatabaseProxy implements DBInterface {
   }
 
   async createLog(log: Omit<CleaningLog, 'id'>): Promise<CleaningLog> {
+    if (await this.isDateLocked(this.getDate())) {
+      throw new Error('DATE_LOCKED');
+    }
     return this.activeDB.createLog(log);
   }
 
   async updateLog(log: CleaningLog): Promise<void> {
+    if (await this.isDateLocked(this.getDate())) {
+      throw new Error('DATE_LOCKED');
+    }
     return this.activeDB.updateLog(log);
   }
 
@@ -521,7 +554,18 @@ class DatabaseProxy implements DBInterface {
   }
 
   async setActiveStaff(date: string, userIds: string[]): Promise<void> {
+    if (await this.isDateLocked(date)) {
+      throw new Error('DATE_LOCKED');
+    }
     return this.activeDB.setActiveStaff(date, userIds);
+  }
+
+  async isDateLocked(date: string): Promise<boolean> {
+    return this.activeDB.isDateLocked(date);
+  }
+
+  async setDateLocked(date: string, locked: boolean): Promise<void> {
+    return this.activeDB.setDateLocked(date, locked);
   }
 }
 

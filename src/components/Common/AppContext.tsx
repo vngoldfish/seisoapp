@@ -28,6 +28,8 @@ interface AppContextType {
   removeToast: (id: string) => void;
   triggerSoundAlert: () => void;
   selectHotel: (id: string) => void;
+  isLocked: boolean;
+  toggleDayLock: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -48,6 +50,55 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     return db.getDate();
   });
+
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+
+  useEffect(() => {
+    let active = true;
+    const fetchLock = async () => {
+      if (!hotelId || hotelId === 'portal' || hotelId === 'admin') {
+        if (active) setIsLocked(false);
+        return;
+      }
+      try {
+        const val = await db.isDateLocked(activeDate);
+        if (active) setIsLocked(val);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchLock();
+    
+    const unsubscribe = db.subscribeRooms(async () => {
+      try {
+        const val = await db.isDateLocked(activeDate);
+        if (active) setIsLocked(val);
+      } catch (e) {}
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [activeDate, hotelId]);
+
+  const toggleDayLock = async () => {
+    if (!hotelId || hotelId === 'portal' || hotelId === 'admin') return;
+    try {
+      const nextVal = !isLocked;
+      await db.setDateLocked(activeDate, nextVal);
+      setIsLocked(nextVal);
+      addToast(
+        nextVal
+          ? (language === 'vi' ? `Đã chốt hoàn tất ngày ${activeDate}` : language === 'ja' ? `日付 ${activeDate} を締め切りました` : `Locked/Closed date ${activeDate}`)
+          : (language === 'vi' ? `Đã mở khóa ngày ${activeDate}` : language === 'ja' ? `日付 ${activeDate} のロックを解除しました` : `Unlocked date ${activeDate}`),
+        nextVal ? 'warning' : 'success'
+      );
+    } catch (e) {
+      console.error(e);
+      addToast('Error changing day lock state', 'warning');
+    }
+  };
 
   // Listen to browser navigation changes (Back/Forward buttons)
   useEffect(() => {
@@ -403,7 +454,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       addToast,
       removeToast,
       triggerSoundAlert,
-      selectHotel
+      selectHotel,
+      isLocked,
+      toggleDayLock
     }}>
       {children}
     </AppContext.Provider>

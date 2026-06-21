@@ -6,10 +6,43 @@ import { db } from '../../db/firebaseDB';
 import type { Hotel as HotelType } from '../../db/dbInterface';
 
 export const Header: React.FC = () => {
-  const { currentUser, language, setLanguage, logout, darkMode, toggleDarkMode, hotelId, selectHotel, activeHotel, activeDate, changeActiveDate } = useApp();
+  const { 
+    currentUser, 
+    language, 
+    setLanguage, 
+    logout, 
+    darkMode, 
+    toggleDarkMode, 
+    hotelId, 
+    selectHotel, 
+    activeHotel, 
+    activeDate, 
+    changeActiveDate,
+    isLocked,
+    toggleDayLock
+  } = useApp();
   const [hotelsList, setHotelsList] = useState<HotelType[]>([]);
   const [showDateModal, setShowDateModal] = useState(false);
   const [tempDate, setTempDate] = useState(activeDate);
+
+  const handleToggleLockClick = async () => {
+    if (!currentUser) return;
+    const confirmMessage = isLocked
+      ? (language === 'vi' 
+          ? `Bạn có chắc chắn muốn MỞ KHÓA dữ liệu ngày ${activeDate}?` 
+          : language === 'ja'
+            ? `日付 ${activeDate} のロックを解除しますか？`
+            : `Are you sure you want to UNLOCK date ${activeDate}?`)
+      : (language === 'vi' 
+          ? `Xác nhận CHỐT hoàn tất ngày ${activeDate}?\nSau khi chốt, toàn bộ dữ liệu dọn dẹp và phòng sẽ không thể chỉnh sửa.` 
+          : language === 'ja'
+            ? `日付 ${activeDate} の業務を締め切りますか？\n締め切り後は客室状態や清` + `掃データの変更ができなくなります。`
+            : `Confirm LOCKING/FINALIZING date ${activeDate}?\nOnce locked, all cleaning and room data will be frozen and cannot be modified.`);
+            
+    if (window.confirm(confirmMessage)) {
+      await toggleDayLock();
+    }
+  };
 
   useEffect(() => {
     const fetchHotels = async () => {
@@ -153,6 +186,78 @@ export const Header: React.FC = () => {
           <span style={{ fontSize: '0.85rem' }}>📅</span>
           <span>{activeDate}</span>
         </div>
+
+        {/* Lock / Unlock Day Button */}
+        {currentUser.role !== 'housekeeping' && (
+          isLocked ? (
+            <button
+              onClick={handleToggleLockClick}
+              title={language === 'vi' ? 'Mở khóa dữ liệu' : language === 'ja' ? 'ロック解除' : 'Unlock Data'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                color: '#ef4444',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '20px',
+                padding: '0.35rem 0.75rem',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                marginLeft: '0.5rem',
+                transition: 'all var(--transition-fast)'
+              }}
+            >
+              <span>🔒</span>
+              <span>{language === 'vi' ? 'Đã chốt' : language === 'ja' ? '締切済' : 'Locked'}</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleToggleLockClick}
+              title={language === 'vi' ? 'Chốt hoàn tất ngày' : language === 'ja' ? '本日の業務を締め切る' : 'Lock/Finalize Day'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                color: 'var(--status-clean)',
+                border: '1px solid rgba(16, 185, 129, 0.2)',
+                borderRadius: '20px',
+                padding: '0.35rem 0.75rem',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                marginLeft: '0.5rem',
+                transition: 'all var(--transition-fast)'
+              }}
+            >
+              <span>🔓</span>
+              <span>{language === 'vi' ? 'Chốt ngày' : language === 'ja' ? '締め切る' : 'Lock Day'}</span>
+            </button>
+          )
+        )}
+
+        {isLocked && currentUser?.role === 'housekeeping' && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              color: '#ef4444',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              borderRadius: '20px',
+              padding: '0.35rem 0.75rem',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              marginLeft: '0.5rem'
+            }}
+          >
+            <span>🔒</span>
+            <span>{language === 'vi' ? 'Đã chốt ngày' : language === 'ja' ? '業務締切済' : 'Day Locked'}</span>
+          </div>
+        )}
 
         {/* Language switcher */}
         <div className="lang-selector">

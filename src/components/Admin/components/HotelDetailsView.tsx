@@ -15,6 +15,7 @@ import {
 import type { Room, User, CleaningLog, Hotel as HotelType } from '../../../db/dbInterface';
 import { getLocalDB } from '../../../db/localDB';
 import { UserManagementTab } from './UserManagementTab';
+import { useApp } from '../../Common/AppContext';
 
 interface HotelDetailsViewProps {
   language: any;
@@ -81,6 +82,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   getTranslation,
   getVisiblePages
 }) => {
+  const { isLocked } = useApp();
   // Local states for sub-management
   const [staffSearchTerm, setStaffSearchTerm] = useState<string>('');
 
@@ -820,6 +822,17 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   };
 
   const handleDeleteRoom = async (id: string, roomNumber?: string) => {
+    if (isLocked) {
+      addToast(
+        language === 'vi'
+          ? 'Ngày này đã chốt hoàn tất, không thể chỉnh sửa dữ liệu.'
+          : language === 'ja'
+            ? 'この日付はすでに締め切られているため、データを変更できません。'
+            : 'This date is finalized and locked. No changes are allowed.',
+        'warning'
+      );
+      return;
+    }
     const label = roomNumber ? ` phòng ${roomNumber}` : '';
     const confirmMsg = language === 'vi' 
       ? `Bạn có chắc chắn muốn xóa${label}?` 
@@ -843,6 +856,17 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
 
   const handleRoomSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLocked) {
+      addToast(
+        language === 'vi'
+          ? 'Ngày này đã chốt hoàn tất, không thể chỉnh sửa dữ liệu.'
+          : language === 'ja'
+            ? 'この日付はすでに締め切られているため、データを変更できません。'
+            : 'This date is finalized and locked. No changes are allowed.',
+        'warning'
+      );
+      return;
+    }
     try {
       const targetDb = getLocalDB(managingHotel.id);
       if (editingRoom) {
@@ -891,6 +915,29 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {isLocked && (
+        <div style={{
+          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+          color: '#ef4444',
+          border: '1px solid rgba(239, 68, 68, 0.2)',
+          padding: '0.75rem 1rem',
+          borderRadius: '8px',
+          fontWeight: 700,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontSize: '0.9rem'
+        }}>
+          <span>🔒</span>
+          <span>
+            {language === 'vi' 
+              ? 'Ngày này đã chốt hoàn tất. Toàn bộ thông tin hiển thị ở chế độ Chỉ Đọc (Read-Only).' 
+              : language === 'ja'
+                ? 'この日付は業務締め切り済みです。すべての情報は読み取り専用です。'
+                : 'This date is locked/finalized. All information is in Read-Only mode.'}
+          </span>
+        </div>
+      )}
       <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>

@@ -1351,6 +1351,9 @@ export class LocalDB implements DBInterface {
     assignedTo?: string,
     cleanerName?: string
   ): Promise<void> {
+    if (await this.isDateLocked(this.currentDate)) {
+      throw new Error('DATE_LOCKED');
+    }
     const rooms = await this.getRooms();
     const updatedRooms = rooms.map(room => {
       if (room.id === roomId) {
@@ -1420,6 +1423,9 @@ export class LocalDB implements DBInterface {
   }
 
   async updateRoom(updatedRoom: Room): Promise<void> {
+    if (await this.isDateLocked(this.currentDate)) {
+      throw new Error('DATE_LOCKED');
+    }
     // 1. Update in master template
     let masterRooms: Room[] = JSON.parse(localStorage.getItem(this.roomsKey) || '[]');
     masterRooms = masterRooms.map(r => r.id === updatedRoom.id ? { ...updatedRoom, updatedAt: new Date().toISOString() } : r);
@@ -1465,6 +1471,9 @@ export class LocalDB implements DBInterface {
   }
 
   async createLog(log: Omit<CleaningLog, 'id'>): Promise<CleaningLog> {
+    if (await this.isDateLocked(this.currentDate)) {
+      throw new Error('DATE_LOCKED');
+    }
     const logs = await this.getLogs();
     const newLog: CleaningLog = {
       ...log,
@@ -1477,6 +1486,9 @@ export class LocalDB implements DBInterface {
   }
 
   async updateLog(updatedLog: CleaningLog): Promise<void> {
+    if (await this.isDateLocked(this.currentDate)) {
+      throw new Error('DATE_LOCKED');
+    }
     const logs = await this.getLogs();
     const idx = logs.findIndex(l => l.id === updatedLog.id);
     if (idx !== -1) {
@@ -1502,8 +1514,26 @@ export class LocalDB implements DBInterface {
   }
 
   async setActiveStaff(date: string, userIds: string[]): Promise<void> {
+    if (await this.isDateLocked(date)) {
+      throw new Error('DATE_LOCKED');
+    }
     const key = `${this.hotelId}_active_staff_${date}`;
     localStorage.setItem(key, JSON.stringify(userIds));
+  }
+
+  async isDateLocked(date: string): Promise<boolean> {
+    const key = `${this.hotelId}_locked_date_${date}`;
+    return localStorage.getItem(key) === 'true';
+  }
+
+  async setDateLocked(date: string, locked: boolean): Promise<void> {
+    const key = `${this.hotelId}_locked_date_${date}`;
+    if (locked) {
+      localStorage.setItem(key, 'true');
+    } else {
+      localStorage.removeItem(key);
+    }
+    this.broadcast('rooms_updated');
   }
 }
 

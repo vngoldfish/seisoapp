@@ -50,7 +50,7 @@ const compressImage = (file: File): Promise<string> => {
 };
 
 export const HousekeepingDashboard: React.FC = () => {
-  const { currentUser, language, addToast, activeDate, logout, darkMode, toggleDarkMode, setLanguage, hotelId } = useApp();
+  const { currentUser, language, addToast, activeDate, logout, darkMode, toggleDarkMode, setLanguage, hotelId, isLocked } = useApp();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [floorFilter, setFloorFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -482,6 +482,30 @@ export const HousekeepingDashboard: React.FC = () => {
         </aside>
 
         <main className="dashboard-content-panel">
+          {isLocked && (
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              color: '#ef4444',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              padding: '0.75rem 1rem',
+              borderRadius: '8px',
+              marginBottom: '1rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.9rem'
+            }}>
+              <span>🔒</span>
+              <span>
+                {language === 'vi' 
+                  ? 'Ngày này đã chốt hoàn tất. Toàn bộ thông tin hiển thị ở chế độ Chỉ Đọc (Read-Only).' 
+                  : language === 'ja'
+                    ? 'この日付は業務締め切り済みです。すべての情報は読み取り専用です。'
+                    : 'This date is locked/finalized. All information is in Read-Only mode.'}
+              </span>
+            </div>
+          )}
           <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1.5rem' }}>
         {getTranslation(language, 'hkDashboard')}
       </h2>
@@ -706,7 +730,7 @@ export const HousekeepingDashboard: React.FC = () => {
 
                       const isEco = room.status === 'eco';
                       // Determine cursor style
-                      const isClickable = isDirty || isEco || (isCleaning && isAssignedToMe) || room.status === 'clean';
+                      const isClickable = !isLocked && (isDirty || isEco || (isCleaning && isAssignedToMe) || room.status === 'clean');
 
                       return (
                         <div 

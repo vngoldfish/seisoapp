@@ -107,4 +107,8 @@ export interface DBInterface {
   // Staff assignments
   getActiveStaff(date: string): Promise<string[]>;
   setActiveStaff(date: string, userIds: string[]): Promise<void>;
+
+  // Locked date management
+  isDateLocked(date: string): Promise<boolean>;
+  setDateLocked(date: string, locked: boolean): Promise<void>;
 }

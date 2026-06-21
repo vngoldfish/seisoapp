@@ -29,7 +29,7 @@ const getVisiblePages = (current: number, total: number) => {
 };
 
 export const FrontDeskDashboard: React.FC = () => {
-  const { currentUser, language, addToast, triggerSoundAlert, activeDate, logout, darkMode, toggleDarkMode, setLanguage, hotelId } = useApp();
+  const { currentUser, language, addToast, triggerSoundAlert, activeDate, logout, darkMode, toggleDarkMode, setLanguage, hotelId, isLocked } = useApp();
   const isEditDisabled = useMemo(() => {
     return (activeDate < getTodayDateString()) && (currentUser?.role === 'kacho');
   }, [activeDate, currentUser]);
@@ -261,6 +261,17 @@ export const FrontDeskDashboard: React.FC = () => {
   };
 
   const executeStaffToggle = async () => {
+    if (isLocked) {
+      addToast(
+        language === 'vi'
+          ? 'Ngày này đã chốt hoàn tất, không thể chỉnh sửa dữ liệu.'
+          : language === 'ja'
+            ? 'この日付はすでに締め切られているため、データを変更できません。'
+            : 'This date is finalized and locked. No changes are allowed.',
+        'warning'
+      );
+      return;
+    }
     const { userId, isActive } = confirmStaffModal;
     setConfirmStaffModal(prev => ({ ...prev, open: false }));
     try {
@@ -382,6 +393,17 @@ export const FrontDeskDashboard: React.FC = () => {
 
   const saveRoomSetup = async () => {
     if (!selectedRoom || !currentUser) return;
+    if (isLocked) {
+      addToast(
+        language === 'vi'
+          ? 'Ngày này đã chốt hoàn tất, không thể chỉnh sửa dữ liệu.'
+          : language === 'ja'
+            ? 'この日付はすでに締め切られているため、データを変更できません。'
+            : 'This date is finalized and locked. No changes are allowed.',
+        'warning'
+      );
+      return;
+    }
     try {
       // Determine check status based on status change
       let extraFields: Partial<Room> = {};
@@ -441,6 +463,17 @@ export const FrontDeskDashboard: React.FC = () => {
 
   const handleApproveClean = async () => {
     if (!selectedRoom || !currentUser) return;
+    if (isLocked) {
+      addToast(
+        language === 'vi'
+          ? 'Ngày này đã chốt hoàn tất, không thể chỉnh sửa dữ liệu.'
+          : language === 'ja'
+            ? 'この日付はすでに締め切られているため、データを変更できません。'
+            : 'This date is finalized and locked. No changes are allowed.',
+        'warning'
+      );
+      return;
+    }
     try {
       const defects = getSelectedDefects();
 
@@ -489,6 +522,17 @@ export const FrontDeskDashboard: React.FC = () => {
 
   const handleRequestReclean = async () => {
     if (!selectedRoom || !currentUser) return;
+    if (isLocked) {
+      addToast(
+        language === 'vi'
+          ? 'Ngày này đã chốt hoàn tất, không thể chỉnh sửa dữ liệu.'
+          : language === 'ja'
+            ? 'この日付はすでに締め切られているため、データを変更できません。'
+            : 'This date is finalized and locked. No changes are allowed.',
+        'warning'
+      );
+      return;
+    }
     const checkedErrors = getSelectedDefects();
     if (checkedErrors.length === 0 && !recleanReason.trim()) {
       addToast(
@@ -1267,6 +1311,30 @@ export const FrontDeskDashboard: React.FC = () => {
         </aside>
 
         <main className="dashboard-content-panel">
+          {isLocked && (
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              color: '#ef4444',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              padding: '0.75rem 1rem',
+              borderRadius: '8px',
+              marginBottom: '1rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.9rem'
+            }}>
+              <span>🔒</span>
+              <span>
+                {language === 'vi' 
+                  ? 'Ngày này đã chốt hoàn tất. Toàn bộ thông tin hiển thị ở chế độ Chỉ Đọc (Read-Only).' 
+                  : language === 'ja'
+                    ? 'この日付は業務締め切り済みです。すべての情報は読み取り専用です。'
+                    : 'This date is locked/finalized. All information is in Read-Only mode.'}
+              </span>
+            </div>
+          )}
 
       {activeTab === 'stats' && branchStats && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '2rem' }}>
