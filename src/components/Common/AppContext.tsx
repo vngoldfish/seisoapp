@@ -425,13 +425,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // Always route non-admin users to the portal so they can select a hotel
         selectHotel('portal', foundUser);
       } else {
-        // Admin goes directly to dashboard, bypassing hotel selection
-        // Route to the first hotel if they are at 'portal' or have no valid hotel selected
-        const list = await db.getHotels();
-        const defaultHotel = list[0]?.id || 'ks1';
-        if (hotelId === 'portal') {
-          selectHotel(defaultHotel, foundUser);
-        }
+        // Admin goes directly to portal, allowing them to select hotels or the admin panel
+        selectHotel('portal', foundUser);
       }
       
       // Simply load the language from localStorage (or defaults to 'ja' if not found)

@@ -182,9 +182,10 @@ export const Header: React.FC = () => {
   }, [currentUser, language]);
 
   const hotelName = useMemo(() => {
+    if (hotelId === 'admin') return language === 'vi' ? 'Bảng Điều Khiển Admin' : language === 'ja' ? '管理画面 (Admin)' : 'Admin Panel';
     if (activeHotel) return activeHotel.name;
     return hotelId === 'ks2' ? 'Fuji Hotel (富士ホテル)' : 'Sakura Hotel (さくらホテル)';
-  }, [activeHotel, hotelId]);
+  }, [activeHotel, hotelId, language]);
 
   if (!currentUser) return null;
 
@@ -200,12 +201,17 @@ export const Header: React.FC = () => {
             <Menu size={22} />
           </button>
         )}
-        <div className="header-logo" style={{ color: hotelId === 'ks2' ? '#0ea5e9' : '#ec4899' }}>
+        <div 
+          className="header-logo" 
+          style={{ color: hotelId === 'ks2' ? '#0ea5e9' : '#ec4899', cursor: 'pointer' }}
+          onClick={() => selectHotel('portal')}
+          title={language === 'vi' ? 'Quay lại cổng chọn khách sạn' : language === 'ja' ? 'ホテル選択画面に戻る' : 'Back to hotel selection portal'}
+        >
           <Hotel size={28} />
         </div>
         <div className="header-title">
           <h1>{getTranslation(language, 'loginTitle')}</h1>
-          {currentUser.role === 'admin' ? null : currentUser.hotelIds && currentUser.hotelIds.length > 1 ? (
+          {(currentUser.role === 'admin' || (currentUser.hotelIds && currentUser.hotelIds.length > 1)) && hotelId !== 'admin' ? (
             <select
               value={hotelId}
               onChange={e => selectHotel(e.target.value)}
@@ -223,7 +229,7 @@ export const Header: React.FC = () => {
               }}
             >
               {hotelsList
-                .filter(h => currentUser.hotelIds?.includes(h.id))
+                .filter(h => currentUser.role === 'admin' || currentUser.hotelIds?.includes(h.id))
                 .map(h => (
                   <option key={h.id} value={h.id} style={{ color: 'var(--text-color)' }}>
                     {h.id === 'ks2' ? '🗻 ' : h.id === 'ks1' ? '🌸 ' : '🏨 '}{h.name}
@@ -231,14 +237,37 @@ export const Header: React.FC = () => {
                 ))}
             </select>
           ) : (
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: hotelId === 'ks2' ? '#0ea5e9' : '#ec4899', display: 'block', marginTop: '0.1rem' }}>
-              {hotelId === 'ks2' ? '🗻 ' : hotelId === 'ks1' ? '🌸 ' : '🏨 '}{hotelName}
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: hotelId === 'admin' ? '#ef4444' : hotelId === 'ks2' ? '#0ea5e9' : '#ec4899', display: 'block', marginTop: '0.1rem' }}>
+              {hotelId === 'admin' ? '🛠️ ' : hotelId === 'ks2' ? '🗻 ' : hotelId === 'ks1' ? '🌸 ' : '🏨 '}{hotelName}
             </span>
           )}
         </div>
       </div>
 
       <div className="header-actions">
+        {/* Quay về chọn KS Button */}
+        {currentUser && hotelId && hotelId !== 'portal' && (
+          <button
+            onClick={() => selectHotel('portal')}
+            className="btn btn-secondary btn-sm animate-fade-in"
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.35rem', 
+              padding: '0.35rem 0.75rem', 
+              borderRadius: '20px', 
+              fontWeight: 700, 
+              fontSize: '0.8rem',
+              border: '1px solid rgba(0,0,0,0.05)',
+              marginRight: '0.5rem',
+              cursor: 'pointer'
+            }}
+            title={language === 'vi' ? 'Quay về chọn khách sạn' : language === 'ja' ? 'ホテル選択に戻る' : 'Return to Hotel Selection'}
+          >
+            <span>🏨</span>
+            <span>{language === 'vi' ? 'Chọn khách sạn' : language === 'ja' ? 'ホテル選択' : 'Select Hotel'}</span>
+          </button>
+        )}
 
 
 

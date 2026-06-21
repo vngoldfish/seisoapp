@@ -260,6 +260,55 @@ const HotelSelectionPortal: React.FC = () => {
 
       {/* Grid of hotels */}
       <div className={`portal-grid cols-${cols}`}>
+        {currentUser?.role === 'admin' && (
+          <div 
+            className="glass-panel portal-hotel-card admin-pane-card" 
+            onClick={() => selectHotel('admin')}
+            style={{ 
+              padding: '1.5rem', 
+              cursor: 'pointer',
+              minHeight: cols === 'list' ? '140px' : '220px',
+              border: '2px solid rgba(239, 68, 68, 0.25)', 
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              alignItems: 'stretch',
+              transition: 'all 0.3s ease',
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.02) 100%)',
+              position: 'relative'
+            }}
+          >
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', backgroundColor: '#ef4444' }} />
+            
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.35rem' }}>
+                <span style={{ fontSize: '1.75rem' }}>🛠️</span>
+                <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+                  {language === 'vi' ? 'Hệ thống' : language === 'ja' ? 'システム' : 'System'}
+                </span>
+              </div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>
+                {language === 'vi' ? 'Bảng Điều Khiển Admin' : language === 'ja' ? '管理画面 (Admin Pane)' : 'Admin Dashboard'}
+              </h2>
+              <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>system_admin</p>
+              <p style={{ fontSize: '0.8rem', marginTop: '0.5rem', opacity: 0.8, lineBreak: 'anywhere' }}>
+                {language === 'vi' 
+                  ? 'Quản lý nhân viên, cấu hình khách sạn, xem báo cáo doanh thu và cài đặt hệ thống.' 
+                  : language === 'ja'
+                    ? 'ユーザー・ホテルの管理、出勤設定、完了レポート của chi nhánh, và cài đặt hệ thống.'
+                    : 'Manage users, branch hotels, view finalized reports, and configure system databases.'}
+              </p>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', fontWeight: 600, color: '#ef4444', fontSize: '0.85rem' }}>
+              <span>
+                {language === 'ja' ? '管理画面を開く' : language === 'vi' ? 'Truy cập quản trị' : 'Open Admin Panel'}
+              </span>
+              <ArrowRight size={16} />
+            </div>
+          </div>
+        )}
+
         {filteredHotels.map(hotel => {
           const isSakura = hotel.id === 'ks1';
           const isFuji = hotel.id === 'ks2';
@@ -412,9 +461,8 @@ const MainApp: React.FC = () => {
     const isCurrentPathAdmin = hotelId === 'admin';
 
     if (isUserAdmin) {
-      if (isPortal) {
-        selectHotel('admin');
-      }
+      // Admins are not auto-redirected; they stay on the portal or their chosen path
+      return;
     } else {
       if (hotels.length === 0) return;
       if (isPortal || isCurrentPathAdmin) {
@@ -496,7 +544,7 @@ const MainApp: React.FC = () => {
           Loading...
         </div>
       }>
-        {currentUser.role === 'admin' && <AdminDashboard />}
+        {currentUser.role === 'admin' && (hotelId === 'admin' ? <AdminDashboard /> : <FrontDeskDashboard />)}
         {currentUser.role === 'checka' && <CheckerDashboard />}
         {(currentUser.role === 'front_desk' || currentUser.role === 'kacho') && <FrontDeskDashboard />}
         {currentUser.role === 'housekeeping' && <HousekeepingDashboard />}

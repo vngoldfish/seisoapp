@@ -72,6 +72,8 @@ export const FrontDeskDashboard: React.FC = () => {
   const [defectSortField, setDefectSortField] = useState<'name' | 'count'>('count');
   const [defectSortOrder, setDefectSortOrder] = useState<'asc' | 'desc'>('desc');
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [fullscreenMode, setFullscreenMode] = useState<'single' | 'all' | 'custom'>('single');
+  const [customSelectedFloors, setCustomSelectedFloors] = useState<number[]>([]);
   const [logs, setLogs] = useState<CleaningLog[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [floorFilter, setFloorFilter] = useState<string>('all');
@@ -154,7 +156,7 @@ export const FrontDeskDashboard: React.FC = () => {
   });
   const [activeTab, setActiveTab] = useState<'stats' | 'grid' | 'staff' | 'logs'>(() => {
     const queryTab = new URLSearchParams(window.location.search).get('tab');
-    const isKacho = currentUser?.role === 'kacho';
+    const isKacho = currentUser?.role === 'kacho' || currentUser?.role === 'admin';
     const defaultTab = isKacho ? 'stats' : 'grid';
     const validTabs = ['stats', 'grid', 'staff', 'logs'];
     return (queryTab && validTabs.includes(queryTab)) ? (queryTab as 'stats' | 'grid' | 'staff' | 'logs') : defaultTab;
@@ -793,6 +795,12 @@ export const FrontDeskDashboard: React.FC = () => {
       .map(Number)
       .sort((a, b) => a - b);
   }, [carouselRoomsByFloor]);
+
+  useEffect(() => {
+    if (carouselSortedFloors.length > 0 && customSelectedFloors.length === 0) {
+      setCustomSelectedFloors(carouselSortedFloors);
+    }
+  }, [carouselSortedFloors]);
 
   useEffect(() => {
     if (!hasRestoredFloorRef.current && carouselSortedFloors.length > 0) {
@@ -2556,7 +2564,7 @@ export const FrontDeskDashboard: React.FC = () => {
                 return (
                   <div key={floorNum} className="floor-section">
                     <h3 className="floor-title">
-                      <span>{floorNum}F</span>
+                      <span>{language === 'vi' ? `Tầng ${floorNum}` : language === 'ja' ? `${floorNum}階` : `Floor ${floorNum}`}</span>
                       <span style={{ fontSize: '0.8rem', fontWeight: 400, opacity: 0.6 }}>
                         ({floorRooms.length} {getTranslation(language, 'room').toLowerCase()})
                       </span>
@@ -2775,7 +2783,7 @@ export const FrontDeskDashboard: React.FC = () => {
           </div>
 
           {/* Collapsible Active Staff Section */}
-          {(currentUser?.role === 'front_desk' || currentUser?.role === 'checka' || currentUser?.role === 'kacho') && (
+          {(currentUser?.role === 'front_desk' || currentUser?.role === 'checka' || currentUser?.role === 'kacho' || currentUser?.role === 'admin') && (
             <div className="glass-panel" style={{ padding: '0.75rem 1rem', marginBottom: '1.25rem', marginTop: '1rem', borderRadius: 'var(--radius-md)' }}>
               <div 
                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
@@ -4186,42 +4194,96 @@ export const FrontDeskDashboard: React.FC = () => {
         >
           {/* Header */}
           <div className="fullscreen-floor-header">
-            <div className="floor-selector-container">
-              <button 
-                type="button"
-                className="btn btn-outline btn-icon"
-                style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
-                onClick={() => setActiveFloorIndex(prev => Math.max(prev - 1, 0))}
-                disabled={activeFloorIndex === 0}
+            <div className="floor-selector-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <select
+                className="form-input"
+                style={{ padding: '0.4rem 0.5rem', fontSize: '0.8rem', fontWeight: 600, width: '110px' }}
+                value={fullscreenMode}
+                onChange={(e) => setFullscreenMode(e.target.value as any)}
               >
-                <ChevronLeft size={20} />
-              </button>
-              
-              <select 
-                className="form-input floor-dropdown"
-                value={carouselSortedFloors[activeFloorIndex]}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  const idx = carouselSortedFloors.indexOf(val);
-                  if (idx !== -1) setActiveFloorIndex(idx);
-                }}
-              >
-                {carouselSortedFloors.map(floorNum => (
-                  <option key={floorNum} value={floorNum}>
-                    {language === 'vi' ? `Tầng ${floorNum}F` : language === 'ja' ? `${floorNum}階` : `Floor ${floorNum}F`}
-                  </option>
-                ))}
+                <option value="single">{language === 'vi' ? 'Một tầng' : language === 'ja' ? '単一階' : 'Single'}</option>
+                <option value="all">{language === 'vi' ? 'Toàn bộ' : language === 'ja' ? '全階' : 'All Floors'}</option>
+                <option value="custom">{language === 'vi' ? 'Tùy chọn' : language === 'ja' ? 'カスタム' : 'Custom'}</option>
               </select>
 
-              <button 
-                type="button"
-                className="btn btn-outline btn-icon"
-                style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
-                onClick={() => setActiveFloorIndex(prev => Math.min(prev + 1, carouselSortedFloors.length - 1))}
-                disabled={activeFloorIndex === carouselSortedFloors.length - 1}
-              >
-                <ChevronRight size={20} />
-              </button>
+              {fullscreenMode === 'single' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <button 
+                    type="button"
+                    className="btn btn-outline btn-icon"
+                    style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
+                    onClick={() => setActiveFloorIndex(prev => Math.max(prev - 1, 0))}
+                    disabled={activeFloorIndex === 0}
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  
+                  <select 
+                    className="form-input floor-dropdown"
+                    value={carouselSortedFloors[activeFloorIndex]}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      const idx = carouselSortedFloors.indexOf(val);
+                      if (idx !== -1) setActiveFloorIndex(idx);
+                    }}
+                  >
+                    {carouselSortedFloors.map(floorNum => (
+                      <option key={floorNum} value={floorNum}>
+                        {language === 'vi' ? `Tầng ${floorNum}F` : language === 'ja' ? `${floorNum}階` : `Floor ${floorNum}F`}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button 
+                    type="button"
+                    className="btn btn-outline btn-icon"
+                    style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
+                    onClick={() => setActiveFloorIndex(prev => Math.min(prev + 1, carouselSortedFloors.length - 1))}
+                    disabled={activeFloorIndex === carouselSortedFloors.length - 1}
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+              )}
+
+              {fullscreenMode === 'custom' && (
+                <div 
+                  className="glass-panel" 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem', 
+                    padding: '0.35rem 0.6rem', 
+                    borderRadius: '8px',
+                    border: '1px solid rgba(0,0,0,0.1)',
+                    backgroundColor: 'rgba(255,255,255,0.75)',
+                    overflowX: 'auto',
+                    maxWidth: '320px',
+                    scrollbarWidth: 'none'
+                  }}
+                >
+                  {carouselSortedFloors.map(floorNum => {
+                    const isChecked = customSelectedFloors.includes(floorNum);
+                    return (
+                      <label key={floorNum} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            setCustomSelectedFloors(prev => 
+                              isChecked 
+                                ? prev.filter(f => f !== floorNum) 
+                                : [...prev, floorNum].sort((a,b) => a-b)
+                            );
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        <span>{language === 'vi' ? `Tầng ${floorNum}` : language === 'ja' ? `${floorNum}階` : `Floor ${floorNum}`}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -4256,136 +4318,178 @@ export const FrontDeskDashboard: React.FC = () => {
           </div>
 
           {/* Content Area */}
-          <div className="fullscreen-floor-body">
-            <div 
-              className={`room-grid cols-${gridColumns}`}
-              style={gridColumns !== 'auto' ? {
-                gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
-                ['--room-card-min-height' as any]: Number(gridColumns) >= 12 ? '80px' : Number(gridColumns) >= 8 ? '95px' : '120px',
-                ['--room-card-padding' as any]: Number(gridColumns) >= 12 ? '0.5rem 0.4rem 0.4rem' : Number(gridColumns) >= 8 ? '0.8rem 0.6rem 0.5rem' : '1.25rem 1rem 0.75rem',
-                ['--room-number-font-size' as any]: Number(gridColumns) >= 12 ? '1.1rem' : Number(gridColumns) >= 8 ? '1.35rem' : '1.75rem',
-                ['--room-type-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
-                ['--room-guest-font-size' as any]: Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 8 ? '0.6rem' : '0.7rem',
-                ['--room-assignee-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
-                ['--room-note-icon-size' as any]: Number(gridColumns) >= 12 ? '0.65rem' : Number(gridColumns) >= 8 ? '0.8rem' : '1rem',
-                
-                // Mobile responsive scaling variables
-                ['--room-card-min-height-mobile' as any]: Number(gridColumns) >= 16 ? '40px' : Number(gridColumns) >= 12 ? '50px' : Number(gridColumns) >= 10 ? '60px' : Number(gridColumns) >= 8 ? '70px' : Number(gridColumns) >= 6 ? '80px' : '90px',
-                ['--room-card-padding-mobile' as any]: Number(gridColumns) >= 12 ? '0.15rem 0.1rem' : Number(gridColumns) >= 8 ? '0.25rem 0.15rem' : Number(gridColumns) >= 6 ? '0.35rem 0.25rem' : '0.5rem 0.35rem',
-                ['--room-number-font-size-mobile' as any]: Number(gridColumns) >= 16 ? '0.5rem' : Number(gridColumns) >= 12 ? '0.6rem' : Number(gridColumns) >= 10 ? '0.7rem' : Number(gridColumns) >= 8 ? '0.8rem' : Number(gridColumns) >= 6 ? '0.95rem' : '1.1rem',
-                ['--room-type-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
-                ['--room-guest-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.3rem' : Number(gridColumns) >= 8 ? '0.4rem' : Number(gridColumns) >= 6 ? '0.45rem' : '0.5rem',
-                ['--room-assignee-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
-                ['--room-assignee-max-width-mobile' as any]: Number(gridColumns) >= 12 ? '20px' : Number(gridColumns) >= 8 ? '35px' : Number(gridColumns) >= 6 ? '45px' : '55px',
-                ['--room-note-icon-size-mobile' as any]: Number(gridColumns) >= 16 ? '0.45rem' : Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 10 ? '0.6rem' : Number(gridColumns) >= 8 ? '0.7rem' : '0.8rem',
-              } : undefined}
-            >
-              {(carouselRoomsByFloor[carouselSortedFloors[activeFloorIndex]] || [])
-                .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber))
-                .map((room) => {
-                  const guestLabel = language === 'ja' 
-                    ? `予定人数:${room.guestCount}人` 
-                    : language === 'vi' 
-                      ? `Dự kiến:${room.guestCount} người` 
-                      : `Set:${room.guestCount} Pax`;
+          <div className="fullscreen-floor-body" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', height: '100%', overflowY: 'auto', paddingBottom: '4rem' }}>
+            {((fullscreenMode === 'all' 
+              ? carouselSortedFloors
+              : fullscreenMode === 'custom'
+                ? customSelectedFloors
+                : [carouselSortedFloors[activeFloorIndex]]) as number[]).map((floorNum) => {
+              const floorRooms = (carouselRoomsByFloor[floorNum] || [])
+                .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber));
+              
+              if (floorRooms.length === 0) return null;
 
-                  const isClean = room.status === 'clean';
-                  const isPending = isClean && !room.isChecked;
-                  
-                  const cardStyle: React.CSSProperties = {
-                    cursor: 'pointer',
-                    position: 'relative'
-                  };
-                  
-                  if (isPending) {
-                    cardStyle.border = '2px dashed var(--status-dirty)';
-                    cardStyle.animation = 'pulseBorder 2s infinite';
-                  }
-
-                  const iconSize = gridColumns !== 'auto' && Number(gridColumns) >= 12 ? 10 : gridColumns !== 'auto' && Number(gridColumns) >= 8 ? 12 : 14;
-                  const isCompact = gridColumns !== 'auto';
-
-                  return (
-                    <div 
-                      key={room.id} 
-                      className={`room-card ${room.status} ${room.isStay ? 'stay' : ''} ${room.isChecked ? 'checked' : ''} ${isCompact ? 'compact' : ''}`}
-                      onClick={() => handleRoomClick(room)}
-                      title={room.notes ? `Ghi chú: ${room.notes}` : undefined}
-                      style={cardStyle}
+              return (
+                <div key={floorNum} className="fullscreen-floor-group">
+                  {/* Floor Divider */}
+                  <div 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '1rem', 
+                      marginBottom: '1rem',
+                      marginTop: '0.5rem',
+                      padding: '0 0.5rem' 
+                    }}
+                  >
+                    <span 
+                      style={{ 
+                        fontSize: '1rem', 
+                        fontWeight: 800, 
+                        color: 'var(--primary-color)',
+                        backgroundColor: 'rgba(128, 128, 128, 0.15)',
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '20px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em'
+                      }}
                     >
-                      {isCompact ? (
-                        <div className="room-card-compact-wrapper">
-                          <div className="room-card-compact-row">
-                            <span className="room-card-compact-number">{room.roomNumber}</span>
-                          </div>
-                          <div className="room-card-compact-guests">
-                            <span className="room-card-compact-guests-icon">👤</span>
-                            <span className="room-card-compact-guests-count">{room.guestCount}</span>
-                            {room.notes && <span className="room-card-compact-note-icon" title={room.notes}>📝</span>}
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <span className="stay-badge">{room.status === 'maintenance' ? 'Sửa' : room.status === 'vacant' ? 'Trống' : room.status === 'eco' ? 'ECO' : (room.status === 'dirty' || room.status === 'cleaning' || (room.isStay && room.status === 'occupied')) ? (room.isStay ? 'STAY' : 'OUT') : (room.status === 'dnd' || room.notes?.includes('Chỉ cần treo đồ')) ? 'DD' : room.isStay ? 'STAY' : 'OUT'}</span>
-                          
-                          <div>
-                            <div className="room-type-text">{getFormattedRoomType(room.type)}</div>
-                            <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
-                              {room.roomNumber}
-                              {room.status === 'dirty' && <Play size={iconSize} style={{ color: 'var(--status-dirty)' }} fill="var(--status-dirty)" />}
-                              {room.status === 'eco' && <Play size={iconSize} style={{ color: 'var(--status-eco)' }} fill="var(--status-eco)" />}
-                              {room.status === 'cleaning' && <CheckCircle size={iconSize} style={{ color: 'var(--status-cleaning)' }} />}
-                              {room.notes && <AlertTriangle size={iconSize} style={{ color: 'var(--status-maintenance)' }} className="animate-pulse" />}
-                              {room.status === 'clean' && (
-                                <span style={{ 
-                                  fontSize: '0.55rem', 
-                                  fontWeight: 800, 
-                                  color: room.isChecked ? 'var(--status-clean)' : 'var(--status-dirty)',
-                                  backgroundColor: room.isChecked ? 'rgba(16, 185, 129, 0.1)' : 'rgba(234, 179, 8, 0.1)',
-                                  padding: '0.1rem 0.25rem',
-                                  borderRadius: '4px',
-                                  marginLeft: '0.25rem',
-                                  display: 'inline-flex',
-                                  alignItems: 'center'
-                                }}>
-                                  {room.isChecked ? '✓' : '🔍'}
+                      {language === 'vi' ? `Tầng ${floorNum}` : language === 'ja' ? `${floorNum}階` : `Floor ${floorNum}`}
+                    </span>
+                    <div style={{ flex: 1, height: '2px', backgroundColor: 'rgba(128, 128, 128, 0.2)', borderRadius: '1px' }} />
+                  </div>
+
+                  {/* Room grid for this floor */}
+                  <div 
+                    className={`room-grid cols-${gridColumns}`}
+                    style={gridColumns !== 'auto' ? {
+                      gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
+                      ['--room-card-min-height' as any]: Number(gridColumns) >= 12 ? '80px' : Number(gridColumns) >= 8 ? '95px' : '120px',
+                      ['--room-card-padding' as any]: Number(gridColumns) >= 12 ? '0.5rem 0.4rem 0.4rem' : Number(gridColumns) >= 8 ? '0.8rem 0.6rem 0.5rem' : '1.25rem 1rem 0.75rem',
+                      ['--room-number-font-size' as any]: Number(gridColumns) >= 12 ? '1.1rem' : Number(gridColumns) >= 8 ? '1.35rem' : '1.75rem',
+                      ['--room-type-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                      ['--room-guest-font-size' as any]: Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 8 ? '0.6rem' : '0.7rem',
+                      ['--room-assignee-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                      ['--room-note-icon-size' as any]: Number(gridColumns) >= 12 ? '0.65rem' : Number(gridColumns) >= 8 ? '0.8rem' : '1rem',
+                      
+                      // Mobile responsive scaling variables
+                      ['--room-card-min-height-mobile' as any]: Number(gridColumns) >= 16 ? '40px' : Number(gridColumns) >= 12 ? '50px' : Number(gridColumns) >= 10 ? '60px' : Number(gridColumns) >= 8 ? '70px' : Number(gridColumns) >= 6 ? '80px' : '90px',
+                      ['--room-card-padding-mobile' as any]: Number(gridColumns) >= 12 ? '0.15rem 0.1rem' : Number(gridColumns) >= 8 ? '0.25rem 0.15rem' : Number(gridColumns) >= 6 ? '0.35rem 0.25rem' : '0.5rem 0.35rem',
+                      ['--room-number-font-size-mobile' as any]: Number(gridColumns) >= 16 ? '0.5rem' : Number(gridColumns) >= 12 ? '0.6rem' : Number(gridColumns) >= 10 ? '0.7rem' : Number(gridColumns) >= 8 ? '0.8rem' : Number(gridColumns) >= 6 ? '0.95rem' : '1.1rem',
+                      ['--room-type-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
+                      ['--room-guest-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.3rem' : Number(gridColumns) >= 8 ? '0.4rem' : Number(gridColumns) >= 6 ? '0.45rem' : '0.5rem',
+                      ['--room-assignee-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
+                      ['--room-assignee-max-width-mobile' as any]: Number(gridColumns) >= 12 ? '20px' : Number(gridColumns) >= 8 ? '35px' : Number(gridColumns) >= 6 ? '45px' : '55px',
+                      ['--room-note-icon-size-mobile' as any]: Number(gridColumns) >= 16 ? '0.45rem' : Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 10 ? '0.6rem' : Number(gridColumns) >= 8 ? '0.7rem' : '0.8rem',
+                    } : undefined}
+                  >
+                    {floorRooms.map((room) => {
+                      const guestLabel = language === 'ja' 
+                        ? `予定人数:${room.guestCount}人` 
+                        : language === 'vi' 
+                          ? `Dự kiến:${room.guestCount} người` 
+                          : `Set:${room.guestCount} Pax`;
+
+                      const isClean = room.status === 'clean';
+                      const isPending = isClean && !room.isChecked;
+                      
+                      const cardStyle: React.CSSProperties = {
+                        cursor: 'pointer',
+                        position: 'relative'
+                      };
+                      
+                      if (isPending) {
+                        cardStyle.border = '2px dashed var(--status-dirty)';
+                        cardStyle.animation = 'pulseBorder 2s infinite';
+                      }
+
+                      const iconSize = gridColumns !== 'auto' && Number(gridColumns) >= 12 ? 10 : gridColumns !== 'auto' && Number(gridColumns) >= 8 ? 12 : 14;
+                      const isCompact = gridColumns !== 'auto';
+
+                      return (
+                        <div 
+                          key={room.id} 
+                          className={`room-card ${room.status} ${room.isStay ? 'stay' : ''} ${room.isChecked ? 'checked' : ''} ${isCompact ? 'compact' : ''}`}
+                          onClick={() => handleRoomClick(room)}
+                          title={room.notes ? `Ghi chú: ${room.notes}` : undefined}
+                          style={cardStyle}
+                        >
+                          {isCompact ? (
+                            <div className="room-card-compact-wrapper">
+                              <div className="room-card-compact-row">
+                                <span className="room-card-compact-number">{room.roomNumber}</span>
+                              </div>
+                              <div className="room-card-compact-guests">
+                                <span className="room-card-compact-guests-icon">👤</span>
+                                <span className="room-card-compact-guests-count">{room.guestCount}</span>
+                                {room.notes && <span className="room-card-compact-note-icon" title={room.notes}>📝</span>}
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="stay-badge">{room.status === 'maintenance' ? 'Sửa' : room.status === 'vacant' ? 'Trống' : room.status === 'eco' ? 'ECO' : (room.status === 'dirty' || room.status === 'cleaning' || (room.isStay && room.status === 'occupied')) ? (room.isStay ? 'STAY' : 'OUT') : (room.status === 'dnd' || room.notes?.includes('Chỉ cần treo đồ')) ? 'DD' : room.isStay ? 'STAY' : 'OUT'}</span>
+                              
+                              <div>
+                                <div className="room-type-text">{getFormattedRoomType(room.type)}</div>
+                                <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+                                  {room.roomNumber}
+                                  {room.status === 'dirty' && <Play size={iconSize} style={{ color: 'var(--status-dirty)' }} fill="var(--status-dirty)" />}
+                                  {room.status === 'eco' && <Play size={iconSize} style={{ color: 'var(--status-eco)' }} fill="var(--status-eco)" />}
+                                  {room.status === 'cleaning' && <CheckCircle size={iconSize} style={{ color: 'var(--status-cleaning)' }} />}
+                                  {room.notes && <AlertTriangle size={iconSize} style={{ color: 'var(--status-maintenance)' }} className="animate-pulse" />}
+                                  {room.status === 'clean' && (
+                                    <span style={{ 
+                                      fontSize: '0.55rem', 
+                                      fontWeight: 800, 
+                                      color: room.isChecked ? 'var(--status-clean)' : 'var(--status-dirty)',
+                                      backgroundColor: room.isChecked ? 'rgba(16, 185, 129, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+                                      padding: '0.1rem 0.25rem',
+                                      borderRadius: '4px',
+                                      marginLeft: '0.25rem',
+                                      display: 'inline-flex',
+                                      alignItems: 'center'
+                                    }}>
+                                      {room.isChecked ? '✓' : '🔍'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <div className="room-info-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '0.5rem' }}>
+                                <span className="room-guest-count">
+                                  <span className="guest-label-full">※ {guestLabel}</span>
+                                  <span className="guest-label-compact">👤 {room.guestCount}</span>
                                 </span>
+                                {(room.status === 'cleaning' || room.status === 'clean') && room.cleanerName && (
+                                   <span className="room-assignee" title={room.cleanerName}>
+                                     👤 {room.cleanerName.split(' ')[0]}
+                                   </span>
+                                 )}
+                              </div>
+                              
+                              {room.notes && (
+                                <div style={{ 
+                                  fontSize: '0.65rem', 
+                                  opacity: 0.9, 
+                                  maxWidth: '100%', 
+                                  overflow: 'hidden', 
+                                  textOverflow: 'ellipsis', 
+                                  whiteSpace: 'nowrap',
+                                  marginTop: '0.25rem',
+                                  color: 'var(--status-maintenance)'
+                                }}>
+                                  📝 {room.notes}
+                                </div>
                               )}
-                            </div>
-                          </div>
-                          
-                          <div className="room-info-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '0.5rem' }}>
-                            <span className="room-guest-count">
-                              <span className="guest-label-full">※ {guestLabel}</span>
-                              <span className="guest-label-compact">👤 {room.guestCount}</span>
-                            </span>
-                            {(room.status === 'cleaning' || room.status === 'clean') && room.cleanerName && (
-                               <span className="room-assignee" title={room.cleanerName}>
-                                 👤 {room.cleanerName.split(' ')[0]}
-                               </span>
-                             )}
-                          </div>
-                          
-                          {room.notes && (
-                            <div style={{ 
-                              fontSize: '0.65rem', 
-                              opacity: 0.9, 
-                              maxWidth: '100%', 
-                              overflow: 'hidden', 
-                              textOverflow: 'ellipsis', 
-                              whiteSpace: 'nowrap',
-                              marginTop: '0.25rem',
-                              color: 'var(--status-maintenance)'
-                            }}>
-                              📝 {room.notes}
-                            </div>
+                            </>
                           )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Dots Indicator */}
