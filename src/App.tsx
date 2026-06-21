@@ -243,7 +243,7 @@ const HotelSelectionPortal: React.FC = () => {
           return (
             <div 
               key={hotel.id}
-              className="glass-panel room-card" 
+              className="glass-panel portal-hotel-card" 
               onClick={() => selectHotel(hotel.id)}
               style={{ 
                 padding: '1.5rem', 

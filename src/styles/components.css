@@ -1690,6 +1690,36 @@
   }
 }
 
+/* Portal Hotel Card styling */
+.portal-hotel-card {
+  border-radius: var(--radius-md);
+  position: relative;
+  overflow: hidden;
+  transition: all var(--transition-normal);
+  color: var(--text-color) !important;
+}
+
+.dark-mode .portal-hotel-card {
+  color: var(--text-color) !important;
+}
+
+.portal-hotel-card h2 {
+  color: var(--text-color) !important;
+}
+
+.portal-hotel-card p {
+  color: var(--text-secondary-light) !important;
+}
+
+.dark-mode .portal-hotel-card p {
+  color: var(--text-secondary-dark) !important;
+}
+
+.portal-hotel-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+}
+
 /* Print Styles */
 @media print {
   body {
