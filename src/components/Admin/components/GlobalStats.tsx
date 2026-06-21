@@ -28,6 +28,10 @@ interface GlobalStatsProps {
   setHotelPage: React.Dispatch<React.SetStateAction<number>>;
   hotelPerPage: number;
   setHotelPerPage: (val: number) => void;
+  hotelSortBy: 'id' | 'name';
+  setHotelSortBy: (val: 'id' | 'name') => void;
+  hotelSortOrder: 'asc' | 'desc';
+  setHotelSortOrder: React.Dispatch<React.SetStateAction<'asc' | 'desc'>>;
   processedHotelsData: {
     displayed: HotelType[];
     totalPages: number;
@@ -50,12 +54,128 @@ export const GlobalStats: React.FC<GlobalStatsProps> = ({
   setHotelPage,
   hotelPerPage,
   setHotelPerPage,
+  hotelSortBy,
+  setHotelSortBy,
+  hotelSortOrder,
+  setHotelSortOrder,
   processedHotelsData,
   setManagingHotel,
   selectHotel,
   setBranchTab,
   getVisiblePages
 }) => {
+  const [issueSearch, setIssueSearch] = React.useState('');
+  const [issueType, setIssueType] = React.useState('all');
+  const [issueSortField, setIssueSortField] = React.useState<'date' | 'hotelName' | 'roomId'>('date');
+  const [issueSortOrder, setIssueSortOrder] = React.useState<'asc' | 'desc'>('desc');
+  const [issuePage, setIssuePage] = React.useState(1);
+  const [issuePerPage, setIssuePerPage] = React.useState(5);
+
+  const filteredIssues = React.useMemo(() => {
+    return globalStats.allIssues.filter(issue => {
+      const term = issueSearch.toLowerCase().trim();
+      const matchesSearch = !term ||
+        issue.hotelName.toLowerCase().includes(term) ||
+        issue.roomId.toLowerCase().includes(term) ||
+        issue.note.toLowerCase().includes(term);
+
+      const matchesType = issueType === 'all' || issue.type === issueType;
+
+      return matchesSearch && matchesType;
+    });
+  }, [globalStats.allIssues, issueSearch, issueType]);
+
+  const sortedIssues = React.useMemo(() => {
+    return [...filteredIssues].sort((a, b) => {
+      let valA: any = a[issueSortField] || '';
+      let valB: any = b[issueSortField] || '';
+
+      if (issueSortField === 'date') {
+        const timeA = a.time ? ` ${a.time}` : ' 00:00';
+        const timeB = b.time ? ` ${b.time}` : ' 00:00';
+        try {
+          valA = new Date(`${a.date}${timeA}`).getTime();
+          valB = new Date(`${b.date}${timeB}`).getTime();
+        } catch {
+          valA = 0;
+          valB = 0;
+        }
+      } else {
+        valA = valA.toLowerCase();
+        valB = valB.toLowerCase();
+      }
+
+      if (valA < valB) return issueSortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return issueSortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredIssues, issueSortField, issueSortOrder]);
+
+  const paginatedIssues = React.useMemo(() => {
+    if (issuePerPage === 0) return sortedIssues;
+    const startIdx = (issuePage - 1) * issuePerPage;
+    return sortedIssues.slice(startIdx, startIdx + issuePerPage);
+  }, [sortedIssues, issuePage, issuePerPage]);
+
+  const totalIssuePages = React.useMemo(() => {
+    if (issuePerPage === 0) return 1;
+    return Math.ceil(sortedIssues.length / issuePerPage) || 1;
+  }, [sortedIssues, issuePerPage]);
+
+  const [defectSearch, setDefectSearch] = React.useState('');
+  const [defectSortField, setDefectSortField] = React.useState<'name' | 'count'>('count');
+  const [defectSortOrder, setDefectSortOrder] = React.useState<'asc' | 'desc'>('desc');
+  const [defectPage, setDefectPage] = React.useState(1);
+  const [defectPerPage, setDefectPerPage] = React.useState(5);
+
+  const parsedDefects = React.useMemo(() => {
+    return Object.entries(globalStats.defectsByCleaner || {}).map(([name, defects]) => ({
+      name,
+      defects,
+      count: defects.length
+    }));
+  }, [globalStats.defectsByCleaner]);
+
+  const filteredDefects = React.useMemo(() => {
+    return parsedDefects.filter(item => {
+      const term = defectSearch.toLowerCase().trim();
+      return !term || item.name.toLowerCase().includes(term) || item.defects.some(d => d.roomNumber.toLowerCase().includes(term) || d.note.toLowerCase().includes(term));
+    });
+  }, [parsedDefects, defectSearch]);
+
+  const sortedDefects = React.useMemo(() => {
+    return [...filteredDefects].sort((a, b) => {
+      if (defectSortField === 'name') {
+        return defectSortOrder === 'asc'
+          ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+          : b.name.localeCompare(a.name, undefined, { sensitivity: 'base' });
+      } else {
+        return defectSortOrder === 'asc'
+          ? a.count - b.count
+          : b.count - a.count;
+      }
+    });
+  }, [filteredDefects, defectSortField, defectSortOrder]);
+
+  const paginatedDefects = React.useMemo(() => {
+    if (defectPerPage === 0) return sortedDefects;
+    const startIdx = (defectPage - 1) * defectPerPage;
+    return sortedDefects.slice(startIdx, startIdx + defectPerPage);
+  }, [sortedDefects, defectPage, defectPerPage]);
+
+  const totalDefectPages = React.useMemo(() => {
+    if (defectPerPage === 0) return 1;
+    return Math.ceil(sortedDefects.length / defectPerPage) || 1;
+  }, [sortedDefects, defectPerPage]);
+
+  React.useEffect(() => {
+    setIssuePage(1);
+  }, [issueSearch, issueType, issueSortField, issueSortOrder, issuePerPage]);
+
+  React.useEffect(() => {
+    setDefectPage(1);
+  }, [defectSearch, defectSortField, defectSortOrder, defectPerPage]);
+
   return (
     <div>
       {/* Header */}
@@ -208,27 +328,117 @@ export const GlobalStats: React.FC<GlobalStatsProps> = ({
               {language === 'vi' ? 'Không phát hiện lỗi dọn dẹp nào' : language === 'ja' ? '指摘された不備はありません' : 'No cleaner defects reported'}
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto', maxHeight: '420px', paddingRight: '0.25rem' }}>
-              {Object.entries(globalStats.defectsByCleaner).map(([cleanerName, defectsList]) => (
-                <div key={cleanerName} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.75rem' }}>
-                  <div style={{ fontWeight: 700, color: 'var(--primary-color)', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
-                    🧹 {cleanerName} ({defectsList.length} {language === 'vi' ? 'lỗi' : language === 'ja' ? '指摘' : 'defects'})
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
+              {/* Defect Search, Sort, Page Size Toolbar */}
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  style={{ flex: 1, padding: '0.35rem 0.75rem', fontSize: '0.8rem', minWidth: '150px' }}
+                  placeholder={language === 'vi' ? 'Tìm nhân viên, phòng, lỗi...' : 'Search staff, room, note...'}
+                  value={defectSearch}
+                  onChange={e => setDefectSearch(e.target.value)}
+                />
+                
+                <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                  <select
+                    value={defectSortField}
+                    onChange={e => setDefectSortField(e.target.value as any)}
+                    className="form-input"
+                    style={{ width: '90px', padding: '0.35rem 0.5rem', fontSize: '0.75rem', height: 'auto' }}
+                  >
+                    <option value="count">{language === 'vi' ? 'Số lỗi' : 'Defects'}</option>
+                    <option value="name">{language === 'vi' ? 'Tên NV' : 'Name'}</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setDefectSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                    style={{ padding: '0.35rem 0.5rem', fontSize: '0.75rem', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    {defectSortOrder === 'asc' ? '▲' : '▼'}
+                  </button>
+                  <select
+                    value={defectPerPage}
+                    onChange={e => setDefectPerPage(Number(e.target.value))}
+                    className="form-input"
+                    style={{ width: '80px', padding: '0.35rem 0.5rem', fontSize: '0.75rem', height: 'auto' }}
+                  >
+                    <option value={3}>3 / pg</option>
+                    <option value={5}>5 / pg</option>
+                    <option value={10}>10 / pg</option>
+                    <option value={0}>All</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto', maxHeight: '350px', paddingRight: '0.25rem', flex: 1 }}>
+                {paginatedDefects.map((item) => (
+                  <div key={item.name} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.75rem' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--primary-color)', fontSize: '0.95rem', marginBottom: '0.5rem' }}>
+                      🧹 {item.name} ({item.count} {language === 'vi' ? 'lỗi' : language === 'ja' ? '指摘' : 'defects'})
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      {item.defects.map((d, index) => (
+                        <div key={index} style={{ fontSize: '0.8rem', padding: '0.5rem', backgroundColor: 'rgba(0,0,0,0.015)', border: '1px solid rgba(0,0,0,0.03)', borderRadius: '4px', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
+                            <span>Phòng {d.roomNumber}</span>
+                            <span style={{ opacity: 0.6 }}>{d.date.split('-').reverse().join('/')} {d.time || ''}</span>
+                          </div>
+                          <div style={{ fontStyle: 'italic', color: 'var(--status-maintenance)' }}>
+                            ⚠️ {d.note}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    {defectsList.map((d, index) => (
-                      <div key={index} style={{ fontSize: '0.8rem', padding: '0.5rem', backgroundColor: 'rgba(0,0,0,0.015)', border: '1px solid rgba(0,0,0,0.03)', borderRadius: '4px', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-                          <span>Phòng {d.roomNumber}</span>
-                          <span style={{ opacity: 0.6 }}>{d.date.split('-').reverse().join('/')} {d.time || ''}</span>
-                        </div>
-                        <div style={{ fontStyle: 'italic', color: 'var(--status-maintenance)' }}>
-                          ⚠️ {d.note}
-                        </div>
-                      </div>
-                    ))}
+                ))}
+              </div>
+
+              {/* Defects Footer Pagination */}
+              {totalDefectPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '0.75rem', fontSize: '0.75rem' }}>
+                  <span style={{ opacity: 0.6 }}>
+                    {language === 'vi' ? `Trang ${defectPage} / ${totalDefectPages}` : `Page ${defectPage} of ${totalDefectPages}`}
+                  </span>
+                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setDefectPage(prev => Math.max(prev - 1, 1))}
+                      disabled={defectPage === 1}
+                      style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
+                    >
+                      &laquo;
+                    </button>
+                    {getVisiblePages(defectPage, totalDefectPages).map((p, idx) => {
+                      if (p === '...') {
+                        return <span key={`dots-${idx}`} style={{ padding: '0 0.2rem', opacity: 0.5 }}>...</span>;
+                      }
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          className={`btn ${defectPage === p ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+                          onClick={() => setDefectPage(p as number)}
+                          style={{ minWidth: '22px', padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
+                        >
+                          {p}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setDefectPage(prev => Math.min(prev + 1, totalDefectPages))}
+                      disabled={defectPage === totalDefectPages}
+                      style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
+                    >
+                      &raquo;
+                    </button>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
@@ -254,12 +464,30 @@ export const GlobalStats: React.FC<GlobalStatsProps> = ({
                 value={hotelFilterStatus}
                 onChange={(e) => setHotelFilterStatus(e.target.value as any)}
                 className="form-input"
-                style={{ width: '150px', padding: '0.4rem 0.75rem', fontSize: '0.85rem', height: 'auto' }}
+                style={{ width: '130px', padding: '0.4rem 0.75rem', fontSize: '0.85rem', height: 'auto' }}
               >
                 <option value="all">{language === 'vi' ? 'Tất cả trạng thái' : language === 'ja' ? 'すべての状態' : 'All status'}</option>
                 <option value="completed">{language === 'vi' ? 'Đã dọn xong 100%' : language === 'ja' ? '完了 (100%)' : 'Completed (100%)'}</option>
                 <option value="in_progress">{language === 'vi' ? 'Đang dọn dẹp' : language === 'ja' ? '清掃中' : 'In progress'}</option>
               </select>
+              <select
+                value={hotelSortBy}
+                onChange={(e) => setHotelSortBy(e.target.value as any)}
+                className="form-input"
+                style={{ width: '120px', padding: '0.4rem 0.75rem', fontSize: '0.85rem', height: 'auto' }}
+              >
+                <option value="name">{language === 'vi' ? 'Tên khách sạn' : 'Hotel Name'}</option>
+                <option value="id">{language === 'vi' ? 'Mã khách sạn' : 'Hotel Code'}</option>
+              </select>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setHotelSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '32px' }}
+                title={language === 'vi' ? 'Đảo chiều sắp xếp' : 'Toggle Sort Order'}
+              >
+                {hotelSortOrder === 'asc' ? '▲' : '▼'}
+              </button>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', opacity: 0.8, flexWrap: 'wrap', gap: '0.5rem' }}>
               <span>
@@ -366,49 +594,158 @@ export const GlobalStats: React.FC<GlobalStatsProps> = ({
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
-        {/* Right: Issues & Errors list (Các lỗi xảy ra) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+        {/* Issues & Errors list (Các lỗi xảy ra) */}
         <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <AlertTriangle size={20} style={{ color: 'var(--status-maintenance)' }} />
             {language === 'vi' ? 'Sự Cố & Lỗi Ghi Nhận' : language === 'ja' ? '報告された問題・トラブル' : 'Reported Issues & Errors'}
           </h3>
 
-          {globalStats.allIssues.length === 0 ? (
+          {/* Search, Filter, Sort and Page size for Issues */}
+          <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', backgroundColor: 'rgba(255,255,255,0.4)', marginBottom: '1rem', alignItems: 'center' }}>
+            <input
+              type="text"
+              placeholder={language === 'vi' ? 'Tìm sự cố, số phòng, chi nhánh...' : language === 'ja' ? '問題、客室、ホテル検索...' : 'Search issues, room, hotel...'}
+              value={issueSearch}
+              onChange={(e) => setIssueSearch(e.target.value)}
+              className="form-input"
+              style={{ flex: '2 1 200px', padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
+            />
+            <select
+              value={issueType}
+              onChange={(e) => setIssueType(e.target.value)}
+              className="form-input"
+              style={{ flex: '1 1 120px', padding: '0.35rem 0.5rem', fontSize: '0.8rem', height: 'auto' }}
+            >
+              <option value="all">{language === 'vi' ? 'Tất cả loại sự cố' : language === 'ja' ? 'すべてのタイプ' : 'All Types'}</option>
+              <option value="maintenance">{language === 'vi' ? 'Bảo trì (Maintenance)' : language === 'ja' ? '不具合 (Maintenance)' : 'Maintenance'}</option>
+              <option value="dirty">{language === 'vi' ? 'Lỗi dọn dẹp (Defect)' : language === 'ja' ? '清掃不備 (Defect)' : 'Defect'}</option>
+            </select>
+            <select
+              value={issueSortField}
+              onChange={(e) => setIssueSortField(e.target.value as any)}
+              className="form-input"
+              style={{ flex: '1 1 120px', padding: '0.35rem 0.5rem', fontSize: '0.8rem', height: 'auto' }}
+            >
+              <option value="date">{language === 'vi' ? 'Sắp xếp theo ngày' : language === 'ja' ? '日付でソート' : 'Sort by Date'}</option>
+              <option value="hotelName">{language === 'vi' ? 'Khách sạn' : language === 'ja' ? 'ホテル名' : 'Hotel'}</option>
+              <option value="roomId">{language === 'vi' ? 'Số phòng' : language === 'ja' ? '部屋番号' : 'Room Number'}</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => setIssueSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className="btn btn-secondary"
+              style={{ padding: '0.35rem 0.6rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center' }}
+            >
+              {issueSortOrder === 'asc' ? '▲ ASC' : '▼ DESC'}
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginLeft: 'auto' }}>
+              <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>{language === 'vi' ? 'Hiển thị:' : 'Show:'}</span>
+              <select
+                value={issuePerPage}
+                onChange={(e) => setIssuePerPage(Number(e.target.value))}
+                className="form-input"
+                style={{ width: '60px', padding: '0.2rem 0.4rem', fontSize: '0.75rem', height: 'auto' }}
+              >
+                <option value={5}>5</option>
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={0}>{language === 'vi' ? 'Tất cả' : 'All'}</option>
+              </select>
+            </div>
+          </div>
+
+          {sortedIssues.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem 1rem', opacity: 0.6, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <div>
                 <span style={{ fontSize: '2rem' }}>✅</span>
                 <p style={{ marginTop: '0.5rem', fontWeight: 600 }}>
-                  {language === 'vi' ? 'Không có sự cố nào được ghi nhận' : language === 'ja' ? '報告されたトラブルはありません' : 'No issues reported'}
+                  {language === 'vi' ? 'Không tìm thấy sự cố nào thích hợp' : language === 'ja' ? '該当するトラブルはありません' : 'No matching issues found'}
                 </p>
               </div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto', maxHeight: '420px', paddingRight: '0.25rem' }}>
-              {globalStats.allIssues.map((issue, idx) => (
-                <div key={idx} style={{ padding: '0.75rem', backgroundColor: issue.type === 'maintenance' ? 'rgba(239, 68, 68, 0.05)' : 'rgba(234, 179, 8, 0.05)', borderRadius: 'var(--radius-sm)', borderLeft: `3px solid ${issue.type === 'maintenance' ? 'var(--status-maintenance)' : 'var(--status-dirty)'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-                    <span>{issue.hotelName} - Phòng {issue.roomId}</span>
-                    <span style={{ color: issue.type === 'maintenance' ? 'var(--status-maintenance)' : 'var(--status-dirty)', textTransform: 'uppercase', fontSize: '0.65rem' }}>
-                      {issue.type === 'maintenance' ? 'Maintenance' : 'Report Log'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.7rem', opacity: 0.7, marginBottom: '0.4rem', fontWeight: 600 }}>
-                    <span style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 5px', borderRadius: '4px' }}>
-                      📅 {issue.date.split('-').reverse().join('/')}
-                    </span>
-                    {issue.time && (
-                      <span style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 5px', borderRadius: '4px' }}>
-                        ⏰ {issue.time}
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto', maxHeight: '420px', paddingRight: '0.25rem' }}>
+                {paginatedIssues.map((issue, idx) => (
+                  <div key={idx} style={{ padding: '0.75rem', backgroundColor: issue.type === 'maintenance' ? 'rgba(239, 68, 68, 0.05)' : 'rgba(234, 179, 8, 0.05)', borderRadius: 'var(--radius-sm)', borderLeft: `3px solid ${issue.type === 'maintenance' ? 'var(--status-maintenance)' : 'var(--status-dirty)'}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                      <span>{issue.hotelName} - Phòng {issue.roomId}</span>
+                      <span style={{ color: issue.type === 'maintenance' ? 'var(--status-maintenance)' : 'var(--status-dirty)', textTransform: 'uppercase', fontSize: '0.65rem' }}>
+                        {issue.type === 'maintenance' ? 'Maintenance' : 'Report Log'}
                       </span>
-                    )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.7rem', opacity: 0.7, marginBottom: '0.4rem', fontWeight: 600 }}>
+                      <span style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 5px', borderRadius: '4px' }}>
+                        📅 {issue.date.split('-').reverse().join('/')}
+                      </span>
+                      {issue.time && (
+                        <span style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 5px', borderRadius: '4px' }}>
+                          ⏰ {issue.time}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 500, opacity: 0.9 }}>
+                      {issue.note}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 500, opacity: 0.9 }}>
-                    {issue.note}
+                ))}
+              </div>
+
+              {/* Issue Pagination Controls */}
+              {totalIssuePages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', padding: '0.75rem 0.5rem 0 0.5rem', borderTop: '1px solid rgba(0,0,0,0.05)', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div style={{ fontSize: '0.8rem', opacity: 0.6 }}>
+                    {language === 'vi' 
+                      ? `Hiển thị ${((issuePage - 1) * (issuePerPage || sortedIssues.length)) + 1}-${Math.min(issuePage * (issuePerPage || sortedIssues.length), sortedIssues.length)} trên tổng số ${sortedIssues.length} sự cố` 
+                      : language === 'ja'
+                        ? `${sortedIssues.length}件中 ${((issuePage - 1) * (issuePerPage || sortedIssues.length)) + 1}-${Math.min(issuePage * (issuePerPage || sortedIssues.length), sortedIssues.length)}件を表示`
+                        : `Showing ${((issuePage - 1) * (issuePerPage || sortedIssues.length)) + 1}-${Math.min(issuePage * (issuePerPage || sortedIssues.length), sortedIssues.length)} of ${sortedIssues.length} issues`}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setIssuePage(prev => Math.max(prev - 1, 1))}
+                      disabled={issuePage === 1}
+                      style={{ minWidth: '32px' }}
+                    >
+                      &laquo;
+                    </button>
+                    {getVisiblePages(issuePage, totalIssuePages).map((page, index) => {
+                      if (page === '...') {
+                        return (
+                          <span key={`ellipsis-${index}`} style={{ padding: '0.2rem 0.4rem', opacity: 0.5, fontSize: '0.8rem' }}>
+                            ...
+                          </span>
+                        );
+                      }
+                      return (
+                        <button
+                          key={page}
+                          type="button"
+                          className={`btn btn-sm ${issuePage === page ? 'btn-primary' : 'btn-secondary'}`}
+                          onClick={() => setIssuePage(page as number)}
+                          style={{ minWidth: '28px', fontSize: '0.75rem', padding: '0.2rem 0.4rem', fontWeight: issuePage === page ? 'bold' : 'normal' }}
+                        >
+                          {page}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setIssuePage(prev => Math.min(prev + 1, totalIssuePages))}
+                      disabled={issuePage === totalIssuePages}
+                      style={{ minWidth: '32px' }}
+                    >
+                      &raquo;
+                    </button>
                   </div>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>

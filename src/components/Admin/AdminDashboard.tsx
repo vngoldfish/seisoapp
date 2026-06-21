@@ -98,7 +98,7 @@ export const AdminDashboard: React.FC = () => {
     return (queryTab && validTabs.includes(queryTab)) ? (queryTab as 'stats' | 'users' | 'logs' | 'hotels') : 'stats';
   });
   
-  const [branchTab, setBranchTab] = useState<'stats' | 'grid' | 'staff' | 'rooms' | 'linkStaff' | 'users'>('stats');
+  const [branchTab, setBranchTab] = useState<'stats' | 'grid' | 'staff' | 'rooms' | 'linkStaff' | 'users' | 'settings'>('stats');
   
   // Database States
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -120,6 +120,8 @@ export const AdminDashboard: React.FC = () => {
   const [hotelFilterStatus, setHotelFilterStatus] = useState<'all' | 'completed' | 'in_progress'>('all');
   const [hotelPage, setHotelPage] = useState(1);
   const [hotelPerPage, setHotelPerPage] = useState(5);
+  const [hotelSortBy, setHotelSortBy] = useState<'id' | 'name'>('name');
+  const [hotelSortOrder, setHotelSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Form States (Create/Edit Hotel)
   const [hotelModalOpen, setHotelModalOpen] = useState(false);
@@ -156,7 +158,7 @@ export const AdminDashboard: React.FC = () => {
         if (foundHotel) {
           setManagingHotel(foundHotel);
           selectHotel(foundHotel.id);
-          if (branchTabParam && ['stats', 'grid', 'staff', 'rooms', 'linkStaff', 'users'].includes(branchTabParam)) {
+          if (branchTabParam && ['stats', 'grid', 'staff', 'rooms', 'linkStaff', 'users', 'settings'].includes(branchTabParam)) {
             setBranchTab(branchTabParam as any);
           }
         }
@@ -606,12 +608,12 @@ export const AdminDashboard: React.FC = () => {
     };
   }, [hotels, activeDate]);
 
-  // Reset hotel page when search, filter or selected stats date changes
+  // Reset hotel page when search, filter, sort or selected stats date changes
   useEffect(() => {
     setHotelPage(1);
-  }, [hotelSearchTerm, hotelFilterStatus, activeDate]);
+  }, [hotelSearchTerm, hotelFilterStatus, hotelSortBy, hotelSortOrder, activeDate]);
 
-  // Filter and Paginate Hotel Breakdown list for stats view
+  // Filter, Sort and Paginate Hotel Breakdown list for stats view
   const processedHotelsData = useMemo(() => {
     const filtered = hotels.filter(hotel => {
       const nameMatch = hotel.name.toLowerCase().includes(hotelSearchTerm.toLowerCase()) ||
@@ -629,11 +631,22 @@ export const AdminDashboard: React.FC = () => {
       return nameMatch && statusMatch;
     });
 
-    const totalItems = filtered.length;
+    const sorted = [...filtered].sort((a, b) => {
+      let valA = hotelSortBy === 'id' ? a.id : a.name;
+      let valB = hotelSortBy === 'id' ? b.id : b.name;
+      valA = valA.toLowerCase();
+      valB = valB.toLowerCase();
+      
+      if (valA < valB) return hotelSortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return hotelSortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    const totalItems = sorted.length;
     const totalPages = Math.ceil(totalItems / hotelPerPage) || 1;
     const currentPage = Math.min(Math.max(1, hotelPage), totalPages);
     const startIndex = (currentPage - 1) * hotelPerPage;
-    const paginated = filtered.slice(startIndex, startIndex + hotelPerPage);
+    const paginated = sorted.slice(startIndex, startIndex + hotelPerPage);
 
     return {
       displayed: paginated,
@@ -641,7 +654,7 @@ export const AdminDashboard: React.FC = () => {
       currentPage,
       totalItems
     };
-  }, [hotels, globalStats.hotelBreakdowns, hotelSearchTerm, hotelFilterStatus, hotelPage, hotelPerPage]);
+  }, [hotels, globalStats.hotelBreakdowns, hotelSearchTerm, hotelFilterStatus, hotelPage, hotelPerPage, hotelSortBy, hotelSortOrder]);
 
   return (
     <div className="main-content">
@@ -804,6 +817,10 @@ export const AdminDashboard: React.FC = () => {
               setHotelPage={setHotelPage}
               hotelPerPage={hotelPerPage}
               setHotelPerPage={setHotelPerPage}
+              hotelSortBy={hotelSortBy}
+              setHotelSortBy={setHotelSortBy}
+              hotelSortOrder={hotelSortOrder}
+              setHotelSortOrder={setHotelSortOrder}
               processedHotelsData={processedHotelsData}
               setManagingHotel={setManagingHotel}
               selectHotel={selectHotel}
@@ -824,6 +841,10 @@ export const AdminDashboard: React.FC = () => {
               setHotelPage={setHotelPage}
               hotelPerPage={hotelPerPage}
               setHotelPerPage={setHotelPerPage}
+              hotelSortBy={hotelSortBy}
+              setHotelSortBy={setHotelSortBy}
+              hotelSortOrder={hotelSortOrder}
+              setHotelSortOrder={setHotelSortOrder}
               processedHotelsData={processedHotelsData}
               handleAddHotelClick={handleAddHotelClick}
               handleEditHotelClick={handleEditHotelClick}
@@ -858,6 +879,7 @@ export const AdminDashboard: React.FC = () => {
               setUsersPage={setUsersPage}
               refreshUsers={refreshUsers}
               loadManagingHotelData={loadManagingHotelData}
+              refreshHotels={refreshHotels}
               addToast={addToast}
               getTranslation={getTranslation}
               getVisiblePages={getVisiblePages}

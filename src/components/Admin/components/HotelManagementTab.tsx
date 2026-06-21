@@ -13,6 +13,10 @@ interface HotelManagementTabProps {
   setHotelPage: React.Dispatch<React.SetStateAction<number>>;
   hotelPerPage: number;
   setHotelPerPage: (val: number) => void;
+  hotelSortBy: 'id' | 'name';
+  setHotelSortBy: (val: 'id' | 'name') => void;
+  hotelSortOrder: 'asc' | 'desc';
+  setHotelSortOrder: React.Dispatch<React.SetStateAction<'asc' | 'desc'>>;
   processedHotelsData: {
     displayed: HotelType[];
     totalPages: number;
@@ -40,6 +44,10 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
   setHotelPage,
   hotelPerPage,
   setHotelPerPage,
+  hotelSortBy,
+  setHotelSortBy,
+  hotelSortOrder,
+  setHotelSortOrder,
   processedHotelsData,
   handleAddHotelClick,
   handleEditHotelClick,
@@ -66,27 +74,47 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
         </button>
       </div>
 
-      {/* Search, Filter, Page Size Controls */}
+      {/* Search, Filter, Sort, Page Size Controls */}
       <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', backgroundColor: 'rgba(255, 255, 255, 0.4)', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <input
             type="text"
             placeholder={language === 'vi' ? 'Tìm tên/mã khách sạn...' : language === 'ja' ? 'ホテル名・コード検索...' : 'Search hotel name/code...'}
             value={hotelSearchTerm}
             onChange={(e) => setHotelSearchTerm(e.target.value)}
             className="form-input"
-            style={{ flex: 1, minWidth: '150px', padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+            style={{ flex: '2 1 180px', padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
           />
           <select
             value={hotelFilterStatus}
             onChange={(e) => setHotelFilterStatus(e.target.value as any)}
             className="form-input"
-            style={{ width: '150px', padding: '0.4rem 0.75rem', fontSize: '0.85rem', height: 'auto' }}
+            style={{ flex: '1 1 130px', padding: '0.4rem 0.75rem', fontSize: '0.85rem', height: 'auto' }}
           >
             <option value="all">{language === 'vi' ? 'Tất cả trạng thái' : language === 'ja' ? 'すべての状態' : 'All status'}</option>
             <option value="completed">{language === 'vi' ? 'Đã dọn xong 100%' : language === 'ja' ? '完了 (100%)' : 'Completed (100%)'}</option>
             <option value="in_progress">{language === 'vi' ? 'Đang dọn dẹp' : language === 'ja' ? '清掃中' : 'In progress'}</option>
           </select>
+          
+          {/* Sorting controls */}
+          <select
+            value={hotelSortBy}
+            onChange={(e) => setHotelSortBy(e.target.value as any)}
+            className="form-input"
+            style={{ flex: '1 1 130px', padding: '0.4rem 0.75rem', fontSize: '0.85rem', height: 'auto' }}
+          >
+            <option value="name">{language === 'vi' ? 'Tên khách sạn' : language === 'ja' ? 'ホテル名' : 'Hotel Name'}</option>
+            <option value="id">{language === 'vi' ? 'Mã khách sạn' : language === 'ja' ? 'ホテルコード' : 'Hotel Code'}</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => setHotelSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+            className="btn btn-secondary"
+            style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title={language === 'vi' ? 'Đảo chiều sắp xếp' : 'Toggle Sort Order'}
+          >
+            {hotelSortOrder === 'asc' ? '▲ ASC' : '▼ DESC'}
+          </button>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', opacity: 0.8, flexWrap: 'wrap', gap: '0.5rem' }}>
           <span>
@@ -117,8 +145,26 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '500px' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'hotelCode')}</th>
-                <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'hotelName')}</th>
+                <th 
+                  style={{ padding: '0.75rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => {
+                    setHotelSortBy('id');
+                    setHotelSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                  }}
+                  title="Sort by Hotel Code"
+                >
+                  {getTranslation(language, 'hotelCode')} {hotelSortBy === 'id' ? (hotelSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+                </th>
+                <th 
+                  style={{ padding: '0.75rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => {
+                    setHotelSortBy('name');
+                    setHotelSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                  }}
+                  title="Sort by Hotel Name"
+                >
+                  {getTranslation(language, 'hotelName')} {hotelSortBy === 'name' ? (hotelSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+                </th>
                 <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'description')}</th>
                 <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'action')}</th>
               </tr>

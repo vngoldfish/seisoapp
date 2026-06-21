@@ -38,7 +38,16 @@ export const CheckerDashboard: React.FC = () => {
   const isEditDisabled = useMemo(() => {
     return (activeDate < getTodayDateString()) && (currentUser?.role === 'checka');
   }, [activeDate, currentUser]);
-  const [statsTimeRange, setStatsTimeRange] = useState<'today' | 'week' | 'month'>('today');
+  const [statsTimeRange, setStatsTimeRange] = useState<'today' | 'week' | 'month' | 'year'>('today');
+  const [leaderboardSortBy, setLeaderboardSortBy] = useState<'count' | 'time'>('count');
+  const [leaderboardSortOrder, setLeaderboardSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [leaderboardPage, setLeaderboardPage] = useState<number>(1);
+  const [leaderboardPerPage, setLeaderboardPerPage] = useState<number>(6);
+  const [leaderboardSearchTerm, setLeaderboardSearchTerm] = useState<string>('');
+  const [defectPage, setDefectPage] = useState<number>(1);
+  const [defectPerPage, setDefectPerPage] = useState<number>(5);
+  const [defectSortField, setDefectSortField] = useState<'name' | 'count'>('count');
+  const [defectSortOrder, setDefectSortOrder] = useState<'asc' | 'desc'>('desc');
   
   // Tab/Menu navigation inside Checker Dashboard
   const [activeTab, setActiveTab] = useState<'stats' | 'grid' | 'logs' | 'staff'>(() => {
@@ -696,8 +705,10 @@ export const CheckerDashboard: React.FC = () => {
       
       if (statsTimeRange === 'week') {
         return diffDays >= 0 && diffDays < 7;
-      } else { // statsTimeRange === 'month'
+      } else if (statsTimeRange === 'month') {
         return diffDays >= 0 && diffDays < 30;
+      } else { // statsTimeRange === 'year'
+        return diffDays >= 0 && diffDays < 365;
       }
     });
 
@@ -815,6 +826,71 @@ export const CheckerDashboard: React.FC = () => {
       finishedCount
     };
   }, [rooms, logs, activeStaffIds, activeDate, statsTimeRange]);
+
+  const filteredLeaderboard = useMemo(() => {
+    const list = branchStats?.leaderboard || [];
+    return list.filter(cleaner => {
+      const term = leaderboardSearchTerm.toLowerCase().trim();
+      return !term || cleaner.name.toLowerCase().includes(term);
+    });
+  }, [branchStats?.leaderboard, leaderboardSearchTerm]);
+
+  const sortedLeaderboard = useMemo(() => {
+    return [...filteredLeaderboard].sort((a, b) => {
+      let comparison = 0;
+      if (leaderboardSortBy === 'count') {
+        comparison = b.count - a.count || a.avgTime - b.avgTime;
+      } else {
+        comparison = a.avgTime - b.avgTime || b.count - a.count;
+      }
+      return leaderboardSortOrder === 'desc' ? comparison : -comparison;
+    });
+  }, [filteredLeaderboard, leaderboardSortBy, leaderboardSortOrder]);
+
+  const paginatedLeaderboard = useMemo(() => {
+    if (leaderboardPerPage === 0) return sortedLeaderboard;
+    const startIndex = (leaderboardPage - 1) * leaderboardPerPage;
+    return sortedLeaderboard.slice(startIndex, startIndex + leaderboardPerPage);
+  }, [sortedLeaderboard, leaderboardPage, leaderboardPerPage]);
+
+  const totalLeaderboardPages = useMemo(() => {
+    if (leaderboardPerPage === 0 || sortedLeaderboard.length === 0) return 1;
+    return Math.ceil(sortedLeaderboard.length / leaderboardPerPage);
+  }, [sortedLeaderboard.length, leaderboardPerPage]);
+
+  useEffect(() => {
+    setLeaderboardPage(1);
+  }, [statsTimeRange, leaderboardSortBy, leaderboardSortOrder, leaderboardPerPage, leaderboardSearchTerm]);
+
+  const sortedCleanerErrorLeaderboard = useMemo(() => {
+    const list = branchStats?.cleanerErrorLeaderboard || [];
+    return [...list].sort((a, b) => {
+      if (defectSortField === 'name') {
+        return defectSortOrder === 'asc'
+          ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+          : b.name.localeCompare(a.name, undefined, { sensitivity: 'base' });
+      } else {
+        return defectSortOrder === 'asc'
+          ? a.count - b.count
+          : b.count - a.count;
+      }
+    });
+  }, [branchStats?.cleanerErrorLeaderboard, defectSortField, defectSortOrder]);
+
+  const paginatedCleanerErrorLeaderboard = useMemo(() => {
+    if (defectPerPage === 0) return sortedCleanerErrorLeaderboard;
+    const startIndex = (defectPage - 1) * defectPerPage;
+    return sortedCleanerErrorLeaderboard.slice(startIndex, startIndex + defectPerPage);
+  }, [sortedCleanerErrorLeaderboard, defectPage, defectPerPage]);
+
+  const totalDefectPages = useMemo(() => {
+    if (defectPerPage === 0 || sortedCleanerErrorLeaderboard.length === 0) return 1;
+    return Math.ceil(sortedCleanerErrorLeaderboard.length / defectPerPage);
+  }, [sortedCleanerErrorLeaderboard.length, defectPerPage]);
+
+  useEffect(() => {
+    setDefectPage(1);
+  }, [statsTimeRange, defectPerPage, defectSortField, defectSortOrder]);
 
   // Helper for showing cleaner activity (cleaning, finished count) in Checker
   const getCleanerActivity = (cleanerId: string) => {
@@ -1072,6 +1148,14 @@ export const CheckerDashboard: React.FC = () => {
                   >
                     <span>📈</span>
                     <span>{language === 'vi' ? 'Tháng này' : language === 'ja' ? '今月' : 'This Month'}</span>
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setStatsTimeRange('year')}
+                    className={`capsule-button ${statsTimeRange === 'year' ? 'active' : ''}`}
+                  >
+                    <span>📅</span>
+                    <span>{language === 'vi' ? 'Năm nay' : language === 'ja' ? '今年' : 'This Year'}</span>
                   </button>
                 </div>
               </div>
@@ -1362,33 +1446,102 @@ export const CheckerDashboard: React.FC = () => {
 
                 {/* Housekeeper Leaderboard */}
                 <div className="glass-panel" style={{ padding: '1.5rem', gridColumn: 'span 2' }}>
-                  <h4 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                    {statsTimeRange === 'today' 
-                      ? (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Hôm nay)' : language === 'ja' ? 'スタッフ清掃実績ランキング (本日)' : 'Housekeeper Leaderboard (Today)')
-                      : statsTimeRange === 'week'
-                        ? (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Tuần này)' : language === 'ja' ? 'スタッフ清掃実績ランキング (今週)' : 'Housekeeper Leaderboard (This Week)')
-                        : (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Tháng này)' : language === 'ja' ? 'スタッフ清掃実績ランキング (今月)' : 'Housekeeper Leaderboard (This Month)')}
-                  </h4>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
+                    <h4 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>
+                      {statsTimeRange === 'today' 
+                        ? (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Hôm nay)' : language === 'ja' ? 'スタッフ清掃実績ランキング (本日)' : 'Housekeeper Leaderboard (Today)')
+                        : statsTimeRange === 'week'
+                          ? (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Tuần này)' : language === 'ja' ? 'スタッフ清掃実績ランキング (今週)' : 'Housekeeper Leaderboard (This Week)')
+                          : statsTimeRange === 'month'
+                            ? (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Tháng này)' : language === 'ja' ? 'スタッフ清掃実績ランキング (今月)' : 'Housekeeper Leaderboard (This Month)')
+                            : (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Năm nay)' : language === 'ja' ? 'スタッフ清掃実績ランキング (今年)' : 'Housekeeper Leaderboard (This Year)')}
+                    </h4>
+                  </div>
+
+                  {/* Leaderboard Toolbar */}
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1.25rem' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ flex: 1, padding: '0.35rem 0.75rem', fontSize: '0.8rem', minWidth: '180px' }}
+                      placeholder={language === 'vi' ? 'Tìm nhanh nhân viên...' : language === 'ja' ? 'スタッフ名検索...' : 'Search housekeeper...'}
+                      value={leaderboardSearchTerm}
+                      onChange={e => setLeaderboardSearchTerm(e.target.value)}
+                    />
+                    
+                    <div className="capsule-switcher" style={{ display: 'inline-flex' }}>
+                      <button
+                        type="button"
+                        onClick={() => setLeaderboardSortBy('count')}
+                        className={`capsule-button ${leaderboardSortBy === 'count' ? 'active' : ''}`}
+                      >
+                        <span>{language === 'vi' ? '🧹 Số lượng phòng' : language === 'ja' ? '🧹 清掃室数' : '🧹 Room Count'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLeaderboardSortBy('time')}
+                        className={`capsule-button ${leaderboardSortBy === 'time' ? 'active' : ''}`}
+                      >
+                        <span>{language === 'vi' ? '⏱️ Thời gian dọn TB' : language === 'ja' ? '⏱️ 平均清掃時間' : '⏱️ Avg Clean Time'}</span>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.45rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '30px' }}
+                      onClick={() => setLeaderboardSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                      title={language === 'vi' ? 'Đảo chiều sắp xếp' : 'Toggle Sort Order'}
+                    >
+                      {leaderboardSortOrder === 'asc' ? '▲' : '▼'}
+                    </button>
+
+                    <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', fontWeight: 600 }}>
+                      <span>{language === 'vi' ? 'Hiển thị:' : language === 'ja' ? '表示:' : 'Show:'}</span>
+                      <select
+                        value={leaderboardPerPage}
+                        onChange={(e) => setLeaderboardPerPage(Number(e.target.value))}
+                        style={{
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(0,0,0,0.15)',
+                          backgroundColor: 'white',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          height: '30px'
+                        }}
+                      >
+                        <option value={6}>6</option>
+                        <option value={12}>12</option>
+                        <option value={24}>24</option>
+                        <option value={0}>{language === 'vi' ? 'Tất cả' : language === 'ja' ? 'すべて' : 'All'}</option>
+                      </select>
+                    </div>
+                  </div>
                   
-                  {branchStats.leaderboard.length === 0 ? (
+                  {sortedLeaderboard.length === 0 ? (
                     <div style={{ padding: '3rem', textAlign: 'center', opacity: 0.6, fontSize: '0.9rem' }}>
                       🧹 {statsTimeRange === 'today'
-                        ? (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong ngày hôm nay' : language === 'ja' ? '本日のこの店舗 của 清掃実績はまだありません' : 'No cleaning logs recorded for this branch today')
+                        ? (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong ngày hôm nay' : language === 'ja' ? '本日のこの店舗の清掃実績はまだありません' : 'No cleaning logs recorded for this branch today')
                         : statsTimeRange === 'week'
                           ? (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong tuần này' : language === 'ja' ? '今週のこの店舗の清掃実績はまだありません' : 'No cleaning logs recorded for this branch this week')
-                          : (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong tháng này' : language === 'ja' ? '今月のこの店舗の清掃実績はまだありません' : 'No cleaning logs recorded for this branch this month')}
+                          : statsTimeRange === 'month'
+                            ? (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong tháng này' : language === 'ja' ? '今月のこの店舗 của 清掃実績はまだありません' : 'No cleaning logs recorded for this branch this month')
+                            : (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong năm nay' : language === 'ja' ? '今年のこの店舗 của 清掃実績はまだありません' : 'No cleaning logs recorded for this branch this year')}
                     </div>
                   ) : (
                     <div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
-                        {branchStats.leaderboard.map((cleaner, index) => {
-                          const maxRooms = Math.max(...branchStats.leaderboard.map(c => c.count), 1);
+                        {paginatedLeaderboard.map((cleaner, index) => {
+                          const maxRooms = Math.max(...sortedLeaderboard.map(c => c.count), 1);
                           const percent = (cleaner.count / maxRooms) * 100;
-                          const rankMedal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}`;
+                          const overallIndex = leaderboardPerPage === 0 ? index : (leaderboardPage - 1) * leaderboardPerPage + index;
+                          const rankMedal = overallIndex === 0 ? '🥇' : overallIndex === 1 ? '🥈' : overallIndex === 2 ? '🥉' : `${overallIndex + 1}`;
                           
                           return (
                             <div 
-                              key={index} 
+                              key={overallIndex} 
                               className="glass-panel" 
                               style={{ 
                                 padding: '1rem', 
@@ -1396,7 +1549,7 @@ export const CheckerDashboard: React.FC = () => {
                                 display: 'flex', 
                                 alignItems: 'center', 
                                 gap: '1rem',
-                                borderLeft: index < 3 ? `4px solid ${index === 0 ? '#fbbf24' : index === 1 ? '#94a3b8' : '#b45309'}` : '1px solid rgba(0,0,0,0.05)'
+                                borderLeft: overallIndex < 3 ? `4px solid ${overallIndex === 0 ? '#fbbf24' : overallIndex === 1 ? '#94a3b8' : '#b45309'}` : '1px solid rgba(0,0,0,0.05)'
                               }}
                             >
                               <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', fontWeight: 800 }}>
@@ -1425,13 +1578,13 @@ export const CheckerDashboard: React.FC = () => {
                                           : (language === 'vi' ? '⏱️ T.Bình' : language === 'ja' ? '⏱️ 普通' : '⏱️ Normal')}
                                     </span>
                                   </div>
-                                  <span style={{ color: 'var(--primary-color)' }}>{cleaner.count} {language === 'vi' ? 'phòng' : language === 'ja' ? '室' : 'rooms'}</span>
+                                  <span style={{ color: leaderboardSortBy === 'count' ? 'var(--primary-color)' : 'inherit', fontWeight: leaderboardSortBy === 'count' ? 700 : 500 }}>{cleaner.count} {language === 'vi' ? 'phòng' : language === 'ja' ? '室' : 'rooms'}</span>
                                 </div>
                                 <div style={{ width: '100%', height: '6px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '99px', overflow: 'hidden', marginBottom: '0.4rem' }}>
                                   <div style={{ width: `${percent}%`, height: '100%', backgroundColor: 'var(--primary-color)' }} />
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '0.75rem', opacity: 0.8, fontWeight: 500 }}>
-                                  <span>⏱️ Avg: {cleaner.avgTime} {language === 'vi' ? 'phút / phòng' : language === 'ja' ? '分 / 室' : 'mins / room'}</span>
+                                  <span style={{ color: leaderboardSortBy === 'time' ? 'var(--primary-color)' : 'inherit', fontWeight: leaderboardSortBy === 'time' ? 700 : 500 }}>⏱️ Avg: {cleaner.avgTime} {language === 'vi' ? 'phút / phòng' : language === 'ja' ? '分 / 室' : 'mins / room'}</span>
                                 </div>
                               </div>
                             </div>
@@ -1439,18 +1592,66 @@ export const CheckerDashboard: React.FC = () => {
                         })}
                       </div>
 
+                      {totalLeaderboardPages > 1 && (
+                        <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', flexWrap: 'wrap', gap: '0.75rem', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1rem' }}>
+                          <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>
+                            {language === 'vi'
+                              ? `Đang hiển thị ${(leaderboardPage - 1) * leaderboardPerPage + 1}-${Math.min(leaderboardPage * leaderboardPerPage, sortedLeaderboard.length)} trong số ${sortedLeaderboard.length} nhân viên`
+                              : language === 'ja'
+                                ? `${sortedLeaderboard.length}人中 ${(leaderboardPage - 1) * leaderboardPerPage + 1}-${Math.min(leaderboardPage * leaderboardPerPage, sortedLeaderboard.length)}人表示`
+                                : `Showing ${(leaderboardPage - 1) * leaderboardPerPage + 1}-${Math.min(leaderboardPage * leaderboardPerPage, sortedLeaderboard.length)} of ${sortedLeaderboard.length} housekeepers`}
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => setLeaderboardPage(prev => Math.max(prev - 1, 1))}
+                              disabled={leaderboardPage === 1}
+                              style={{ padding: '0.25rem 0.5rem' }}
+                            >
+                              <ChevronLeft size={14} />
+                            </button>
+                            {getVisiblePages(leaderboardPage, totalLeaderboardPages).map((page, idx) => {
+                              if (page === '...') {
+                                return <span key={`dots-${idx}`} style={{ padding: '0 0.25rem', opacity: 0.5 }}>...</span>;
+                              }
+                              return (
+                                <button
+                                  key={page}
+                                  type="button"
+                                  className={`btn btn-sm ${leaderboardPage === page ? 'btn-primary' : 'btn-secondary'}`}
+                                  onClick={() => setLeaderboardPage(page as number)}
+                                  style={{ minWidth: '28px', padding: '0.25rem 0.5rem', fontWeight: leaderboardPage === page ? 'bold' : 'normal' }}
+                                >
+                                  {page}
+                                </button>
+                              );
+                            })}
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => setLeaderboardPage(prev => Math.min(prev + 1, totalLeaderboardPages))}
+                              disabled={leaderboardPage === totalLeaderboardPages}
+                              style={{ padding: '0.25rem 0.5rem' }}
+                            >
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Housekeeper Speed Comparison SVG Chart */}
-                      <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1.5rem' }}>
+                      <div style={{ marginTop: '1.5rem', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1.5rem' }}>
                         <h5 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-color)' }}>
                           📊 {language === 'vi' ? 'Biểu Đồ So Sánh Tốc Độ Dọn Dẹp (Thời gian trung bình)' : language === 'ja' ? 'スタッフ清掃速度比較グラフ (平均時間)' : 'Housekeeper Speed Comparison Chart (Avg Duration)'}
                         </h5>
                         
                         <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
                           {(() => {
-                            const maxAvgTime = Math.max(...branchStats.leaderboard.map(c => c.avgTime), 50);
+                            const maxAvgTime = Math.max(...sortedLeaderboard.map(c => c.avgTime), 50);
                             return (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                {branchStats.leaderboard.map((cleaner, i) => {
+                                {paginatedLeaderboard.map((cleaner, i) => {
                                   const barPercent = (cleaner.avgTime / maxAvgTime) * 100;
                                   const barColor = cleaner.speedCategory === 'fast' 
                                     ? 'var(--status-clean)' 
@@ -1488,7 +1689,9 @@ export const CheckerDashboard: React.FC = () => {
                       ? (language === 'vi' ? 'Thống Kê Lỗi Dọn Dẹp (Hôm nay)' : language === 'ja' ? '清掃不備インスペクション統計 (本日)' : 'Cleaning Defects Inspection Stats (Today)')
                       : statsTimeRange === 'week'
                         ? (language === 'vi' ? 'Thống Kê Lỗi Dọn Dẹp (Tuần này)' : language === 'ja' ? '清掃不備インスペクション統計 (今週)' : 'Cleaning Defects Inspection Stats (This Week)')
-                        : (language === 'vi' ? 'Thống Kê Lỗi Dọn Dẹp (Tháng này)' : language === 'ja' ? '清掃不備インスペクション統計 (今月)' : 'Cleaning Defects Inspection Stats (This Month)')}
+                        : statsTimeRange === 'month'
+                          ? (language === 'vi' ? 'Thống Kê Lỗi Dọn Dẹp (Tháng này)' : language === 'ja' ? '清掃不備インスペクション統計 (今月)' : 'Cleaning Defects Inspection Stats (This Month)')
+                          : (language === 'vi' ? 'Thống Kê Lỗi Dọn Dẹp (Năm nay)' : language === 'ja' ? '清掃不備インスペクション統計 (今年)' : 'Cleaning Defects Inspection Stats (This Year)')}
                   </h4>
 
                   {branchStats.totalErrors === 0 ? (
@@ -1497,7 +1700,9 @@ export const CheckerDashboard: React.FC = () => {
                         ? (language === 'vi' ? 'Không phát hiện lỗi dọn dẹp nào trong ngày hôm nay!' : language === 'ja' ? '本日は清掃不備の指摘はありません！' : 'No cleaning defects reported today!')
                         : statsTimeRange === 'week'
                           ? (language === 'vi' ? 'Không phát hiện lỗi dọn dẹp nào trong tuần này!' : language === 'ja' ? '今週は清掃不備の指摘はありません！' : 'No cleaning defects reported this week!')
-                          : (language === 'vi' ? 'Không phát hiện lỗi dọn dẹp nào trong tháng này!' : language === 'ja' ? '今月は清掃不備の指摘はありません！' : 'No cleaning defects reported this month!')}
+                          : statsTimeRange === 'month'
+                            ? (language === 'vi' ? 'Không phát hiện lỗi dọn dẹp nào trong tháng này!' : language === 'ja' ? '今月は清掃不備の指摘はありません！' : 'No cleaning defects reported this month!')
+                            : (language === 'vi' ? 'Không phát hiện lỗi dọn dẹp nào trong năm nay!' : language === 'ja' ? '今年は清掃不備の指摘はありません！' : 'No cleaning defects reported this year!')}
                     </div>
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
@@ -1524,11 +1729,58 @@ export const CheckerDashboard: React.FC = () => {
 
                         {/* Housekeeper Error List */}
                         <div className="glass-panel" style={{ padding: '1rem', backgroundColor: 'rgba(255, 255, 255, 0.2)' }}>
-                          <h5 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem' }}>
-                            👤 {language === 'vi' ? 'Chi tiết lỗi theo nhân viên:' : language === 'ja' ? 'スタッフ別指摘詳細:' : 'Defects by Housekeeper:'}
-                          </h5>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '200px', overflowY: 'auto' }}>
-                            {branchStats.cleanerErrorLeaderboard.map((cleaner, i) => (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>
+                              👤 {language === 'vi' ? 'Chi tiết lỗi theo nhân viên:' : language === 'ja' ? 'スタッフ別指摘詳細:' : 'Defects by Housekeeper:'}
+                            </h5>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.7rem', fontWeight: 600 }}>
+                              <select
+                                value={defectSortField}
+                                onChange={(e) => setDefectSortField(e.target.value as any)}
+                                style={{
+                                  padding: '0.15rem 0.35rem',
+                                  borderRadius: '4px',
+                                  border: '1px solid rgba(0,0,0,0.15)',
+                                  backgroundColor: 'white',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <option value="count">{language === 'vi' ? 'Số lỗi' : language === 'ja' ? '指摘数' : 'Defects'}</option>
+                                <option value="name">{language === 'vi' ? 'Tên NV' : language === 'ja' ? '氏名' : 'Name'}</option>
+                              </select>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setDefectSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                                style={{ padding: '0.15rem 0.35rem', fontSize: '0.7rem', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '22px' }}
+                              >
+                                {defectSortOrder === 'asc' ? '▲' : '▼'}
+                              </button>
+                              <span>{language === 'vi' ? 'Hiển thị:' : language === 'ja' ? '表示:' : 'Show:'}</span>
+                              <select
+                                value={defectPerPage}
+                                onChange={(e) => setDefectPerPage(Number(e.target.value))}
+                                style={{
+                                  padding: '0.15rem 0.35rem',
+                                  borderRadius: '4px',
+                                  border: '1px solid rgba(0,0,0,0.15)',
+                                  backgroundColor: 'white',
+                                  fontSize: '0.7rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <option value={5}>5</option>
+                                <option value={10}>10</option>
+                                <option value={20}>20</option>
+                                <option value={0}>{language === 'vi' ? 'Tất cả' : language === 'ja' ? 'すべて' : 'All'}</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: defectPerPage === 0 ? '250px' : 'none', overflowY: defectPerPage === 0 ? 'auto' : 'visible' }}>
+                            {paginatedCleanerErrorLeaderboard.map((cleaner, i) => (
                               <div key={i} style={{ fontSize: '0.8rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginBottom: '0.25rem' }}>
                                   <span>{cleaner.name}</span>
@@ -1544,6 +1796,54 @@ export const CheckerDashboard: React.FC = () => {
                               </div>
                             ))}
                           </div>
+
+                          {totalDefectPages > 1 && (
+                            <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', flexWrap: 'wrap', gap: '0.5rem', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '0.75rem' }}>
+                              <div style={{ fontSize: '0.7rem', opacity: 0.7 }}>
+                                {language === 'vi'
+                                  ? `${(defectPage - 1) * defectPerPage + 1}-${Math.min(defectPage * defectPerPage, branchStats.cleanerErrorLeaderboard.length)} / ${branchStats.cleanerErrorLeaderboard.length}`
+                                  : language === 'ja'
+                                    ? `${branchStats.cleanerErrorLeaderboard.length}人ch ${(defectPage - 1) * defectPerPage + 1}-${Math.min(defectPage * defectPerPage, branchStats.cleanerErrorLeaderboard.length)}人`
+                                    : `${(defectPage - 1) * defectPerPage + 1}-${Math.min(defectPage * defectPerPage, branchStats.cleanerErrorLeaderboard.length)} of ${branchStats.cleanerErrorLeaderboard.length}`}
+                              </div>
+                              <div style={{ display: 'flex', gap: '0.2px', alignItems: 'center' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => setDefectPage(prev => Math.max(prev - 1, 1))}
+                                  disabled={defectPage === 1}
+                                  style={{ padding: '0.15rem 0.35rem', lineHeight: 1 }}
+                                >
+                                  <ChevronLeft size={10} />
+                                </button>
+                                {getVisiblePages(defectPage, totalDefectPages).map((page, idx) => {
+                                  if (page === '...') {
+                                    return <span key={`dots-def-${idx}`} style={{ padding: '0 0.1rem', opacity: 0.5, fontSize: '0.7rem' }}>...</span>;
+                                  }
+                                  return (
+                                    <button
+                                      key={page}
+                                      type="button"
+                                      className={`btn ${defectPage === page ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+                                      onClick={() => setDefectPage(page as number)}
+                                      style={{ minWidth: '20px', padding: '0.15rem 0.35rem', fontSize: '0.7rem', lineHeight: 1, fontWeight: defectPage === page ? 'bold' : 'normal' }}
+                                    >
+                                      {page}
+                                    </button>
+                                  );
+                                })}
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => setDefectPage(prev => Math.min(prev + 1, totalDefectPages))}
+                                  disabled={defectPage === totalDefectPages}
+                                  style={{ padding: '0.15rem 0.35rem', lineHeight: 1 }}
+                                >
+                                  <ChevronRight size={10} />
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
 

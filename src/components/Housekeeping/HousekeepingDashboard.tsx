@@ -685,7 +685,14 @@ export const HousekeepingDashboard: React.FC = () => {
 
                 <div className="room-grid">
                   {floorRooms
-                    .sort((a: Room, b: Room) => a.roomNumber.localeCompare(b.roomNumber))
+                    .sort((a: Room, b: Room) => {
+                      const priorityA = a.priority === 'rush' ? 0 : 1;
+                      const priorityB = b.priority === 'rush' ? 0 : 1;
+                      if (priorityA !== priorityB) {
+                        return priorityA - priorityB;
+                      }
+                      return a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true });
+                    })
                     .map((room: Room) => {
                       const isAssignedToMe = room.assignedTo === currentUser?.id;
                       const isCleaning = room.status === 'cleaning';
@@ -715,8 +722,24 @@ export const HousekeepingDashboard: React.FC = () => {
                           {room.isStay && <span className="stay-badge">Stay</span>}
                           <div>
                             <div className="room-type-text">{getFormattedRoomType(room.type)}</div>
-                            <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
                               {room.roomNumber}
+                              {room.priority === 'rush' && (
+                                <span className="priority-rush-badge animate-pulse" style={{
+                                  fontSize: '0.5rem',
+                                  fontWeight: 800,
+                                  color: '#ffffff',
+                                  backgroundColor: '#ef4444',
+                                  padding: '0.1rem 0.25rem',
+                                  borderRadius: '4px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.1rem',
+                                  boxShadow: '0 0 5px rgba(239, 68, 68, 0.5)'
+                                }}>
+                                  ⚡ RUSH
+                                </span>
+                              )}
                               {(isDirty || isEco) && <Play size={14} style={isEco ? { color: 'var(--status-eco)' } : { color: 'var(--status-dirty)' }} fill={isEco ? 'var(--status-eco)' : 'var(--status-dirty)'} />}
                               {isCleaning && isAssignedToMe && <CheckCircle size={14} style={{ color: 'var(--status-cleaning)' }} />}
                               {room.notes && <AlertTriangle size={14} style={{ color: 'var(--status-maintenance)' }} className="animate-pulse" />}
@@ -809,6 +832,41 @@ export const HousekeepingDashboard: React.FC = () => {
                 }}>
                   {selectedStartRoom.notes}
                 </p>
+              </div>
+            )}
+
+            {selectedStartRoom.photoDefect && (
+              <div style={{
+                marginTop: '1rem',
+                padding: '0.75rem',
+                backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: 'var(--radius-sm)',
+                textAlign: 'left'
+              }}>
+                <div style={{ 
+                  fontWeight: 700, 
+                  color: 'var(--status-maintenance)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.25rem',
+                  fontSize: '0.85rem',
+                  marginBottom: '0.5rem'
+                }}>
+                  <AlertTriangle size={14} className="animate-pulse" />
+                  {language === 'vi' ? 'Hình ảnh lỗi dọn dẹp:' : language === 'ja' ? '指摘された清掃不良画像:' : 'Defect Photo:'}
+                </div>
+                <img 
+                  src={selectedStartRoom.photoDefect} 
+                  alt="Defect" 
+                  style={{
+                    width: '100%',
+                    maxHeight: '200px',
+                    objectFit: 'contain',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid rgba(0,0,0,0.1)'
+                  }} 
+                />
               </div>
             )}
 
@@ -919,6 +977,41 @@ export const HousekeepingDashboard: React.FC = () => {
                 }}>
                   {activeSheetRoom.notes}
                 </p>
+              </div>
+            )}
+
+            {activeSheetRoom.photoDefect && (
+              <div style={{
+                marginBottom: '1.25rem',
+                padding: '0.75rem',
+                backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: 'var(--radius-sm)',
+                textAlign: 'left'
+              }}>
+                <div style={{ 
+                  fontWeight: 700, 
+                  color: 'var(--status-maintenance)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.25rem',
+                  fontSize: '0.85rem',
+                  marginBottom: '0.5rem'
+                }}>
+                  <AlertTriangle size={14} className="animate-pulse" />
+                  {language === 'vi' ? 'Hình ảnh lỗi dọn dẹp:' : language === 'ja' ? '指摘された清掃不良画像:' : 'Defect Photo:'}
+                </div>
+                <img 
+                  src={activeSheetRoom.photoDefect} 
+                  alt="Defect" 
+                  style={{
+                    width: '100%',
+                    maxHeight: '200px',
+                    objectFit: 'contain',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid rgba(0,0,0,0.1)'
+                  }} 
+                />
               </div>
             )}
 

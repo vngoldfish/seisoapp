@@ -19,7 +19,103 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
   addToast,
   getTranslation
 }) => {
-  const dailyLogs = logs.filter(log => log.endedAt.startsWith(activeDate));
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [floorFilter, setFloorFilter] = React.useState('all');
+  const [statusFilter, setStatusFilter] = React.useState('all');
+  const [sortBy, setSortBy] = React.useState<'endedAt' | 'startedAt' | 'duration' | 'roomNumber' | 'cleanerName'>('endedAt');
+  const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const [itemsPerPage, setItemsPerPage] = React.useState(10);
+
+  // Filter logs for the active date
+  const dailyLogs = React.useMemo(() => logs.filter(log => log.endedAt.startsWith(activeDate)), [logs, activeDate]);
+
+  // Extract unique floors from daily logs
+  const uniqueFloors = React.useMemo(() => {
+    const floors = dailyLogs.map(log => log.floor);
+    return Array.from(new Set(floors)).sort((a, b) => a - b);
+  }, [dailyLogs]);
+
+  // Filter logs by search query, floor, and special statuses
+  const filteredLogs = React.useMemo(() => {
+    return dailyLogs.filter(log => {
+      const sTerm = searchTerm.trim().toLowerCase();
+      const matchesSearch = !sTerm || 
+        log.roomNumber.toLowerCase().includes(sTerm) || 
+        log.cleanerName.toLowerCase().includes(sTerm) ||
+        (log.notes && log.notes.toLowerCase().includes(sTerm));
+      
+      const matchesFloor = floorFilter === 'all' || log.floor.toString() === floorFilter;
+      
+      let matchesStatus = true;
+      if (statusFilter === 'notes') {
+        matchesStatus = !!log.notes;
+      } else if (statusFilter === 'defects') {
+        matchesStatus = !!(log.errors && log.errors.length > 0);
+      } else if (statusFilter === 'photo') {
+        matchesStatus = !!log.photoAfter;
+      }
+      
+      return matchesSearch && matchesFloor && matchesStatus;
+    });
+  }, [dailyLogs, searchTerm, floorFilter, statusFilter]);
+
+  // Sort filtered logs
+  const sortedLogs = React.useMemo(() => {
+    return [...filteredLogs].sort((a, b) => {
+      let valA: any = sortBy === 'duration' ? a.durationMinutes : a[sortBy];
+      let valB: any = sortBy === 'duration' ? b.durationMinutes : b[sortBy];
+
+      if (sortBy === 'startedAt' || sortBy === 'endedAt') {
+        valA = new Date(valA).getTime();
+        valB = new Date(valB).getTime();
+      } else if (sortBy === 'roomNumber') {
+        return sortOrder === 'asc'
+          ? valA.localeCompare(valB, undefined, { numeric: true })
+          : valB.localeCompare(valA, undefined, { numeric: true });
+      } else if (typeof valA === 'string') {
+        valA = valA.toLowerCase();
+        valB = valB.toLowerCase();
+      }
+
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredLogs, sortBy, sortOrder]);
+
+  // Paginated logs
+  const paginatedLogs = React.useMemo(() => {
+    if (itemsPerPage === 0) return sortedLogs;
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    return sortedLogs.slice(startIdx, startIdx + itemsPerPage);
+  }, [sortedLogs, currentPage, itemsPerPage]);
+
+  const totalPages = React.useMemo(() => {
+    if (itemsPerPage === 0) return 1;
+    return Math.ceil(sortedLogs.length / itemsPerPage) || 1;
+  }, [sortedLogs, itemsPerPage]);
+
+  // Reset to page 1 when search or filter states change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, floorFilter, statusFilter, sortBy, sortOrder, itemsPerPage]);
+
+  const getVisiblePages = (curr: number, total: number) => {
+    const pages: (number | string)[] = [];
+    if (total <= 5) {
+      for (let i = 1; i <= total; i++) pages.push(i);
+    } else {
+      if (curr <= 3) {
+        pages.push(1, 2, 3, 4, '...', total);
+      } else if (curr >= total - 2) {
+        pages.push(1, '...', total - 3, total - 2, total - 1, total);
+      } else {
+        pages.push(1, '...', curr - 1, curr, curr + 1, '...', total);
+      }
+    }
+    return pages;
+  };
 
   const handleExportCSV = () => {
     const headers = language === 'vi' 
@@ -28,33 +124,31 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
         ? ["部屋番号", "階", "清掃スタッフ", "開始時間", "完了時間", "清掃時間 (分)", "メモ", "検出された欠陥", "写真"]
         : ["Room Number", "Floor", "Cleaner Name", "Start Time", "End Time", "Duration (mins)", "Notes", "Defects Detected", "Photo"];
 
-    const rows = dailyLogs
-      .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
-      .map(log => {
-        const errorsStr = log.errors && log.errors.length > 0 ? log.errors.join('; ') : '';
-        const noteStr = log.notes || '';
-        const photoStr = log.photoAfter ? (log.photoAfter.startsWith('data:') ? 'Image uploaded' : log.photoAfter) : '';
-        
-        const formatTime = (isoStr: string) => {
-          try {
-            return new Date(isoStr).toLocaleTimeString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US');
-          } catch {
-            return isoStr;
-          }
-        };
+    const rows = sortedLogs.map(log => {
+      const errorsStr = log.errors && log.errors.length > 0 ? log.errors.join('; ') : '';
+      const noteStr = log.notes || '';
+      const photoStr = log.photoAfter ? (log.photoAfter.startsWith('data:') ? 'Image uploaded' : log.photoAfter) : '';
+      
+      const formatTime = (isoStr: string) => {
+        try {
+          return new Date(isoStr).toLocaleTimeString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US');
+        } catch {
+          return isoStr;
+        }
+      };
 
-        return [
-          log.roomNumber,
-          `${log.floor}F`,
-          log.cleanerName,
-          formatTime(log.startedAt),
-          formatTime(log.endedAt),
-          log.durationMinutes.toString(),
-          noteStr,
-          errorsStr,
-          photoStr
-        ];
-      });
+      return [
+        log.roomNumber,
+        `${log.floor}F`,
+        log.cleanerName,
+        formatTime(log.startedAt),
+        formatTime(log.endedAt),
+        log.durationMinutes.toString(),
+        noteStr,
+        errorsStr,
+        photoStr
+      ];
+    });
 
     const escapeCSV = (val: string) => {
       const escaped = val.replace(/"/g, '""');
@@ -94,14 +188,115 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
           onClick={handleExportCSV}
           className="btn btn-primary"
           style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-          disabled={dailyLogs.length === 0}
+          disabled={sortedLogs.length === 0}
         >
           <Download size={16} />
           {language === 'vi' ? 'Xuất CSV' : language === 'ja' ? 'CSV出力' : 'Export CSV'}
         </button>
       </div>
 
-      {dailyLogs.length === 0 ? (
+      {/* Toolbar: Search, Filters, Sort, Page Size */}
+      <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', backgroundColor: 'rgba(255, 255, 255, 0.4)', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {/* Search Input */}
+          <div style={{ flex: '2 1 200px', position: 'relative' }}>
+            <input
+              type="text"
+              placeholder={language === 'vi' ? 'Tìm phòng, nhân viên, ghi chú...' : language === 'ja' ? '部屋、スタッフ、メモで検索...' : 'Search room, cleaner, notes...'}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="form-input"
+              style={{ width: '100%', padding: '0.4rem 2rem 0.4rem 0.75rem', fontSize: '0.85rem' }}
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', opacity: 0.5 }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Floor filter */}
+          <select
+            value={floorFilter}
+            onChange={(e) => setFloorFilter(e.target.value)}
+            className="form-input"
+            style={{ flex: '1 1 110px', padding: '0.4rem 0.5rem', fontSize: '0.85rem', height: 'auto' }}
+          >
+            <option value="all">{language === 'vi' ? 'Tất cả các tầng' : language === 'ja' ? 'すべての階' : 'All Floors'}</option>
+            {uniqueFloors.map(floor => (
+              <option key={floor} value={floor.toString()}>{floor}F</option>
+            ))}
+          </select>
+
+          {/* Status filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="form-input"
+            style={{ flex: '1 1 120px', padding: '0.4rem 0.5rem', fontSize: '0.85rem', height: 'auto' }}
+          >
+            <option value="all">{language === 'vi' ? 'Tất cả trạng thái' : language === 'ja' ? 'すべての状態' : 'All Status'}</option>
+            <option value="notes">{language === 'vi' ? 'Có ghi chú' : language === 'ja' ? 'メモあり' : 'Has Notes'}</option>
+            <option value="defects">{language === 'vi' ? 'Có lỗi phát hiện' : language === 'ja' ? '不備あり' : 'Has Defects'}</option>
+            <option value="photo">{language === 'vi' ? 'Có ảnh dọn dẹp' : language === 'ja' ? '写真あり' : 'Has Photos'}</option>
+          </select>
+
+          {/* Sort field */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="form-input"
+            style={{ flex: '1 1 120px', padding: '0.4rem 0.5rem', fontSize: '0.85rem', height: 'auto' }}
+          >
+            <option value="endedAt">{language === 'vi' ? 'Giờ kết thúc' : language === 'ja' ? '完了時間' : 'End Time'}</option>
+            <option value="startedAt">{language === 'vi' ? 'Giờ bắt đầu' : language === 'ja' ? '開始時間' : 'Start Time'}</option>
+            <option value="duration">{language === 'vi' ? 'Thời lượng' : language === 'ja' ? '清掃時間' : 'Duration'}</option>
+            <option value="roomNumber">{language === 'vi' ? 'Số phòng' : language === 'ja' ? '部屋番号' : 'Room Number'}</option>
+            <option value="cleanerName">{language === 'vi' ? 'Nhân viên dọn' : language === 'ja' ? '清掃スタッフ' : 'Cleaner Name'}</option>
+          </select>
+
+          {/* Sort order button */}
+          <button
+            type="button"
+            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+            className="btn btn-secondary"
+            style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title={language === 'vi' ? 'Đảo chiều sắp xếp' : 'Toggle Sort Order'}
+          >
+            {sortOrder === 'asc' ? '▲ ASC' : '▼ DESC'}
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', opacity: 0.8, flexWrap: 'wrap', gap: '0.5rem' }}>
+          <span>
+            {language === 'vi' ? `Tìm thấy ${sortedLogs.length} bản ghi` : language === 'ja' ? `${sortedLogs.length} 件 của tài liệu` : `Found ${sortedLogs.length} records`}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span>{language === 'vi' ? 'Hiển thị:' : language === 'ja' ? '表示数:' : 'Show:'}</span>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="form-input"
+              style={{ width: '70px', padding: '0.2rem 0.4rem', fontSize: '0.8rem', height: 'auto' }}
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={0}>{language === 'vi' ? 'Tất cả' : language === 'ja' ? 'すべて' : 'All'}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {sortedLogs.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '3rem', opacity: 0.6 }}>{getTranslation(language, 'noData')}</div>
       ) : (
         <>
@@ -114,77 +309,144 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'startCleaning')}</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'finishCleaning')}</th>
-                  <th style={{ padding: '0.75rem 0.5rem' }}>Duration</th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Thời lượng' : language === 'ja' ? '清掃時間' : 'Duration'}</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'notes')}</th>
-                  <th style={{ padding: '0.75rem 0.5rem' }}>Photo</th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Hình ảnh' : language === 'ja' ? '写真' : 'Photo'}</th>
                 </tr>
               </thead>
               <tbody>
-                {dailyLogs
-                  .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
-                  .map(log => (
-                    <tr key={log.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                      <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>
-                        {log.roomNumber} <span style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.6 }}>({log.floor}F)</span>
-                      </td>
-                      <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{log.cleanerName}</td>
-                      <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.startedAt).toLocaleTimeString()}</td>
-                      <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.endedAt).toLocaleTimeString()}</td>
-                      <td style={{ padding: '0.75rem 0.5rem' }}>
-                        <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
-                      </td>
-                      <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.notes}>
-                        {log.notes}
-                      </td>
-                      <td style={{ padding: '0.75rem 0.5rem' }}>
-                        {log.photoAfter ? (
-                          <a href={log.photoAfter} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.8rem', fontWeight: 600 }}>
-                            View Photo
-                          </a>
-                        ) : (
-                          <span style={{ opacity: 0.4, fontSize: '0.8rem' }}>No Photo</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                {paginatedLogs.map(log => (
+                  <tr key={log.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                    <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>
+                      {log.roomNumber} <span style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.6 }}>({log.floor}F)</span>
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{log.cleanerName}</td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.startedAt).toLocaleTimeString()}</td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.endedAt).toLocaleTimeString()}</td>
+                    <td style={{ padding: '0.75rem 0.5rem' }}>
+                      <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.notes}>
+                      {log.notes}
+                      {log.errors && log.errors.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginTop: '0.2rem' }}>
+                          {log.errors.map((e, idx) => (
+                            <span key={idx} className="badge badge-dirty" style={{ fontSize: '0.6rem', padding: '0.05rem 0.25rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)' }}>
+                              {e}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem' }}>
+                      {log.photoAfter ? (
+                        <a href={log.photoAfter} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.8rem', fontWeight: 600 }}>
+                          {language === 'vi' ? 'Xem ảnh' : language === 'ja' ? '写真を見る' : 'View Photo'}
+                        </a>
+                      ) : (
+                        <span style={{ opacity: 0.4, fontSize: '0.8rem' }}>{language === 'vi' ? 'Không ảnh' : language === 'ja' ? '写真なし' : 'No Photo'}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
 
           {/* Mobile view: Cards */}
           <div className="mobile-only-block" style={{ width: '100%' }}>
-            {dailyLogs
-              .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
-              .map(log => (
-                <div key={log.id} className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: '4px solid var(--primary-color)', position: 'relative' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>Room {log.roomNumber} ({log.floor}F)</span>
-                    <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
-                  </div>
-                  <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                    <strong>{getTranslation(language, 'cleanerName')}:</strong> {log.cleanerName}
-                  </div>
-                  <div style={{ fontSize: '0.8rem', opacity: 0.8, display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
-                    <span>🕒 {language === 'vi' ? 'Bắt đầu' : 'Start'}: {new Date(log.startedAt).toLocaleTimeString()}</span>
-                    <span>⌛ {language === 'vi' ? 'Kết thúc' : 'Finish'}: {new Date(log.endedAt).toLocaleTimeString()}</span>
-                  </div>
-                  {log.notes && (
-                    <div style={{ fontSize: '0.8rem', backgroundColor: 'rgba(0,0,0,0.02)', padding: '0.35rem 0.5rem', borderRadius: '4px', marginBottom: '0.5rem', borderLeft: '2px solid #eab308' }}>
-                      <strong>{getTranslation(language, 'notes')}:</strong> {log.notes}
-                    </div>
-                  )}
-                  <div style={{ marginTop: '0.5rem' }}>
-                    {log.photoAfter ? (
-                      <a href={log.photoAfter} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', padding: '0.25rem 0.75rem', fontSize: '0.75rem', alignItems: 'center' }}>
-                        🖼️ {language === 'vi' ? 'Xem ảnh' : language === 'ja' ? '写真を見る' : 'View Photo'}
-                      </a>
-                    ) : (
-                      <span style={{ opacity: 0.5, fontSize: '0.75rem' }}>🚫 {language === 'vi' ? 'Không có ảnh' : language === 'ja' ? '写真なし' : 'No Photo'}</span>
-                    )}
-                  </div>
+            {paginatedLogs.map(log => (
+              <div key={log.id} className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: '4px solid var(--primary-color)', position: 'relative' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <span style={{ fontWeight: 700, fontSize: '1rem' }}>Room {log.roomNumber} ({log.floor}F)</span>
+                  <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
                 </div>
-              ))}
+                <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
+                  <strong>{getTranslation(language, 'cleanerName')}:</strong> {log.cleanerName}
+                </div>
+                <div style={{ fontSize: '0.8rem', opacity: 0.8, display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+                  <span>🕒 {language === 'vi' ? 'Bắt đầu' : language === 'ja' ? '開始' : 'Start'}: {new Date(log.startedAt).toLocaleTimeString()}</span>
+                  <span>⌛ {language === 'vi' ? 'Kết thúc' : language === 'ja' ? '完了' : 'Finish'}: {new Date(log.endedAt).toLocaleTimeString()}</span>
+                </div>
+                {log.notes && (
+                  <div style={{ fontSize: '0.8rem', backgroundColor: 'rgba(0,0,0,0.02)', padding: '0.35rem 0.5rem', borderRadius: '4px', marginBottom: '0.5rem', borderLeft: '2px solid #eab308' }}>
+                    <strong>{getTranslation(language, 'notes')}:</strong> {log.notes}
+                  </div>
+                )}
+                {log.errors && log.errors.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.5rem' }}>
+                    {log.errors.map((e, idx) => (
+                      <span key={idx} className="badge badge-dirty" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)' }}>
+                        ⚠️ {e}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ marginTop: '0.5rem' }}>
+                  {log.photoAfter ? (
+                    <a href={log.photoAfter} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', padding: '0.25rem 0.75rem', fontSize: '0.75rem', alignItems: 'center' }}>
+                      🖼️ {language === 'vi' ? 'Xem ảnh' : language === 'ja' ? '写真を見る' : 'View Photo'}
+                    </a>
+                  ) : (
+                    <span style={{ opacity: 0.5, fontSize: '0.75rem' }}>🚫 {language === 'vi' ? 'Không có ảnh' : language === 'ja' ? '写真なし' : 'No Photo'}</span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
+
+          {/* Pagination Footer */}
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', padding: '1rem 0.5rem 0 0.5rem', borderTop: '1px solid rgba(0,0,0,0.05)', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ fontSize: '0.85rem', opacity: 0.6 }}>
+                {language === 'vi' 
+                  ? `Hiển thị ${((currentPage - 1) * itemsPerPage) + 1}-${Math.min(currentPage * itemsPerPage, sortedLogs.length)} trên tổng số ${sortedLogs.length} lịch sử` 
+                  : language === 'ja'
+                    ? `${sortedLogs.length}件中 ${((currentPage - 1) * itemsPerPage) + 1}-${Math.min(currentPage * itemsPerPage, sortedLogs.length)}件を表示`
+                    : `Showing ${((currentPage - 1) * itemsPerPage) + 1}-${Math.min(currentPage * itemsPerPage, sortedLogs.length)} of ${sortedLogs.length} logs`}
+              </div>
+              <div style={{ display: 'flex', gap: '0.25rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  style={{ minWidth: '40px' }}
+                >
+                  &laquo;
+                </button>
+                {getVisiblePages(currentPage, totalPages).map((page, idx) => {
+                  if (page === '...') {
+                    return (
+                      <span key={`ellipsis-${idx}`} style={{ padding: '0.4rem 0.5rem', opacity: 0.5, fontSize: '0.85rem' }}>
+                        ...
+                      </span>
+                    );
+                  }
+                  return (
+                    <button
+                      key={page}
+                      type="button"
+                      className={`btn btn-sm ${currentPage === page ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => setCurrentPage(page as number)}
+                      style={{ minWidth: '32px', fontWeight: currentPage === page ? 'bold' : 'normal' }}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  style={{ minWidth: '40px' }}
+                >
+                  &raquo;
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

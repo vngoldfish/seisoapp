@@ -81,46 +81,80 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
 
   const userViewMode = activeTab === 'users' ? 'global' : 'local';
 
-  // Compute displayed users list
-  const displayedUsers = useMemo(() => {
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [userSortField, setUserSortField] = useState<'name' | 'username' | 'role' | 'status'>('name');
+  const [userSortOrder, setUserSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [usersPerPage, setUsersPerPage] = useState(10);
+
+  // Compute filtered users list
+  const filteredUsers = useMemo(() => {
     const isHotelLocalUsers = activeTab === 'hotels' && managingHotel && branchTab === 'users';
     const baseUsers = isHotelLocalUsers ? managingHotelStaff : (userViewMode === 'global' ? globalUsers : hotelUsers);
-    if (!userSearchTerm.trim()) return baseUsers;
-    const term = userSearchTerm.toLowerCase().trim();
+    
     return baseUsers.filter(user => {
-      const nameMatch = user.name.toLowerCase().includes(term);
-      const usernameMatch = (user.username || '').toLowerCase().includes(term);
-      const userHotels = user.hotelIds?.map(hId => {
-        const match = hotels.find(h => h.id === hId);
-        return match ? match.name.toLowerCase() : '';
-      }) || [];
-      const hotelMatch = userHotels.some(hName => hName.includes(term));
-      return nameMatch || usernameMatch || hotelMatch;
+      // Search term filter
+      const term = userSearchTerm.toLowerCase().trim();
+      const matchesSearch = !term || 
+        user.name.toLowerCase().includes(term) ||
+        (user.username || '').toLowerCase().includes(term) ||
+        (user.hotelIds?.map(hId => hotels.find(h => h.id === hId)?.name.toLowerCase() || '').some(hName => hName.includes(term)));
+
+      // Role filter
+      const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+
+      // Status filter
+      const matchesStatus = statusFilter === 'all' || (user.status || 'working') === statusFilter;
+
+      return matchesSearch && matchesRole && matchesStatus;
     });
-  }, [activeTab, managingHotel, branchTab, userViewMode, globalUsers, hotelUsers, managingHotelStaff, userSearchTerm, hotels]);
+  }, [activeTab, managingHotel, branchTab, userViewMode, globalUsers, hotelUsers, managingHotelStaff, userSearchTerm, hotels, roleFilter, statusFilter]);
+
+  // Compute sorted users list
+  const sortedUsers = useMemo(() => {
+    return [...filteredUsers].sort((a, b) => {
+      let valA = a[userSortField] || '';
+      let valB = b[userSortField] || '';
+
+      if (userSortField === 'name' || userSortField === 'username' || userSortField === 'role' || userSortField === 'status') {
+        valA = valA.toLowerCase();
+        valB = valB.toLowerCase();
+      }
+
+      if (valA < valB) return userSortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return userSortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredUsers, userSortField, userSortOrder]);
 
   // Adjust page if it exceeds bounds
   useEffect(() => {
-    const totalPagesCount = Math.ceil(displayedUsers.length / 10);
+    const limit = usersPerPage === 0 ? sortedUsers.length || 1 : usersPerPage;
+    const totalPagesCount = Math.ceil(sortedUsers.length / limit);
     if (totalPagesCount > 0 && usersPage > totalPagesCount) {
       setUsersPage(totalPagesCount);
     }
-  }, [displayedUsers, usersPage, setUsersPage]);
+  }, [sortedUsers, usersPage, setUsersPage, usersPerPage]);
+
+  // Reset page when filter/sort changes
+  useEffect(() => {
+    setUsersPage(1);
+  }, [userSearchTerm, roleFilter, statusFilter, userSortField, userSortOrder, usersPerPage, setUsersPage]);
 
   // Pagination bounds
-  const usersPerPage = 10;
   const { totalPages, indexOfLastUser, indexOfFirstUser, currentUsers } = useMemo(() => {
-    const totalP = Math.ceil(displayedUsers.length / usersPerPage);
-    const lastUser = usersPage * usersPerPage;
-    const firstUser = lastUser - usersPerPage;
-    const currUsers = displayedUsers.slice(firstUser, lastUser);
+    const limit = usersPerPage === 0 ? sortedUsers.length : usersPerPage;
+    const totalP = usersPerPage === 0 ? 1 : Math.ceil(sortedUsers.length / limit);
+    const lastUser = usersPage * limit;
+    const firstUser = lastUser - limit;
+    const currUsers = sortedUsers.slice(firstUser, lastUser);
     return {
       totalPages: totalP,
       indexOfLastUser: lastUser,
       indexOfFirstUser: firstUser,
       currentUsers: currUsers
     };
-  }, [displayedUsers, usersPage]);
+  }, [sortedUsers, usersPage, usersPerPage]);
 
   const handleAddUserClick = () => {
     setEditingUser(null);
@@ -308,14 +342,14 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
         </div>
 
         {/* Search Bar */}
-        <div style={{ marginBottom: '1.25rem', position: 'relative' }}>
+        <div style={{ marginBottom: '1rem', position: 'relative' }}>
           <input
             type="text"
             placeholder={
               language === 'vi' 
                 ? 'Tìm kiếm theo tên hoặc khách sạn đang làm...' 
                 : language === 'ja'
-                  ? '名前 hoặc 所属ホテル で検索...'
+                  ? '名前/所属ホテルで検索...'
                   : 'Search by name or assigned hotel...'
             }
             value={userSearchTerm}
@@ -362,19 +396,134 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
           )}
         </div>
 
+        {/* Toolbar: Filters, Sorting and Page Size */}
+        <div className="glass-panel" style={{ padding: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', backgroundColor: 'rgba(255,255,255,0.4)', marginBottom: '1.25rem', alignItems: 'center' }}>
+          {/* Role Filter */}
+          <select
+            value={roleFilter}
+            onChange={(e) => {
+              setRoleFilter(e.target.value);
+              setUsersPage(1);
+            }}
+            className="form-input"
+            style={{ flex: '1 1 140px', padding: '0.4rem 0.5rem', fontSize: '0.85rem', height: 'auto' }}
+          >
+            <option value="all">{language === 'vi' ? 'Tất cả chức vụ' : language === 'ja' ? 'すべての権限' : 'All Roles'}</option>
+            <option value="housekeeping">{language === 'vi' ? 'Dọn phòng (Housekeeper)' : language === 'ja' ? '清掃 (Housekeeper)' : 'Housekeeper'}</option>
+            <option value="front_desk">{language === 'vi' ? 'Lễ tân (Front Desk)' : language === 'ja' ? 'フロント (Front Desk)' : 'Front Desk'}</option>
+            <option value="checka">{language === 'vi' ? 'Kiểm phòng (Checker)' : language === 'ja' ? '検査 (Checker)' : 'Checker'}</option>
+            <option value="kacho">{language === 'vi' ? 'Trưởng bộ phận (Kacho)' : language === 'ja' ? '課長 (Kacho)' : 'Kacho'}</option>
+            <option value="admin">{language === 'vi' ? 'Quản trị (Admin)' : language === 'ja' ? '管理者 (Admin)' : 'Admin'}</option>
+          </select>
+
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setUsersPage(1);
+            }}
+            className="form-input"
+            style={{ flex: '1 1 130px', padding: '0.4rem 0.5rem', fontSize: '0.85rem', height: 'auto' }}
+          >
+            <option value="all">{language === 'vi' ? 'Tất cả trạng thái' : language === 'ja' ? 'すべての状態' : 'All Statuses'}</option>
+            <option value="working">{language === 'vi' ? 'Đang làm (Working)' : language === 'ja' ? '在職 (Working)' : 'Working'}</option>
+            <option value="quit">{language === 'vi' ? 'Đã nghỉ (Quit)' : language === 'ja' ? '退職 (Quit)' : 'Quit'}</option>
+          </select>
+
+          {/* Sort field for Mobile/Quick selection */}
+          <select
+            value={userSortField}
+            onChange={(e) => setUserSortField(e.target.value as any)}
+            className="form-input"
+            style={{ flex: '1 1 140px', padding: '0.4rem 0.5rem', fontSize: '0.85rem', height: 'auto' }}
+          >
+            <option value="name">{language === 'vi' ? 'Tên nhân viên' : language === 'ja' ? '名前' : 'Name'}</option>
+            <option value="username">{language === 'vi' ? 'Tên đăng nhập' : language === 'ja' ? 'ユーザー名' : 'Username'}</option>
+            <option value="role">{language === 'vi' ? 'Chức vụ' : language === 'ja' ? '権限' : 'Role'}</option>
+            <option value="status">{language === 'vi' ? 'Trạng thái' : language === 'ja' ? '状態' : 'Status'}</option>
+          </select>
+
+          {/* Sort order toggle button */}
+          <button
+            type="button"
+            onClick={() => setUserSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+            className="btn btn-secondary"
+            style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}
+          >
+            {userSortOrder === 'asc' ? '▲ ASC' : '▼ DESC'}
+          </button>
+
+          {/* Page size options */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: 'auto' }}>
+            <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>{language === 'vi' ? 'Hiển thị:' : 'Show:'}</span>
+            <select
+              value={usersPerPage}
+              onChange={(e) => {
+                setUsersPerPage(Number(e.target.value));
+                setUsersPage(1);
+              }}
+              className="form-input"
+              style={{ width: '70px', padding: '0.2rem 0.4rem', fontSize: '0.8rem', height: 'auto' }}
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={0}>{language === 'vi' ? 'Tất cả' : 'All'}</option>
+            </select>
+          </div>
+        </div>
+
         <>
           {/* Desktop view: Table */}
           <div className="desktop-only-block" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '500px' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'username')}</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>Role</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>Password</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Khách sạn' : language === 'ja' ? '所属ホテル' : 'Hotels'}</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Trạng thái' : language === 'ja' ? 'ステータス' : 'Status'}</th>
-                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'action')}</th>
+                  <th 
+                    style={{ padding: '0.75rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => {
+                      setUserSortField('name');
+                      setUserSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                    }}
+                    title="Click to sort by Name"
+                  >
+                    {getTranslation(language, 'cleanerName')} {userSortField === 'name' ? (userSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+                  </th>
+                  <th 
+                    style={{ padding: '0.75rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => {
+                      setUserSortField('username');
+                      setUserSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                    }}
+                    title="Click to sort by Username"
+                  >
+                    {getTranslation(language, 'username')} {userSortField === 'username' ? (userSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+                  </th>
+                  <th 
+                    style={{ padding: '0.75rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => {
+                      setUserSortField('role');
+                      setUserSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                    }}
+                    title="Click to sort by Role"
+                  >
+                    Role {userSortField === 'role' ? (userSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+                  </th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>Password</th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Khách sạn' : language === 'ja' ? '所属ホテル' : 'Hotels'}</th>
+                  <th 
+                    style={{ padding: '0.75rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => {
+                      setUserSortField('status');
+                      setUserSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                    }}
+                    title="Click to sort by Status"
+                  >
+                    {language === 'vi' ? 'Trạng thái' : language === 'ja' ? 'ステータス' : 'Status'} {userSortField === 'status' ? (userSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+                  </th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'action')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -458,10 +607,10 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', padding: '1rem 0.5rem 0 0.5rem', borderTop: '1px solid rgba(0,0,0,0.05)', flexWrap: 'wrap', gap: '1rem' }}>
             <div style={{ fontSize: '0.85rem', opacity: 0.6 }}>
               {language === 'vi' 
-                ? `Hiển thị ${indexOfFirstUser + 1}-${Math.min(indexOfLastUser, displayedUsers.length)} trên tổng số ${displayedUsers.length} nhân viên` 
+                ? `Hiển thị ${indexOfFirstUser + 1}-${Math.min(indexOfLastUser, sortedUsers.length)} trên tổng số ${sortedUsers.length} nhân viên` 
                 : language === 'ja'
-                  ? `${displayedUsers.length}名中 ${indexOfFirstUser + 1}-${Math.min(indexOfLastUser, displayedUsers.length)}名を表示`
-                  : `Showing ${indexOfFirstUser + 1}-${Math.min(indexOfLastUser, displayedUsers.length)} of ${displayedUsers.length} users`}
+                  ? `${sortedUsers.length}名中 ${indexOfFirstUser + 1}-${Math.min(indexOfLastUser, sortedUsers.length)}名を表示`
+                  : `Showing ${indexOfFirstUser + 1}-${Math.min(indexOfLastUser, sortedUsers.length)} of ${sortedUsers.length} users`}
             </div>
             <div style={{ display: 'flex', gap: '0.25rem' }}>
               <button

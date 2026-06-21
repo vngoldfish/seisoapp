@@ -23,6 +23,8 @@ export interface Room {
   isChecked?: boolean;
   checkedBy?: string;
   checkedAt?: string;
+  priority?: 'normal' | 'rush';
+  photoDefect?: string;
   updatedAt: string; // ISO String
   updatedBy: string; // User Name or User ID
 }
@@ -43,11 +45,19 @@ export interface CleaningLog {
   errors?: string[];
 }
 
+export interface RoomTypeConfig {
+  id: string;
+  name: string;
+  cleanMinutes: number;
+}
+
 export interface Hotel {
   id: string; // e.g. "ks1", "ks2"
   name: string; // e.g. "Sakura Hotel"
   description?: string;
   roomsList?: string; // Comma-separated room numbers entered during creation
+  defaultCleanMinutes?: number; // default average cleaning time per room
+  roomTypes?: RoomTypeConfig[]; // custom room types with target cleaning minutes
 }
 
 export type RoomSubscriptionCallback = (rooms: Room[]) => void;

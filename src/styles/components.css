@@ -1659,3 +1659,94 @@
   background-color: rgba(239, 68, 68, 0.15);
 }
 
+/* Priority RUSH Badge Animation */
+@keyframes rush-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    transform: scale(1);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+    transform: scale(1.05);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    transform: scale(1);
+  }
+}
+
+.priority-rush-badge.animate-pulse {
+  animation: rush-pulse 1.5s infinite;
+}
+
+/* Print Styles */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  /* Hide UI elements that shouldn't be printed */
+  header,
+  .sidebar-menu,
+  .mobile-only-sidebar,
+  .mobile-menu-toggle-btn,
+  .dashboard-filter-panel,
+  .dashboard-actions,
+  .btn,
+  .toast-container,
+  .modal-overlay,
+  aside,
+  .header-actions,
+  .nav-tabs,
+  .tabs-list,
+  .dashboard-tab-actions,
+  .stats-action-row,
+  .no-print,
+  .sidebar,
+  .sidebar-nav {
+    display: none !important;
+  }
+
+  /* Make main content span full width */
+  .main-content,
+  .dashboard-layout,
+  .dashboard-content-panel,
+  .stats-tab-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Display only relevant reports / charts full-width */
+  .stats-grid,
+  .stats-charts-grid,
+  .charts-container {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .stat-card-large,
+  .stats-table-wrapper {
+    page-break-inside: avoid;
+    margin-bottom: 2rem !important;
+    border: 1px solid #ccc !important;
+    border-radius: 4px !important;
+    padding: 1rem !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  th, td {
+    border: 1px solid #ddd !important;
+    padding: 8px !important;
+    text-align: left !important;
+  }
+}

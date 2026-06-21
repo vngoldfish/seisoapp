@@ -1,26 +1,48 @@
 import type { DBInterface, User, Room, CleaningLog, RoomSubscriptionCallback, LogSubscriptionCallback, Hotel } from './dbInterface';
 
-function generateUUID(prefix: string): string {
+export function generateUUID(prefix: string): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return prefix + crypto.randomUUID();
   }
   return prefix + Math.random().toString(36).substring(2, 11);
 }
 
-const DEFAULT_HOTELS: Hotel[] = [
-  { id: 'ks1', name: 'Sakura Hotel', description: 'さくらホテル (ks1) - Standard Branch' },
-  { id: 'ks2', name: 'Fuji Hotel', description: '富士ホテル (ks2) - Luxury Suite Branch' },
-  { id: 'ks3', name: 'Tokyo Inn', description: '東京イン (ks3) - Central Business Branch' },
-  { id: 'ks4', name: 'Kyoto Resort', description: '京都リゾート (ks4) - Traditional Spa & Onsen' },
-  { id: 'ks5', name: 'Osaka Plaza', description: '大阪プラザ (ks5) - Downtown Commercial' },
-  { id: 'ks6', name: 'Sapporo Lodge', description: '札幌ロッジ (ks6) - Northern Ski Resort' },
-  { id: 'ks7', name: 'Okinawa Beach', description: '沖縄ビーチ (ks7) - Southern Coast Resort' },
-  { id: 'ks8', name: 'Nara Gardens', description: '奈良ガーデン (ks8) - Historic Sanctuary' }
+export const DEFAULT_HOTELS: Hotel[] = [
+  {
+    id: 'ks1',
+    name: 'Sakura Hotel',
+    description: 'さくらホテル (ks1) - Standard Branch',
+    defaultCleanMinutes: 35,
+    roomTypes: [
+      { id: 'ks1_rt1', name: 'Twin', cleanMinutes: 35 },
+      { id: 'ks1_rt2', name: 'Single', cleanMinutes: 25 },
+      { id: 'ks1_rt3', name: 'Double', cleanMinutes: 30 },
+      { id: 'ks1_rt4', name: 'Suite', cleanMinutes: 60 }
+    ]
+  },
+  {
+    id: 'ks2',
+    name: 'Fuji Hotel',
+    description: '富士ホテル (ks2) - Luxury Suite Branch',
+    defaultCleanMinutes: 35,
+    roomTypes: [
+      { id: 'ks2_rt1', name: 'Twin', cleanMinutes: 40 },
+      { id: 'ks2_rt2', name: 'Single', cleanMinutes: 30 },
+      { id: 'ks2_rt3', name: 'Double', cleanMinutes: 35 },
+      { id: 'ks2_rt4', name: 'Suite', cleanMinutes: 70 }
+    ]
+  },
+  { id: 'ks3', name: 'Tokyo Inn', description: '東京イン (ks3) - Central Business Branch', defaultCleanMinutes: 35, roomTypes: [] },
+  { id: 'ks4', name: 'Kyoto Resort', description: '京都リゾート (ks4) - Traditional Spa & Onsen', defaultCleanMinutes: 35, roomTypes: [] },
+  { id: 'ks5', name: 'Osaka Plaza', description: '大阪プラザ (ks5) - Downtown Commercial', defaultCleanMinutes: 35, roomTypes: [] },
+  { id: 'ks6', name: 'Sapporo Lodge', description: '札幌ロッジ (ks6) - Northern Ski Resort', defaultCleanMinutes: 35, roomTypes: [] },
+  { id: 'ks7', name: 'Okinawa Beach', description: '沖縄ビーチ (ks7) - Southern Coast Resort', defaultCleanMinutes: 35, roomTypes: [] },
+  { id: 'ks8', name: 'Nara Gardens', description: '奈良ガーデン (ks8) - Historic Sanctuary', defaultCleanMinutes: 35, roomTypes: [] }
 ];
 
 
 // --- MOCK SEED DATA FOR USERS & LOGS ---
-const USERS_KS1: User[] = [
+export const USERS_KS1: User[] = [
   { id: 'u1', username: 'admin', role: 'admin', name: 'NKTN Manager', language: 'ja' },
   { id: 'u2', username: 'front1', role: 'front_desk', name: 'Front Sato', language: 'ja' },
   { id: 'u3', username: 'cleaner1', role: 'housekeeping', pin: '1111', name: 'Nguyen Van A (Anh A)', language: 'vi' },
@@ -29,7 +51,7 @@ const USERS_KS1: User[] = [
   { id: 'u_kacho1', username: 'kacho1', role: 'kacho', name: 'Kacho Nguyen', language: 'vi' },
 ];
 
-const LOGS_KS1: CleaningLog[] = [
+export const LOGS_KS1: CleaningLog[] = [
   {
     id: 'log1',
     roomId: '303',
@@ -44,7 +66,7 @@ const LOGS_KS1: CleaningLog[] = [
   }
 ];
 
-const USERS_KS2: User[] = [
+export const USERS_KS2: User[] = [
   { id: 'u201', username: 'admin', role: 'admin', name: 'Fuji Manager', language: 'ja' },
   { id: 'u202', username: 'front2', role: 'front_desk', name: 'Front Suzuki', language: 'en' },
   { id: 'u203', username: 'cleaner3', role: 'housekeeping', pin: '3333', name: 'Saito Tanaka', language: 'ja' },
@@ -53,7 +75,7 @@ const USERS_KS2: User[] = [
   { id: 'u_kacho2', username: 'kacho2', role: 'kacho', name: 'Kacho Saito', language: 'ja' },
 ];
 
-const LOGS_KS2: CleaningLog[] = [
+export const LOGS_KS2: CleaningLog[] = [
   {
     id: 'log201',
     roomId: '503',
@@ -69,7 +91,7 @@ const LOGS_KS2: CleaningLog[] = [
 ];
 
 // --- AUTO GENERATOR FOR ROOMS ---
-const generateRoomsKS1 = (): Room[] => {
+export const generateRoomsKS1 = (): Room[] => {
   const rooms: Room[] = [];
   const floors = [3, 4, 5, 6, 7, 8, 9];
   const types = ['1 Bed', '2 Beds', '3 Beds', '4 Beds', 'Minpaku', 'Single', 'Double', 'Twin', 'Suite'];
@@ -154,7 +176,7 @@ const generateRoomsKS1 = (): Room[] => {
   return rooms;
 };
 
-const generateRoomsKS2 = (): Room[] => {
+export const generateRoomsKS2 = (): Room[] => {
   const rooms: Room[] = [];
   const floors = [5, 6];
   const types = ['1 Bed', '2 Beds', '3 Beds', '4 Beds', 'Minpaku', 'Single', 'Double', 'Twin', 'Suite'];
@@ -537,6 +559,47 @@ export class LocalDB implements DBInterface {
     }
     if (!existingHotelsStr || existingCount < 3) {
       localStorage.setItem('global_hotels', JSON.stringify(DEFAULT_HOTELS));
+    } else {
+      try {
+        const hotels: Hotel[] = JSON.parse(existingHotelsStr);
+        let updated = false;
+        hotels.forEach(h => {
+          if (h.defaultCleanMinutes === undefined) {
+            h.defaultCleanMinutes = 35;
+            updated = true;
+          }
+          if (!h.roomTypes) {
+            if (h.id === 'ks1') {
+              h.roomTypes = [
+                { id: 'ks1_rt1', name: 'Twin', cleanMinutes: 35 },
+                { id: 'ks1_rt2', name: 'Single', cleanMinutes: 25 },
+                { id: 'ks1_rt3', name: 'Double', cleanMinutes: 30 },
+                { id: 'ks1_rt4', name: 'Suite', cleanMinutes: 60 }
+              ];
+            } else if (h.id === 'ks2') {
+              h.roomTypes = [
+                { id: 'ks2_rt1', name: 'Twin', cleanMinutes: 40 },
+                { id: 'ks2_rt2', name: 'Single', cleanMinutes: 30 },
+                { id: 'ks2_rt3', name: 'Double', cleanMinutes: 35 },
+                { id: 'ks2_rt4', name: 'Suite', cleanMinutes: 70 }
+              ];
+            } else {
+              h.roomTypes = [
+                { id: `${h.id}_rt1`, name: 'Twin', cleanMinutes: 35 },
+                { id: `${h.id}_rt2`, name: 'Single', cleanMinutes: 25 },
+                { id: `${h.id}_rt3`, name: 'Double', cleanMinutes: 30 },
+                { id: `${h.id}_rt4`, name: 'Suite', cleanMinutes: 60 }
+              ];
+            }
+            updated = true;
+          }
+        });
+        if (updated) {
+          localStorage.setItem('global_hotels', JSON.stringify(hotels));
+        }
+      } catch (e) {
+        console.error('Migration of global_hotels failed:', e);
+      }
     }
 
     // Cleanup any future date data (after today) from localStorage
@@ -1011,6 +1074,17 @@ export class LocalDB implements DBInterface {
     }
     
     const { roomsList, ...hotelToSave } = hotel;
+    if (hotelToSave.defaultCleanMinutes === undefined) {
+      hotelToSave.defaultCleanMinutes = 35;
+    }
+    if (!hotelToSave.roomTypes) {
+      hotelToSave.roomTypes = [
+        { id: `${hotelToSave.id}_rt1`, name: 'Twin', cleanMinutes: 35 },
+        { id: `${hotelToSave.id}_rt2`, name: 'Single', cleanMinutes: 25 },
+        { id: `${hotelToSave.id}_rt3`, name: 'Double', cleanMinutes: 30 },
+        { id: `${hotelToSave.id}_rt4`, name: 'Suite', cleanMinutes: 60 }
+      ];
+    }
     hotels.push(hotelToSave);
     localStorage.setItem('global_hotels', JSON.stringify(hotels));
     
@@ -1286,7 +1360,8 @@ export class LocalDB implements DBInterface {
           extraFields = {
             isChecked: false,
             checkedBy: undefined,
-            checkedAt: undefined
+            checkedAt: undefined,
+            photoDefect: undefined
           };
         } else {
           extraFields = {

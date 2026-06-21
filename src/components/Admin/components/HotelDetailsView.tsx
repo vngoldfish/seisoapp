@@ -19,8 +19,8 @@ interface HotelDetailsViewProps {
   language: any;
   managingHotel: HotelType;
   setManagingHotel: (hotel: HotelType | null) => void;
-  branchTab: 'stats' | 'grid' | 'staff' | 'rooms' | 'users' | 'linkStaff';
-  setBranchTab: (tab: 'stats' | 'grid' | 'staff' | 'rooms' | 'users' | 'linkStaff') => void;
+  branchTab: 'stats' | 'grid' | 'staff' | 'rooms' | 'users' | 'linkStaff' | 'settings';
+  setBranchTab: (tab: 'stats' | 'grid' | 'staff' | 'rooms' | 'users' | 'linkStaff' | 'settings') => void;
   activeDate: string;
   rooms: Room[];
   cleaners: User[];
@@ -35,6 +35,7 @@ interface HotelDetailsViewProps {
   setUsersPage: React.Dispatch<React.SetStateAction<number>>;
   refreshUsers: () => Promise<void>;
   loadManagingHotelData: (hotelId: string) => Promise<void>;
+  refreshHotels?: () => Promise<void>;
   addToast: (msg: string, type: 'success' | 'warning' | 'info') => void;
   getTranslation: any;
   getVisiblePages: (curr: number, total: number) => (number | string)[];
@@ -74,6 +75,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   setUsersPage,
   refreshUsers,
   loadManagingHotelData,
+  refreshHotels,
   addToast,
   getTranslation,
   getVisiblePages
@@ -106,6 +108,15 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   const [gridColumns, setGridColumns] = useState<string>(() => {
     return localStorage.getItem('hotel_clean_room_grid_columns') || 'auto';
   });
+
+  const [defaultMinutesInput, setDefaultMinutesInput] = useState<number>(managingHotel.defaultCleanMinutes || 35);
+  const [rtModalOpen, setRtModalOpen] = useState(false);
+  const [editingRt, setEditingRt] = useState<{ id: string; name: string; cleanMinutes: number } | null>(null);
+  const [rtForm, setRtForm] = useState({ name: '', cleanMinutes: 30 });
+
+  useEffect(() => {
+    setDefaultMinutesInput(managingHotel.defaultCleanMinutes || 35);
+  }, [managingHotel]);
   const [roomForm, setRoomForm] = useState({ 
     roomNumber: '', 
     floor: 1, 
@@ -113,8 +124,36 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
     status: 'vacant' as Room['status'],
     isStay: false,
     guestCount: 0,
-    notes: ''
+    notes: '',
+    priority: 'normal' as Room['priority']
   });
+
+  // State variables for rooms tab search, filter, sort, pagination
+  const [roomsSearchTerm, setRoomsSearchTerm] = useState('');
+  const [roomsFloorFilter, setRoomsFloorFilter] = useState('all');
+  const [roomsTypeFilter, setRoomsTypeFilter] = useState('all');
+  const [roomsSortField, setRoomsSortField] = useState<'roomNumber' | 'floor'>('roomNumber');
+  const [roomsSortOrder, setRoomsSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [roomsPage, setRoomsPage] = useState(1);
+  const [roomsPerPage, setRoomsPerPage] = useState(10);
+
+  // State variables for linkStaff tab search, pagination, and sorting
+  const [linkedStaffSearchTerm, setLinkedStaffSearchTerm] = useState('');
+  const [linkedStaffPage, setLinkedStaffPage] = useState(1);
+  const [linkedStaffSortOrder, setLinkedStaffSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [unlinkedStaffPage, setUnlinkedStaffPage] = useState(1);
+  const [unlinkedStaffSortOrder, setUnlinkedStaffSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  // State variables for stats tab leaderboard and defects search, pagination, and sorting
+  const [leaderboardSearchTerm, setLeaderboardSearchTerm] = useState('');
+  const [leaderboardPage, setLeaderboardPage] = useState(1);
+  const [leaderboardPerPage, setLeaderboardPerPage] = useState(5);
+  const [leaderboardSortBy, setLeaderboardSortBy] = useState<'count' | 'avgTime'>('count');
+  const [leaderboardSortOrder, setLeaderboardSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [defectsPage, setDefectsPage] = useState(1);
+  const [defectsPerPage, setDefectsPerPage] = useState(5);
+  const [defectsSortField, setDefectsSortField] = useState<'name' | 'count'>('count');
+  const [defectsSortOrder, setDefectsSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Load rooms and populate bulk text on init / update
   useEffect(() => {
@@ -256,6 +295,190 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
       cleanerErrorLeaderboard
     };
   }, [rooms, logs, activeStaffIds, activeDate]);
+
+  // Computed helper memos for rooms, staff, and rankings list components
+  const roomsUniqueFloors = useMemo(() => {
+    const floors = rooms.map(r => r.floor);
+    return Array.from(new Set(floors)).sort((a, b) => a - b);
+  }, [rooms]);
+
+  const roomsUniqueTypes = useMemo(() => {
+    const types = rooms.map(r => r.type);
+    return Array.from(new Set(types)).sort();
+  }, [rooms]);
+
+  const filteredRoomsList = useMemo(() => {
+    return rooms.filter(room => {
+      const term = roomsSearchTerm.trim().toLowerCase();
+      const matchesSearch = !term || room.roomNumber.toLowerCase().includes(term);
+      const matchesFloor = roomsFloorFilter === 'all' || room.floor.toString() === roomsFloorFilter;
+      const matchesType = roomsTypeFilter === 'all' || room.type === roomsTypeFilter;
+      return matchesSearch && matchesFloor && matchesType;
+    });
+  }, [rooms, roomsSearchTerm, roomsFloorFilter, roomsTypeFilter]);
+
+  const sortedRoomsList = useMemo(() => {
+    return [...filteredRoomsList].sort((a, b) => {
+      let valA = a[roomsSortField];
+      let valB = b[roomsSortField];
+
+      if (roomsSortField === 'roomNumber') {
+        const strA = String(valA);
+        const strB = String(valB);
+        return roomsSortOrder === 'asc'
+          ? strA.localeCompare(strB, undefined, { numeric: true })
+          : strB.localeCompare(strA, undefined, { numeric: true });
+      }
+
+      if (valA < valB) return roomsSortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return roomsSortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredRoomsList, roomsSortField, roomsSortOrder]);
+
+  const paginatedRoomsList = useMemo(() => {
+    if (roomsPerPage === 0) return sortedRoomsList;
+    const startIdx = (roomsPage - 1) * roomsPerPage;
+    return sortedRoomsList.slice(startIdx, startIdx + roomsPerPage);
+  }, [sortedRoomsList, roomsPage, roomsPerPage]);
+
+  const totalRoomsPages = useMemo(() => {
+    if (roomsPerPage === 0) return 1;
+    return Math.ceil(sortedRoomsList.length / roomsPerPage) || 1;
+  }, [sortedRoomsList, roomsPerPage]);
+
+  useEffect(() => {
+    setRoomsPage(1);
+  }, [roomsSearchTerm, roomsFloorFilter, roomsTypeFilter, roomsSortField, roomsSortOrder, roomsPerPage]);
+
+  const filteredLinkedStaff = useMemo(() => {
+    return managingHotelStaff.filter(u => {
+      const term = linkedStaffSearchTerm.toLowerCase().trim();
+      return !term || u.name.toLowerCase().includes(term) || u.username.toLowerCase().includes(term);
+    });
+  }, [managingHotelStaff, linkedStaffSearchTerm]);
+
+  const sortedLinkedStaff = useMemo(() => {
+    return [...filteredLinkedStaff].sort((a, b) => {
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+      return linkedStaffSortOrder === 'asc'
+        ? nameA.localeCompare(nameB, undefined, { sensitivity: 'base' })
+        : nameB.localeCompare(nameA, undefined, { sensitivity: 'base' });
+    });
+  }, [filteredLinkedStaff, linkedStaffSortOrder]);
+
+  const paginatedLinkedStaff = useMemo(() => {
+    const limit = 10;
+    const startIdx = (linkedStaffPage - 1) * limit;
+    return sortedLinkedStaff.slice(startIdx, startIdx + limit);
+  }, [sortedLinkedStaff, linkedStaffPage]);
+
+  const totalLinkedStaffPages = useMemo(() => {
+    return Math.ceil(sortedLinkedStaff.length / 10) || 1;
+  }, [sortedLinkedStaff]);
+
+  useEffect(() => {
+    setLinkedStaffPage(1);
+  }, [linkedStaffSearchTerm, linkedStaffSortOrder]);
+
+  const filteredUnlinkedUsers = useMemo(() => {
+    return globalUsers.filter(u => 
+      !u.hotelIds?.includes(managingHotel.id) &&
+      u.status !== 'quit' &&
+      (u.name.toLowerCase().includes(staffSearchTerm.toLowerCase()) || 
+       u.username.toLowerCase().includes(staffSearchTerm.toLowerCase()))
+    );
+  }, [globalUsers, managingHotel.id, staffSearchTerm]);
+
+  const sortedUnlinkedUsers = useMemo(() => {
+    return [...filteredUnlinkedUsers].sort((a, b) => {
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+      return unlinkedStaffSortOrder === 'asc'
+        ? nameA.localeCompare(nameB, undefined, { sensitivity: 'base' })
+        : nameB.localeCompare(nameA, undefined, { sensitivity: 'base' });
+    });
+  }, [filteredUnlinkedUsers, unlinkedStaffSortOrder]);
+
+  const paginatedUnlinkedUsers = useMemo(() => {
+    const limit = 10;
+    const startIdx = (unlinkedStaffPage - 1) * limit;
+    return sortedUnlinkedUsers.slice(startIdx, startIdx + limit);
+  }, [sortedUnlinkedUsers, unlinkedStaffPage]);
+
+  const totalUnlinkedStaffPages = useMemo(() => {
+    return Math.ceil(sortedUnlinkedUsers.length / 10) || 1;
+  }, [sortedUnlinkedUsers]);
+
+  useEffect(() => {
+    setUnlinkedStaffPage(1);
+  }, [staffSearchTerm, unlinkedStaffSortOrder]);
+
+  const filteredLeaderboard = useMemo(() => {
+    const list = branchStats ? (branchStats.leaderboard || []) : [];
+    return list.filter(cleaner => {
+      const term = leaderboardSearchTerm.toLowerCase().trim();
+      return !term || cleaner.name.toLowerCase().includes(term);
+    });
+  }, [branchStats, leaderboardSearchTerm]);
+
+  const sortedLeaderboard = useMemo(() => {
+    return [...filteredLeaderboard].sort((a, b) => {
+      let comparison = 0;
+      if (leaderboardSortBy === 'count') {
+        comparison = b.count - a.count || a.avgTime - b.avgTime;
+      } else {
+        comparison = a.avgTime - b.avgTime || b.count - a.count;
+      }
+      return leaderboardSortOrder === 'desc' ? comparison : -comparison;
+    });
+  }, [filteredLeaderboard, leaderboardSortBy, leaderboardSortOrder]);
+
+  const paginatedLeaderboard = useMemo(() => {
+    if (leaderboardPerPage === 0) return sortedLeaderboard;
+    const startIdx = (leaderboardPage - 1) * leaderboardPerPage;
+    return sortedLeaderboard.slice(startIdx, startIdx + leaderboardPerPage);
+  }, [sortedLeaderboard, leaderboardPage, leaderboardPerPage]);
+
+  const totalLeaderboardPages = useMemo(() => {
+    if (leaderboardPerPage === 0) return 1;
+    return Math.ceil(sortedLeaderboard.length / leaderboardPerPage) || 1;
+  }, [sortedLeaderboard, leaderboardPerPage]);
+
+  useEffect(() => {
+    setLeaderboardPage(1);
+  }, [leaderboardSearchTerm, leaderboardPerPage, leaderboardSortBy, leaderboardSortOrder]);
+
+  const sortedDefectsLeaderboard = useMemo(() => {
+    const list = branchStats ? (branchStats.cleanerErrorLeaderboard || []) : [];
+    return [...list].sort((a, b) => {
+      if (defectsSortField === 'name') {
+        return defectsSortOrder === 'asc'
+          ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+          : b.name.localeCompare(a.name, undefined, { sensitivity: 'base' });
+      } else {
+        return defectsSortOrder === 'asc'
+          ? a.count - b.count
+          : b.count - a.count;
+      }
+    });
+  }, [branchStats, defectsSortField, defectsSortOrder]);
+
+  const paginatedDefectsLeaderboard = useMemo(() => {
+    if (defectsPerPage === 0) return sortedDefectsLeaderboard;
+    const startIdx = (defectsPage - 1) * defectsPerPage;
+    return sortedDefectsLeaderboard.slice(startIdx, startIdx + defectsPerPage);
+  }, [sortedDefectsLeaderboard, defectsPage, defectsPerPage]);
+
+  const totalDefectsPages = useMemo(() => {
+    if (defectsPerPage === 0) return 1;
+    return Math.ceil(sortedDefectsLeaderboard.length / defectsPerPage) || 1;
+  }, [sortedDefectsLeaderboard, defectsPerPage]);
+
+  useEffect(() => {
+    setDefectsPage(1);
+  }, [defectsPerPage, defectsSortField, defectsSortOrder]);
 
 
 
@@ -450,7 +673,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   // ROOM CRUD BUTTON TRIGGERS
   const handleAddRoomClick = () => {
     setEditingRoom(null);
-    setRoomForm({ roomNumber: '', floor: 1, type: '1 Bed', status: 'vacant', isStay: false, guestCount: 0, notes: '' });
+    setRoomForm({ roomNumber: '', floor: 1, type: '1 Bed', status: 'vacant', isStay: false, guestCount: 0, notes: '', priority: 'normal' });
     setRoomModalOpen(true);
   };
 
@@ -463,7 +686,8 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
       status: room.status,
       isStay: room.isStay,
       guestCount: room.guestCount,
-      notes: room.notes || ''
+      notes: room.notes || '',
+      priority: room.priority || 'normal'
     });
     setRoomModalOpen(true);
   };
@@ -501,7 +725,8 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
           floor: Number(roomForm.floor),
           type: roomForm.type,
           guestCount: Number(roomForm.guestCount),
-          notes: roomForm.notes || undefined
+          notes: roomForm.notes || undefined,
+          priority: roomForm.priority
         });
         addToast('Room updated successfully', 'success');
       } else {
@@ -513,7 +738,8 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
           status: 'vacant',
           isStay: false,
           guestCount: Number(roomForm.guestCount),
-          notes: roomForm.notes || undefined
+          notes: roomForm.notes || undefined,
+          priority: roomForm.priority
         });
         addToast('Room added successfully', 'success');
       }
@@ -607,6 +833,14 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
           <Users size={14} />
           <span>{language === 'vi' ? 'Liên kết nhân sự' : language === 'ja' ? 'スタッフ連携' : 'Link Staff'}</span>
         </button>
+        <button
+          className={`btn btn-sm ${branchTab === 'settings' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setBranchTab('settings')}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', borderRadius: '6px' }}
+        >
+          <Clock size={14} />
+          <span>{language === 'vi' ? 'Loại phòng & Cài đặt' : language === 'ja' ? '部屋タイプ・設定' : 'Room Types & Settings'}</span>
+        </button>
       </div>
 
       {/* Mobile sub-tab select dropdown */}
@@ -644,6 +878,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
           <option value="rooms">🚪 {language === 'vi' ? 'Quản lý phòng' : language === 'ja' ? '客室管理' : 'Room Management'}</option>
           <option value="users">👥 {language === 'vi' ? 'Quản lý nhân sự' : language === 'ja' ? 'スタッフ管理' : 'Staff Management'}</option>
           <option value="linkStaff">🔗 {language === 'vi' ? 'Liên kết nhân sự' : language === 'ja' ? 'スタッフ連携' : 'Link Staff'}</option>
+          <option value="settings">⚙️ {language === 'vi' ? 'Loại phòng & Cài đặt' : language === 'ja' ? '部屋タイプ・設定' : 'Room Types & Settings'}</option>
         </select>
       </div>
 
@@ -887,15 +1122,66 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
               
               {branchStats.leaderboard.length === 0 ? (
                 <div style={{ padding: '3rem', textAlign: 'center', opacity: 0.6, fontSize: '0.9rem' }}>
-                  🧹 {language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong ngày hôm nay' : language === 'ja' ? '本日のこの店舗の清掃実績はまだありません' : 'No cleaning logs recorded for this branch today'}
+                  🧹 {language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong ngày hôm nay' : language === 'ja' ? '本日のこの店舗 của 清掃実績はまだありません' : 'No cleaning logs recorded for this branch today'}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {/* Leaderboard Toolbar */}
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      style={{ flex: 1, padding: '0.35rem 0.75rem', fontSize: '0.8rem', minWidth: '180px' }}
+                      placeholder={language === 'vi' ? 'Tìm nhanh nhân viên...' : 'Search housekeeper...'}
+                      value={leaderboardSearchTerm}
+                      onChange={e => setLeaderboardSearchTerm(e.target.value)}
+                    />
+                    
+                    <div className="capsule-switcher no-print" style={{ display: 'inline-flex' }}>
+                      <button
+                        type="button"
+                        onClick={() => setLeaderboardSortBy('count')}
+                        className={`capsule-button ${leaderboardSortBy === 'count' ? 'active' : ''}`}
+                      >
+                        <span>🧹 {language === 'vi' ? 'Số phòng' : 'Rooms'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLeaderboardSortBy('avgTime')}
+                        className={`capsule-button ${leaderboardSortBy === 'avgTime' ? 'active' : ''}`}
+                      >
+                        <span>⏱️ {language === 'vi' ? 'T.gian TB' : 'Avg Time'}</span>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0.45rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '30px' }}
+                      onClick={() => setLeaderboardSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                      title={language === 'vi' ? 'Đảo chiều sắp xếp' : 'Toggle Sort Order'}
+                    >
+                      {leaderboardSortOrder === 'asc' ? '▲' : '▼'}
+                    </button>
+
+                    <select
+                      value={leaderboardPerPage}
+                      onChange={e => setLeaderboardPerPage(Number(e.target.value))}
+                      className="form-input"
+                      style={{ width: '100px', padding: '0.35rem 0.5rem', fontSize: '0.8rem', height: 'auto' }}
+                    >
+                      <option value={5}>5 / page</option>
+                      <option value={10}>10 / page</option>
+                      <option value={0}>All</option>
+                    </select>
+                  </div>
+
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
-                    {branchStats.leaderboard.map((cleaner, index) => {
+                    {paginatedLeaderboard.map((cleaner, index) => {
+                      const overallIndex = leaderboardPerPage === 0 ? index : (leaderboardPage - 1) * leaderboardPerPage + index;
                       const maxRooms = Math.max(...branchStats.leaderboard.map(c => c.count), 1);
                       const percent = (cleaner.count / maxRooms) * 100;
-                      const rankMedal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}`;
+                      const rankMedal = overallIndex === 0 ? '🥇' : overallIndex === 1 ? '🥈' : overallIndex === 2 ? '🥉' : `${overallIndex + 1}`;
                       
                       return (
                         <div 
@@ -907,7 +1193,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                             display: 'flex', 
                             alignItems: 'center', 
                             gap: '1rem',
-                            borderLeft: index < 3 ? `4px solid ${index === 0 ? '#fbbf24' : index === 1 ? '#94a3b8' : '#b45309'}` : '1px solid rgba(0,0,0,0.05)'
+                            borderLeft: overallIndex < 3 ? `4px solid ${overallIndex === 0 ? '#fbbf24' : overallIndex === 1 ? '#94a3b8' : '#b45309'}` : '1px solid rgba(0,0,0,0.05)'
                           }}
                         >
                           <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', fontWeight: 800 }}>
@@ -950,6 +1236,37 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                     })}
                   </div>
 
+                  {/* Leaderboard Pagination Controls */}
+                  {totalLeaderboardPages > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', padding: '0.5rem 0.5rem 0 0.5rem', borderTop: '1px solid rgba(0,0,0,0.05)', flexWrap: 'wrap', gap: '1rem' }}>
+                      <div style={{ fontSize: '0.8rem', opacity: 0.6 }}>
+                        {language === 'vi' 
+                          ? `Hiển thị ${((leaderboardPage - 1) * leaderboardPerPage) + 1}-${Math.min(leaderboardPage * leaderboardPerPage, filteredLeaderboard.length)} trên tổng số ${filteredLeaderboard.length} nhân viên` 
+                          : `Showing ${((leaderboardPage - 1) * leaderboardPerPage) + 1}-${Math.min(leaderboardPage * leaderboardPerPage, filteredLeaderboard.length)} of ${filteredLeaderboard.length} housekeepers`}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.25rem' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setLeaderboardPage(prev => Math.max(prev - 1, 1))}
+                          disabled={leaderboardPage === 1}
+                          style={{ minWidth: '32px' }}
+                        >
+                          &laquo;
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setLeaderboardPage(prev => Math.min(prev + 1, totalLeaderboardPages))}
+                          disabled={leaderboardPage === totalLeaderboardPages}
+                          style={{ minWidth: '32px' }}
+                        >
+                          &raquo;
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1.5rem' }}>
                     <h5 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text-color)' }}>
                       📊 {language === 'vi' ? 'Biểu Đồ So Sánh Tốc Độ Dọn Dẹp (Thời gian trung bình)' : language === 'ja' ? 'スタッフ清掃速度比較グラフ (平均時間)' : 'Housekeeper Speed Comparison Chart (Avg Duration)'}
@@ -957,10 +1274,10 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                     
                     <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '1rem', borderRadius: 'var(--radius-sm)' }}>
                       {(() => {
-                        const maxAvgTime = Math.max(...branchStats.leaderboard.map(c => c.avgTime), 50);
+                        const maxAvgTime = Math.max(...filteredLeaderboard.map(c => c.avgTime), 50);
                         return (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            {branchStats.leaderboard.map((cleaner, i) => {
+                            {paginatedLeaderboard.map((cleaner, i) => {
                               const barPercent = (cleaner.avgTime / maxAvgTime) * 100;
                               const barColor = cleaner.speedCategory === 'fast' 
                                 ? 'var(--status-clean)' 
@@ -1024,11 +1341,43 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                     </div>
 
                     <div className="glass-panel" style={{ padding: '1rem', backgroundColor: 'rgba(255, 255, 255, 0.2)' }}>
-                      <h5 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem' }}>
-                        👤 {language === 'vi' ? 'Chi tiết lỗi theo nhân viên:' : language === 'ja' ? 'スタッフ別指摘詳細:' : 'Defects by Housekeeper:'}
-                      </h5>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <h5 style={{ fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>
+                          👤 {language === 'vi' ? 'Chi tiết lỗi theo nhân viên:' : language === 'ja' ? 'スタッフ別指摘詳細:' : 'Defects by Housekeeper:'}
+                        </h5>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <select
+                            value={defectsSortField}
+                            onChange={e => setDefectsSortField(e.target.value as any)}
+                            className="form-input"
+                            style={{ width: '90px', padding: '0.15rem 0.35rem', fontSize: '0.7rem', height: 'auto' }}
+                          >
+                            <option value="count">{language === 'vi' ? 'Số lỗi' : 'Defects'}</option>
+                            <option value="name">{language === 'vi' ? 'Tên NV' : 'Name'}</option>
+                          </select>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-xs"
+                            onClick={() => setDefectsSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                            style={{ padding: '0.15rem 0.35rem', fontSize: '0.7rem', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            {defectsSortOrder === 'asc' ? '▲' : '▼'}
+                          </button>
+                          <select
+                            value={defectsPerPage}
+                            onChange={e => setDefectsPerPage(Number(e.target.value))}
+                            className="form-input"
+                            style={{ width: '75px', padding: '0.15rem 0.35rem', fontSize: '0.7rem', height: 'auto' }}
+                          >
+                            <option value={3}>3 / pg</option>
+                            <option value={5}>5 / pg</option>
+                            <option value={10}>10 / pg</option>
+                            <option value={0}>All</option>
+                          </select>
+                        </div>
+                      </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '200px', overflowY: 'auto' }}>
-                        {branchStats.cleanerErrorLeaderboard.map((cleaner, i) => (
+                        {paginatedDefectsLeaderboard.map((cleaner, i) => (
                           <div key={i} style={{ fontSize: '0.8rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginBottom: '0.25rem' }}>
                               <span>{cleaner.name}</span>
@@ -1044,6 +1393,35 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                           </div>
                         ))}
                       </div>
+
+                      {/* Defects Leaderboard Pagination */}
+                      {totalDefectsPages > 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', padding: '0.5rem 0.25rem 0 0.25rem', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                          <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>
+                            Page {defectsPage} of {totalDefectsPages}
+                          </span>
+                          <div style={{ display: 'flex', gap: '0.25rem' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-xs"
+                              onClick={() => setDefectsPage(prev => Math.max(prev - 1, 1))}
+                              disabled={defectsPage === 1}
+                              style={{ padding: '0.1rem 0.3rem', fontSize: '0.65rem' }}
+                            >
+                              &laquo;
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-xs"
+                              onClick={() => setDefectsPage(prev => Math.min(prev + 1, totalDefectsPages))}
+                              disabled={defectsPage === totalDefectsPages}
+                              style={{ padding: '0.1rem 0.3rem', fontSize: '0.65rem' }}
+                            >
+                              &raquo;
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1231,7 +1609,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
 
 
 
-      {branchTab === 'rooms' && (
+       {branchTab === 'rooms' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
           {/* Left Column: Rooms Table */}
           <div className="glass-panel" style={{ padding: '1.5rem' }}>
@@ -1250,62 +1628,189 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
               </button>
             </div>
 
+            {/* Search, Filter, Sort, Page Size Controls for Rooms */}
+            <div className="glass-panel" style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', backgroundColor: 'rgba(255, 255, 255, 0.4)', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  placeholder={language === 'vi' ? 'Tìm số phòng...' : 'Search room...'}
+                  value={roomsSearchTerm}
+                  onChange={e => setRoomsSearchTerm(e.target.value)}
+                  className="form-input"
+                  style={{ flex: '2 1 120px', padding: '0.35rem 0.6rem', fontSize: '0.8rem' }}
+                />
+                <select
+                  value={roomsFloorFilter}
+                  onChange={e => setRoomsFloorFilter(e.target.value)}
+                  className="form-input"
+                  style={{ flex: '1 1 90px', padding: '0.35rem 0.5rem', fontSize: '0.8rem', height: 'auto' }}
+                >
+                  <option value="all">{language === 'vi' ? 'Tất cả tầng' : 'All Floors'}</option>
+                  {roomsUniqueFloors.map(f => (
+                    <option key={f} value={f.toString()}>{f}F</option>
+                  ))}
+                </select>
+                <select
+                  value={roomsTypeFilter}
+                  onChange={e => setRoomsTypeFilter(e.target.value)}
+                  className="form-input"
+                  style={{ flex: '1 1 100px', padding: '0.35rem 0.5rem', fontSize: '0.8rem', height: 'auto' }}
+                >
+                  <option value="all">{language === 'vi' ? 'Tất cả loại' : 'All Types'}</option>
+                  {roomsUniqueTypes.map(t => (
+                    <option key={t} value={t}>{getFormattedRoomType(t)}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.75rem' }}>
+                <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                  <select
+                    value={roomsSortField}
+                    onChange={e => setRoomsSortField(e.target.value as any)}
+                    className="form-input"
+                    style={{ width: '120px', padding: '0.2rem 0.4rem', fontSize: '0.75rem', height: 'auto' }}
+                  >
+                    <option value="roomNumber">{language === 'vi' ? 'Số phòng' : 'Room Number'}</option>
+                    <option value="floor">{language === 'vi' ? 'Tầng' : 'Floor'}</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setRoomsSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                    className="btn btn-secondary"
+                    style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
+                  >
+                    {roomsSortOrder === 'asc' ? '▲ ASC' : '▼ DESC'}
+                  </button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <span>{language === 'vi' ? 'Hiển thị:' : 'Show:'}</span>
+                  <select
+                    value={roomsPerPage}
+                    onChange={e => setRoomsPerPage(Number(e.target.value))}
+                    className="form-input"
+                    style={{ width: '60px', padding: '0.2rem 0.4rem', fontSize: '0.75rem', height: 'auto' }}
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={0}>{language === 'vi' ? 'Tất cả' : 'All'}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
             {/* Desktop View Table */}
             <div className="desktop-only-block" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', maxHeight: '450px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '400px' }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                    <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomNumber')}</th>
-                    <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'floor')}</th>
+                    <th 
+                      style={{ padding: '0.75rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                      onClick={() => {
+                        setRoomsSortField('roomNumber');
+                        setRoomsSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                      }}
+                      title="Sort by Room Number"
+                    >
+                      {getTranslation(language, 'roomNumber')} {roomsSortField === 'roomNumber' ? (roomsSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+                    </th>
+                    <th 
+                      style={{ padding: '0.75rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                      onClick={() => {
+                        setRoomsSortField('floor');
+                        setRoomsSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                      }}
+                      title="Sort by Floor"
+                    >
+                      {getTranslation(language, 'floor')} {roomsSortField === 'floor' ? (roomsSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+                    </th>
                     <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomType')}</th>
                     <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'action')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[...rooms]
-                    .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber))
-                    .map(room => (
-                      <tr key={room.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>{room.roomNumber}</td>
-                        <td style={{ padding: '0.75rem 0.5rem' }}>{room.floor}F</td>
-                        <td style={{ padding: '0.75rem 0.5rem' }}>{getFormattedRoomType(room.type)}</td>
-                        <td style={{ padding: '0.75rem 0.5rem', display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn btn-secondary btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleEditRoomClick(room)}>
-                            <Edit2 size={12} />
-                          </button>
-                          <button className="btn btn-danger btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleDeleteRoom(room.id, room.roomNumber)}>
-                            <Trash2 size={12} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                  {paginatedRoomsList.map(room => (
+                    <tr key={room.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                      <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>{room.roomNumber}</td>
+                      <td style={{ padding: '0.75rem 0.5rem' }}>{room.floor}F</td>
+                      <td style={{ padding: '0.75rem 0.5rem' }}>{getFormattedRoomType(room.type)}</td>
+                      <td style={{ padding: '0.75rem 0.5rem', display: 'flex', gap: '0.5rem' }}>
+                        <button className="btn btn-secondary btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleEditRoomClick(room)}>
+                          <Edit2 size={12} />
+                        </button>
+                        <button className="btn btn-danger btn-sm" style={{ padding: '0.25rem 0.5rem' }} onClick={() => handleDeleteRoom(room.id, room.roomNumber)}>
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
 
             {/* Mobile View Cards */}
             <div className="mobile-only-block" style={{ width: '100%', maxHeight: '450px', overflowY: 'auto' }}>
-              {[...rooms]
-                .sort((a, b) => a.roomNumber.localeCompare(b.roomNumber))
-                .map(room => (
-                  <div key={room.id} className="glass-panel" style={{ padding: '0.85rem 1rem', marginBottom: '0.6rem', borderLeft: '4px solid var(--primary-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Room {room.roomNumber}</div>
-                      <div style={{ fontSize: '0.75rem', opacity: 0.8, marginTop: '0.15rem' }}>
-                        {room.floor}F • {getFormattedRoomType(room.type)}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <button className="btn btn-secondary btn-sm" style={{ padding: '0.35rem 0.5rem' }} onClick={() => handleEditRoomClick(room)}>
-                        <Edit2 size={12} />
-                      </button>
-                      <button className="btn btn-danger btn-sm" style={{ padding: '0.35rem 0.5rem' }} onClick={() => handleDeleteRoom(room.id, room.roomNumber)}>
-                        <Trash2 size={12} />
-                      </button>
+              {paginatedRoomsList.map(room => (
+                <div key={room.id} className="glass-panel" style={{ padding: '0.85rem 1rem', marginBottom: '0.6rem', borderLeft: '4px solid var(--primary-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Room {room.roomNumber}</div>
+                    <div style={{ fontSize: '0.75rem', opacity: 0.8, marginTop: '0.15rem' }}>
+                      {room.floor}F • {getFormattedRoomType(room.type)}
                     </div>
                   </div>
-                ))}
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <button className="btn btn-secondary btn-sm" style={{ padding: '0.35rem 0.5rem' }} onClick={() => handleEditRoomClick(room)}>
+                      <Edit2 size={12} />
+                    </button>
+                    <button className="btn btn-danger btn-sm" style={{ padding: '0.35rem 0.5rem' }} onClick={() => handleDeleteRoom(room.id, room.roomNumber)}>
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
+
+            {/* Rooms Pagination Controls */}
+            {totalRoomsPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', padding: '0.75rem 0.25rem 0 0.25rem', borderTop: '1px solid rgba(0,0,0,0.05)', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                  {language === 'vi'
+                    ? `Hiển thị ${((roomsPage - 1) * (roomsPerPage || sortedRoomsList.length)) + 1}-${Math.min(roomsPage * (roomsPerPage || sortedRoomsList.length), sortedRoomsList.length)} trên ${sortedRoomsList.length}`
+                    : `Showing ${((roomsPage - 1) * (roomsPerPage || sortedRoomsList.length)) + 1}-${Math.min(roomsPage * (roomsPerPage || sortedRoomsList.length), sortedRoomsList.length)} of ${sortedRoomsList.length}`}
+                </div>
+                <div style={{ display: 'flex', gap: '0.2rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-xs"
+                    onClick={() => setRoomsPage(prev => Math.max(prev - 1, 1))}
+                    disabled={roomsPage === 1}
+                  >
+                    &laquo;
+                  </button>
+                  {getVisiblePages(roomsPage, totalRoomsPages).map((p, idx) => {
+                    if (p === '...') return <span key={idx} style={{ fontSize: '0.75rem', opacity: 0.5 }}>...</span>;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        className={`btn btn-xs ${roomsPage === p ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setRoomsPage(p as number)}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-xs"
+                    onClick={() => setRoomsPage(prev => Math.min(prev + 1, totalRoomsPages))}
+                    disabled={roomsPage === totalRoomsPages}
+                  >
+                    &raquo;
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Column: Bulk Rooms Updater & Generator */}
@@ -1431,71 +1936,123 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
               }
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
               <h4 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 👥 {language === 'vi' ? 'Nhân sự chi nhánh' : 'Branch Staff'} ({managingHotelStaff.length})
               </h4>
             </div>
 
-            {managingHotelStaff.length === 0 ? (
+            <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
+              <input 
+                type="text"
+                className="form-input"
+                style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem', flex: 1 }}
+                placeholder={language === 'vi' ? 'Tìm nhanh nhân sự đã liên kết...' : 'Search linked staff...'}
+                value={linkedStaffSearchTerm}
+                onChange={e => setLinkedStaffSearchTerm(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setLinkedStaffSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap' }}
+                title={language === 'vi' ? 'Sắp xếp theo tên' : 'Sort by name'}
+              >
+                <span>🔤</span>
+                <span>{linkedStaffSortOrder === 'asc' ? '▲ A-Z' : '▼ Z-A'}</span>
+              </button>
+            </div>
+
+            {filteredLinkedStaff.length === 0 ? (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem 1rem', opacity: 0.5, border: '1px dashed rgba(0,0,0,0.08)', borderRadius: 'var(--radius-sm)' }}>
                 <span style={{ fontSize: '1.5rem' }}>📥</span>
                 <p style={{ fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center', margin: '0.5rem 0 0 0' }}>
-                  {language === 'vi' ? 'Kéo thả nhân sự vào đây để liên kết khách sạn.' : 'Drag & drop staff here to link.'}
+                  {language === 'vi' ? 'Không tìm thấy nhân sự phù hợp.' : 'No matching staff found.'}
                 </p>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, overflowY: 'auto', maxHeight: '420px', paddingRight: '0.25rem' }}>
-                {managingHotelStaff.map(u => {
-                  let roleColor = '#10b981';
-                  if (u.role === 'admin') roleColor = '#ef4444';
-                  else if (u.role === 'front_desk') roleColor = '#3b82f6';
-                  else if (u.role === 'checka') roleColor = '#8b5cf6';
-                  else if (u.role === 'kacho') roleColor = '#f59e0b';
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, overflowY: 'auto', maxHeight: '350px', paddingRight: '0.25rem' }}>
+                  {paginatedLinkedStaff.map(u => {
+                    let roleColor = '#10b981';
+                    if (u.role === 'admin') roleColor = '#ef4444';
+                    else if (u.role === 'front_desk') roleColor = '#3b82f6';
+                    else if (u.role === 'checka') roleColor = '#8b5cf6';
+                    else if (u.role === 'kacho') roleColor = '#f59e0b';
 
-                  return (
-                    <div 
-                      key={u.id}
-                      draggable={u.username !== 'admin'}
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('text/plain', u.id);
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '0.75rem',
-                        backgroundColor: 'rgba(0,0,0,0.02)',
-                        border: '1px solid rgba(0,0,0,0.04)',
-                        borderRadius: 'var(--radius-sm)',
-                        cursor: u.username === 'admin' ? 'default' : 'grab'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ opacity: 0.4 }}>☰</span>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{u.name}</div>
-                          <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                            <span>ID: {u.username}</span>
-                            <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.3)' }}></span>
-                            <span style={{ color: roleColor, fontWeight: 700 }}>{u.role.toUpperCase()}</span>
+                    return (
+                      <div 
+                        key={u.id}
+                        draggable={u.username !== 'admin'}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', u.id);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.75rem',
+                          backgroundColor: 'rgba(0,0,0,0.02)',
+                          border: '1px solid rgba(0,0,0,0.04)',
+                          borderRadius: 'var(--radius-sm)',
+                          cursor: u.username === 'admin' ? 'default' : 'grab'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ opacity: 0.4 }}>☰</span>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{u.name}</div>
+                            <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span>ID: {u.username}</span>
+                              <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.3)' }}></span>
+                              <span style={{ color: roleColor, fontWeight: 700 }}>{u.role.toUpperCase()}</span>
+                            </div>
                           </div>
                         </div>
+                        
+                        <button
+                          className="btn btn-danger btn-sm"
+                          style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
+                          onClick={() => handleUnlinkStaff(u.id)}
+                          title={language === 'vi' ? 'Hủy liên kết khỏi khách sạn này' : 'Unlink from this hotel'}
+                          disabled={u.username === 'admin'}
+                        >
+                          X
+                        </button>
                       </div>
-                      
+                    );
+                  })}
+                </div>
+
+                {/* Left Cột Pagination Controls */}
+                {totalLinkedStaffPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', padding: '0.5rem 0.25rem 0 0.25rem', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                      Page {linkedStaffPage} / {totalLinkedStaffPages}
+                    </span>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
                       <button
-                        className="btn btn-danger btn-sm"
-                        style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem' }}
-                        onClick={() => handleUnlinkStaff(u.id)}
-                        title={language === 'vi' ? 'Hủy liên kết khỏi khách sạn này' : 'Unlink from this hotel'}
-                        disabled={u.username === 'admin'}
+                        type="button"
+                        className="btn btn-secondary btn-xs"
+                        onClick={() => setLinkedStaffPage(prev => Math.max(prev - 1, 1))}
+                        disabled={linkedStaffPage === 1}
+                        style={{ padding: '0.15rem 0.4rem', fontSize: '0.7rem' }}
                       >
-                        X
+                        &laquo;
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-xs"
+                        onClick={() => setLinkedStaffPage(prev => Math.min(prev + 1, totalLinkedStaffPages))}
+                        disabled={linkedStaffPage === totalLinkedStaffPages}
+                        style={{ padding: '0.15rem 0.4rem', fontSize: '0.7rem' }}
+                      >
+                        &raquo;
                       </button>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1545,38 +2102,37 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
               </button>
             </div>
 
-            <div style={{ marginBottom: '1rem' }}>
+            <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
               <input 
                 type="text"
                 className="form-input"
-                style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
+                style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem', flex: 1 }}
                 placeholder={language === 'vi' ? 'Tìm nhanh nhân sự...' : 'Search system staff...'}
                 value={staffSearchTerm}
                 onChange={e => setStaffSearchTerm(e.target.value)}
               />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setUnlinkedStaffSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem', whiteSpace: 'nowrap' }}
+                title={language === 'vi' ? 'Sắp xếp theo tên' : 'Sort by name'}
+              >
+                <span>🔤</span>
+                <span>{unlinkedStaffSortOrder === 'asc' ? '▲ A-Z' : '▼ Z-A'}</span>
+              </button>
             </div>
 
-            {(() => {
-              const unlinkedUsers = globalUsers.filter(u => 
-                !u.hotelIds?.includes(managingHotel.id) &&
-                u.status !== 'quit' &&
-                (u.name.toLowerCase().includes(staffSearchTerm.toLowerCase()) || 
-                 u.username.toLowerCase().includes(staffSearchTerm.toLowerCase()))
-              );
-
-              if (unlinkedUsers.length === 0) {
-                return (
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5, border: '1px dashed rgba(0,0,0,0.08)', borderRadius: 'var(--radius-sm)', padding: '2rem 1rem' }}>
-                    <p style={{ fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center', margin: 0 }}>
-                      {language === 'vi' ? 'Không có nhân sự mới thích hợp.' : 'No other active staff found.'}
-                    </p>
-                  </div>
-                );
-              }
-
-              return (
+            {filteredUnlinkedUsers.length === 0 ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5, border: '1px dashed rgba(0,0,0,0.08)', borderRadius: 'var(--radius-sm)', padding: '2rem 1rem' }}>
+                <p style={{ fontSize: '0.85rem', fontStyle: 'italic', textAlign: 'center', margin: 0 }}>
+                  {language === 'vi' ? 'Không có nhân sự mới thích hợp.' : 'No other active staff found.'}
+                </p>
+              </div>
+            ) : (
+              <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1, overflowY: 'auto', maxHeight: '350px', paddingRight: '0.25rem' }}>
-                  {unlinkedUsers.map(u => {
+                  {paginatedUnlinkedUsers.map(u => {
                     let roleColor = '#10b981';
                     if (u.role === 'admin') roleColor = '#ef4444';
                     else if (u.role === 'front_desk') roleColor = '#3b82f6';
@@ -1625,8 +2181,37 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                     );
                   })}
                 </div>
-              );
-            })()}
+
+                {/* Right Cột Pagination Controls */}
+                {totalUnlinkedStaffPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', padding: '0.5rem 0.25rem 0 0.25rem', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
+                      Page {unlinkedStaffPage} / {totalUnlinkedStaffPages}
+                    </span>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-xs"
+                        onClick={() => setUnlinkedStaffPage(prev => Math.max(prev - 1, 1))}
+                        disabled={unlinkedStaffPage === 1}
+                        style={{ padding: '0.15rem 0.4rem', fontSize: '0.7rem' }}
+                      >
+                        &laquo;
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-xs"
+                        onClick={() => setUnlinkedStaffPage(prev => Math.min(prev + 1, totalUnlinkedStaffPages))}
+                        disabled={unlinkedStaffPage === totalUnlinkedStaffPages}
+                        style={{ padding: '0.15rem 0.4rem', fontSize: '0.7rem' }}
+                      >
+                        &raquo;
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1649,6 +2234,252 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
           getTranslation={getTranslation}
           getVisiblePages={getVisiblePages}
         />
+      )}
+
+      {branchTab === 'settings' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* General Hotel settings */}
+          <div className="card glass-panel" style={{ padding: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.15rem' }}>
+              <Clock size={18} />
+              <span>{language === 'vi' ? 'Thời gian dọn dẹp mặc định' : language === 'ja' ? 'デフォルト清掃時間' : 'Default Cleaning Duration'}</span>
+            </h3>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1', minWidth: '200px' }}>
+                <label className="form-label" style={{ marginBottom: '0.4rem' }}>
+                  {language === 'vi' ? 'Số phút trung bình cho một phòng (mặc định)' : language === 'ja' ? '1室あたりの平均時間 (デフォルト - 分)' : 'Average minutes per room (default)'}
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  className="form-input"
+                  value={defaultMinutesInput}
+                  onChange={(e) => setDefaultMinutesInput(Number(e.target.value))}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={async () => {
+                  try {
+                    const targetDb = getLocalDB(managingHotel.id);
+                    const updated: HotelType = {
+                      ...managingHotel,
+                      defaultCleanMinutes: defaultMinutesInput
+                    };
+                    await targetDb.updateHotel(updated);
+                    setManagingHotel(updated);
+                    if (refreshHotels) await refreshHotels();
+                    addToast(
+                      language === 'vi' ? 'Đã lưu cấu hình thời gian mặc định!' : language === 'ja' ? 'デフォルト清掃時間を保存しました！' : 'Saved default clean duration!',
+                      'success'
+                    );
+                  } catch (err) {
+                    console.error(err);
+                    addToast('Failed to save settings', 'warning');
+                  }
+                }}
+                style={{ height: '38px', whiteSpace: 'nowrap' }}
+              >
+                {language === 'vi' ? 'Lưu cấu hình' : language === 'ja' ? '設定を保存' : 'Save Default'}
+              </button>
+            </div>
+          </div>
+
+          {/* Room types settings */}
+          <div className="card glass-panel" style={{ padding: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.15rem' }}>
+                <Hotel size={18} />
+                <span>{language === 'vi' ? 'Quản lý thời gian theo Loại Phòng' : language === 'ja' ? '部屋タイプ別の目標時間' : 'Target Time by Room Type'}</span>
+              </h3>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setEditingRt(null);
+                  setRtForm({ name: '', cleanMinutes: 30 });
+                  setRtModalOpen(true);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+              >
+                <Plus size={14} />
+                <span>{language === 'vi' ? 'Thêm loại phòng' : language === 'ja' ? '部屋タイプを追加' : 'Add Room Type'}</span>
+              </button>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', borderBottom: '2px solid rgba(0,0,0,0.1)' }}>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Tên Loại Phòng' : language === 'ja' ? '部屋タイプ名' : 'Room Type Name'}</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Thời gian dọn dẹp (phút)' : language === 'ja' ? '目標清掃時間 (分)' : 'Clean Duration (minutes)'}</th>
+                    <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>{language === 'vi' ? 'Thao tác' : language === 'ja' ? 'アクション' : 'Actions'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!managingHotel.roomTypes || managingHotel.roomTypes.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>
+                        {language === 'vi' ? 'Chưa cấu hình loại phòng tự chọn.' : language === 'ja' ? 'カスタム部屋タイプが設定されていません。' : 'No custom room types configured.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    managingHotel.roomTypes.map((rt) => (
+                      <tr key={rt.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>{rt.name}</td>
+                        <td style={{ padding: '0.75rem 0.5rem' }}>
+                          <span className="badge badge-secondary" style={{ fontSize: '0.9rem', padding: '0.25rem 0.5rem' }}>
+                            {rt.cleanMinutes} {language === 'vi' ? 'phút' : language === 'ja' ? '分' : 'mins'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => {
+                                setEditingRt(rt);
+                                setRtForm({ name: rt.name, cleanMinutes: rt.cleanMinutes });
+                                setRtModalOpen(true);
+                              }}
+                              style={{ padding: '0.25rem 0.5rem' }}
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={async () => {
+                                if (window.confirm(language === 'vi' ? `Bạn có chắc chắn muốn xóa loại phòng "${rt.name}"?` : language === 'ja' ? `部屋タイプ "${rt.name}" を削除しますか？` : `Are you sure you want to delete room type "${rt.name}"?`)) {
+                                  try {
+                                    const targetDb = getLocalDB(managingHotel.id);
+                                    const updatedTypes = (managingHotel.roomTypes || []).filter(item => item.id !== rt.id);
+                                    const updated: HotelType = {
+                                      ...managingHotel,
+                                      roomTypes: updatedTypes
+                                    };
+                                    await targetDb.updateHotel(updated);
+                                    setManagingHotel(updated);
+                                    if (refreshHotels) await refreshHotels();
+                                    addToast(
+                                      language === 'vi' ? 'Đã xóa loại phòng!' : language === 'ja' ? '部屋タイプを削除しました！' : 'Deleted room type!',
+                                      'success'
+                                    );
+                                  } catch (err) {
+                                    console.error(err);
+                                    addToast('Failed to delete room type', 'warning');
+                                  }
+                                }
+                              }}
+                              style={{ padding: '0.25rem 0.5rem', color: 'var(--accent-red)' }}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Room Type Edit/Create Modal */}
+          {rtModalOpen && (
+            <div className="modal-overlay">
+              <form
+                className="modal-content glass-panel"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  try {
+                    const targetDb = getLocalDB(managingHotel.id);
+                    const existingTypes = managingHotel.roomTypes || [];
+                    let updatedTypes = [...existingTypes];
+                    
+                    if (editingRt) {
+                      // Update existing
+                      updatedTypes = updatedTypes.map(item =>
+                        item.id === editingRt.id
+                          ? { ...item, name: rtForm.name, cleanMinutes: rtForm.cleanMinutes }
+                          : item
+                      );
+                    } else {
+                      // Add new
+                      const newId = `${managingHotel.id}_rt_${Date.now()}`;
+                      updatedTypes.push({
+                        id: newId,
+                        name: rtForm.name,
+                        cleanMinutes: rtForm.cleanMinutes
+                      });
+                    }
+
+                    const updated: HotelType = {
+                      ...managingHotel,
+                      roomTypes: updatedTypes
+                    };
+                    await targetDb.updateHotel(updated);
+                    setManagingHotel(updated);
+                    if (refreshHotels) await refreshHotels();
+                    setRtModalOpen(false);
+                    addToast(
+                      language === 'vi' ? 'Đã lưu cấu hình loại phòng!' : language === 'ja' ? '部屋タイプ設定を保存しました！' : 'Saved room type configuration!',
+                      'success'
+                    );
+                  } catch (err) {
+                    console.error(err);
+                    addToast('Failed to save room type', 'warning');
+                  }
+                }}
+                style={{ maxWidth: '400px' }}
+              >
+                <h3 className="modal-title">
+                  {editingRt
+                    ? (language === 'vi' ? 'Sửa loại phòng' : language === 'ja' ? '部屋タイプを編集' : 'Edit Room Type')
+                    : (language === 'vi' ? 'Thêm loại phòng' : language === 'ja' ? '部屋タイプを追加' : 'Add Room Type')}
+                </h3>
+
+                <div className="form-group">
+                  <label className="form-label">{language === 'vi' ? 'Tên Loại Phòng' : language === 'ja' ? '部屋タイプ名' : 'Room Type Name'}</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    required
+                    value={rtForm.name}
+                    onChange={(e) => setRtForm({ ...rtForm, name: e.target.value })}
+                    placeholder="e.g. Twin, Single, Deluxe..."
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    {language === 'vi' ? 'Thời gian dọn trung bình (phút)' : language === 'ja' ? '目標清掃時間 (分)' : 'Target Duration (minutes)'}
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={300}
+                    className="form-input"
+                    required
+                    value={rtForm.cleanMinutes}
+                    onChange={(e) => setRtForm({ ...rtForm, cleanMinutes: Number(e.target.value) })}
+                  />
+                </div>
+
+                <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setRtModalOpen(false)}>
+                    {getTranslation(language, 'cancel')}
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    {getTranslation(language, 'save')}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
       )}
 
       {/* SUB NEW STAFF DIALOG MODAL */}
@@ -1753,15 +2584,25 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                 value={roomForm.type}
                 onChange={e => setRoomForm({ ...roomForm, type: e.target.value })}
               >
-                <option value="1 Bed">{language === 'vi' ? '1 Giường' : language === 'ja' ? '1ベッド' : '1 Bed'}</option>
-                <option value="2 Beds">{language === 'vi' ? '2 Giường' : language === 'ja' ? '2ベッド' : '2 Beds'}</option>
-                <option value="3 Beds">{language === 'vi' ? '3 Giường' : language === 'ja' ? '3ベッド' : '3 Beds'}</option>
-                <option value="4 Beds">{language === 'vi' ? '4 Giường' : language === 'ja' ? '4ベッド' : '4 Beds'}</option>
-                <option value="Minpaku">{language === 'vi' ? 'Minpaku / Homestay' : language === 'ja' ? '民泊 / Homestay' : 'Minpaku / Homestay'}</option>
-                <option value="Single">Single</option>
-                <option value="Double">Double</option>
-                <option value="Twin">Twin</option>
-                <option value="Suite">Suite</option>
+                {managingHotel.roomTypes && managingHotel.roomTypes.length > 0 ? (
+                  managingHotel.roomTypes.map(rt => (
+                    <option key={rt.id} value={rt.name}>
+                      {rt.name} ({rt.cleanMinutes} {language === 'vi' ? 'phút' : language === 'ja' ? '分' : 'mins'})
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="1 Bed">{language === 'vi' ? '1 Giường' : language === 'ja' ? '1ベッド' : '1 Bed'}</option>
+                    <option value="2 Beds">{language === 'vi' ? '2 Giường' : language === 'ja' ? '2ベッド' : '2 Beds'}</option>
+                    <option value="3 Beds">{language === 'vi' ? '3 Giường' : language === 'ja' ? '3ベッド' : '3 Beds'}</option>
+                    <option value="4 Beds">{language === 'vi' ? '4 Giường' : language === 'ja' ? '4ベッド' : '4 Beds'}</option>
+                    <option value="Minpaku">{language === 'vi' ? 'Minpaku / Homestay' : language === 'ja' ? '民泊 / Homestay' : 'Minpaku / Homestay'}</option>
+                    <option value="Single">Single</option>
+                    <option value="Double">Double</option>
+                    <option value="Twin">Twin</option>
+                    <option value="Suite">Suite</option>
+                  </>
+                )}
               </select>
             </div>
 
@@ -1787,6 +2628,18 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                 onChange={e => setRoomForm({ ...roomForm, notes: e.target.value })}
                 placeholder="잊어버린 물건, 시설 고장 등..."
               />
+            </div>
+
+            <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '1rem 0' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={roomForm.priority === 'rush'}
+                  onChange={e => setRoomForm({ ...roomForm, priority: e.target.checked ? 'rush' : 'normal' })}
+                  style={{ width: '16px', height: '16px' }}
+                />
+                <span>🔥 {language === 'vi' ? 'Phòng dọn gấp / RUSH' : language === 'ja' ? '優先清掃 / RUSH' : 'Priority Clean / RUSH'}</span>
+              </label>
             </div>
 
             <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
