@@ -119,15 +119,17 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
 
   const handleExportCSV = () => {
     const headers = language === 'vi' 
-      ? ["Số phòng", "Tầng", "Nhân viên dọn", "Bắt đầu", "Kết thúc", "Thời gian dọn (phút)", "Ghi chú", "Lỗi phát hiện", "Hình ảnh"]
+      ? ["Số phòng", "Tầng", "Nhân viên dọn", "Người duyệt", "Thời gian duyệt", "Bắt đầu", "Kết thúc", "Thời gian dọn (phút)", "Ghi chú", "Lỗi phát hiện", "Hình ảnh"]
       : language === 'ja'
-        ? ["部屋番号", "階", "清掃スタッフ", "開始時間", "完了時間", "清掃時間 (分)", "メモ", "検出された欠陥", "写真"]
-        : ["Room Number", "Floor", "Cleaner Name", "Start Time", "End Time", "Duration (mins)", "Notes", "Defects Detected", "Photo"];
+        ? ["部屋番号", "階", "清掃スタッフ", "検査者", "検査時間", "開始時間", "完了時間", "清掃時間 (分)", "メモ", "検出された欠陥", "写真"]
+        : ["Room Number", "Floor", "Cleaner Name", "Checked By", "Checked At", "Start Time", "End Time", "Duration (mins)", "Notes", "Defects Detected", "Photo"];
 
     const rows = sortedLogs.map(log => {
       const errorsStr = log.errors && log.errors.length > 0 ? log.errors.join('; ') : '';
       const noteStr = log.notes || '';
       const photoStr = log.photoAfter ? (log.photoAfter.startsWith('data:') ? 'Image uploaded' : log.photoAfter) : '';
+      const checkerName = log.checkedBy || '';
+      const checkerTime = log.checkedAt ? new Date(log.checkedAt).toLocaleTimeString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US') : '';
       
       const formatTime = (isoStr: string) => {
         try {
@@ -141,6 +143,8 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
         log.roomNumber,
         `${log.floor}F`,
         log.cleanerName,
+        checkerName,
+        checkerTime,
         formatTime(log.startedAt),
         formatTime(log.endedAt),
         log.durationMinutes.toString(),
@@ -307,6 +311,7 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
                 <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomNumber')}</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Người duyệt' : language === 'ja' ? '検査者' : 'Checked By'}</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'startCleaning')}</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'finishCleaning')}</th>
                   <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Thời lượng' : language === 'ja' ? '清掃時間' : 'Duration'}</th>
@@ -321,6 +326,18 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
                       {log.roomNumber} <span style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.6 }}>({log.floor}F)</span>
                     </td>
                     <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{log.cleanerName}</td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>
+                      {log.checkedBy ? (
+                        <span style={{ fontWeight: 500 }}>
+                          {log.checkedBy}
+                          <span style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>
+                            {new Date(log.checkedAt!).toLocaleTimeString()}
+                          </span>
+                        </span>
+                      ) : (
+                        <span style={{ opacity: 0.4 }}>—</span>
+                      )}
+                    </td>
                     <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.startedAt).toLocaleTimeString()}</td>
                     <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.endedAt).toLocaleTimeString()}</td>
                     <td style={{ padding: '0.75rem 0.5rem' }}>
@@ -364,6 +381,11 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
                 <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
                   <strong>{getTranslation(language, 'cleanerName')}:</strong> {log.cleanerName}
                 </div>
+                {log.checkedBy && (
+                  <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
+                    <strong>{language === 'vi' ? 'Người duyệt:' : language === 'ja' ? '検査者:' : 'Checked By:'}</strong> {log.checkedBy} <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>({new Date(log.checkedAt!).toLocaleTimeString()})</span>
+                  </div>
+                )}
                 <div style={{ fontSize: '0.8rem', opacity: 0.8, display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
                   <span>🕒 {language === 'vi' ? 'Bắt đầu' : language === 'ja' ? '開始' : 'Start'}: {new Date(log.startedAt).toLocaleTimeString()}</span>
                   <span>⌛ {language === 'vi' ? 'Kết thúc' : language === 'ja' ? '完了' : 'Finish'}: {new Date(log.endedAt).toLocaleTimeString()}</span>

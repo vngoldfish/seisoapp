@@ -43,6 +43,8 @@ export interface CleaningLog {
   photoAfter?: string; // base64 or placeholder
   notes?: string;
   errors?: string[];
+  checkedBy?: string;
+  checkedAt?: string;
 }
 
 export interface RoomTypeConfig {

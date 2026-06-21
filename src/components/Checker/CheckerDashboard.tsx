@@ -400,11 +400,13 @@ export const CheckerDashboard: React.FC = () => {
         updatedBy: currentUser.name
       });
 
-      // Update log with defects
+      // Update log with defects and checker info
       if (roomLog) {
         await db.updateLog({
           ...roomLog,
-          errors: defects
+          errors: defects,
+          checkedBy: currentUser.name,
+          checkedAt: new Date().toISOString()
         });
       }
 
@@ -2287,11 +2289,12 @@ export const CheckerDashboard: React.FC = () => {
                 <>
                   {/* Desktop view: Table */}
                   <div className="desktop-only-block" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
+                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
                       <thead>
                         <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
                           <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomNumber')}</th>
                           <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
+                          <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Người duyệt' : language === 'ja' ? '検査者' : 'Checked By'}</th>
                           <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Bắt đầu' : 'Start'}</th>
                           <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Kết thúc' : 'Finish'}</th>
                           <th style={{ padding: '0.75rem 0.5rem' }}>Duration</th>
@@ -2308,6 +2311,18 @@ export const CheckerDashboard: React.FC = () => {
                                 {log.roomNumber} <span style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.6 }}>({log.floor}F)</span>
                               </td>
                               <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{log.cleanerName}</td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>
+                                {log.checkedBy ? (
+                                  <span style={{ fontWeight: 500 }}>
+                                    {log.checkedBy}
+                                    <span style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>
+                                      {new Date(log.checkedAt!).toLocaleTimeString()}
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span style={{ opacity: 0.4 }}>—</span>
+                                )}
+                              </td>
                               <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.startedAt).toLocaleTimeString()}</td>
                               <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.endedAt).toLocaleTimeString()}</td>
                               <td style={{ padding: '0.75rem 0.5rem' }}>
@@ -2344,6 +2359,11 @@ export const CheckerDashboard: React.FC = () => {
                           <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
                             <strong>{getTranslation(language, 'cleanerName')}:</strong> {log.cleanerName}
                           </div>
+                          {log.checkedBy && (
+                            <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
+                              <strong>{language === 'vi' ? 'Người duyệt:' : language === 'ja' ? '検査者:' : 'Checked By:'}</strong> {log.checkedBy} <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>({new Date(log.checkedAt!).toLocaleTimeString()})</span>
+                            </div>
+                          )}
                           <div style={{ fontSize: '0.8rem', opacity: 0.8, display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
                             <span>🕒 {language === 'vi' ? 'Bắt đầu' : 'Start'}: {new Date(log.startedAt).toLocaleTimeString()}</span>
                             <span>⌛ {language === 'vi' ? 'Kết thúc' : 'Finish'}: {new Date(log.endedAt).toLocaleTimeString()}</span>

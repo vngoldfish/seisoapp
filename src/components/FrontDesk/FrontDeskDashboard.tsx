@@ -454,11 +454,13 @@ export const FrontDeskDashboard: React.FC = () => {
         updatedBy: currentUser.name
       });
 
-      // Update log with defects
+      // Update log with defects and checker info
       if (roomLog) {
         await db.updateLog({
           ...roomLog,
-          errors: defects
+          errors: defects,
+          checkedBy: currentUser.name,
+          checkedAt: new Date().toISOString()
         });
       }
 

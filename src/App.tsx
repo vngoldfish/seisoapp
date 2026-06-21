@@ -326,9 +326,9 @@ const MainApp: React.FC = () => {
       }
     } else {
       if (isPortal || isCurrentPathAdmin) {
-        if (currentUser.hotelIds && currentUser.hotelIds.length > 0) {
+        if (currentUser.hotelIds && currentUser.hotelIds.length === 1) {
           selectHotel(currentUser.hotelIds[0]);
-        } else {
+        } else if (!currentUser.hotelIds || currentUser.hotelIds.length === 0) {
           selectHotel('portal');
         }
       }
