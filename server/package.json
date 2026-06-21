@@ -1,0 +1,17 @@
+{
+  "name": "seisoapp-backend",
+  "version": "1.0.0",
+  "description": "Backend server for seisoapp OUTINKS, connecting to PostgreSQL and enabling WebSockets real-time sync",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pg": "^8.11.5",
+    "socket.io": "^4.7.5"
+  }
+}

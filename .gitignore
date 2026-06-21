@@ -30,4 +30,6 @@ dist-ssr
 *.sln
 *.sw?
 .eslintcache
+.claude/
+
 

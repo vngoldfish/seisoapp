@@ -145,6 +145,9 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '500px' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
+                <th style={{ padding: '0.75rem 0.5rem', width: '50px', opacity: 0.7 }}>
+                  {language === 'vi' ? 'STT' : 'No.'}
+                </th>
                 <th 
                   style={{ padding: '0.75rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
                   onClick={() => {
@@ -166,12 +169,16 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
                   {getTranslation(language, 'hotelName')} {hotelSortBy === 'name' ? (hotelSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
                 </th>
                 <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'description')}</th>
+                <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Trạng thái' : language === 'ja' ? 'ステータス' : 'Status'}</th>
                 <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'action')}</th>
               </tr>
             </thead>
             <tbody>
-              {processedHotelsData.displayed.map(h => (
+              {processedHotelsData.displayed.map((h, idx) => (
                 <tr key={h.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                  <td style={{ padding: '0.75rem 0.5rem', opacity: 0.7 }}>
+                    {((hotelPage - 1) * hotelPerPage) + idx + 1}
+                  </td>
                   <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>{h.id}</td>
                   <td 
                     style={{ padding: '0.75rem 0.5rem', fontWeight: 600, color: 'var(--primary-color)', cursor: 'pointer' }}
@@ -185,6 +192,17 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
                     {h.name}
                   </td>
                   <td style={{ padding: '0.75rem 0.5rem', opacity: 0.8 }}>{h.description || '-'}</td>
+                  <td style={{ padding: '0.75rem 0.5rem' }}>
+                    {h.active !== false ? (
+                      <span className="badge badge-clean" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.2)' }}>
+                        {language === 'vi' ? 'Hoạt động' : language === 'ja' ? 'アクティブ' : 'Active'}
+                      </span>
+                    ) : (
+                      <span className="badge badge-clean" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+                        {language === 'vi' ? 'K.Hoạt động' : language === 'ja' ? '非アクティブ' : 'Inactive'}
+                      </span>
+                    )}
+                  </td>
                   <td style={{ padding: '0.75rem 0.5rem', display: 'flex', gap: '0.5rem' }}>
                     <button 
                       className="btn btn-primary btn-sm" 
@@ -232,9 +250,20 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
                 </span>
                 <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{h.id}</span>
               </div>
-              {h.description && (
-                <p style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.75rem' }}>{h.description}</p>
-              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <p style={{ fontSize: '0.8rem', opacity: 0.8, margin: 0 }}>{h.description || ''}</p>
+                <div>
+                  {h.active !== false ? (
+                    <span className="badge badge-clean" style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.2)' }}>
+                      {language === 'vi' ? 'Hoạt động' : language === 'ja' ? 'アクティブ' : 'Active'}
+                    </span>
+                  ) : (
+                    <span className="badge badge-clean" style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+                      {language === 'vi' ? 'K.Hoạt động' : language === 'ja' ? '非アクティブ' : 'Inactive'}
+                    </span>
+                  )}
+                </div>
+              </div>
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
                 <button 
                   className="btn btn-primary btn-sm"

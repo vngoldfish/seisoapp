@@ -4,13 +4,86 @@ import { getTranslation } from '../../i18n/translations';
 import { db } from '../../db/firebaseDB';
 import type { Room, CleaningLog, User } from '../../db/dbInterface';
 import { getTodayDateString } from '../../db/localDB';
+import { getDateLockedMessage, isDateLockedError } from '../../utils/errors';
 import { 
   Hotel, CheckCircle, AlertTriangle, Search, 
   ClipboardList, CheckCircle2, LayoutDashboard, Clock, Building, Users,
   Sun, Moon, LogOut, User as UserIcon, LayoutGrid, List,
-  Maximize2, Minimize2, ChevronLeft, ChevronRight
+  Maximize2, Minimize2, ChevronLeft, ChevronRight,
+  Camera, Check, Sparkles
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+
+const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 320;
+        const MAX_HEIGHT = 320;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Canvas context not available'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        resolve(dataUrl);
+      };
+      img.onerror = () => reject(new Error('Image load error'));
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('File read error'));
+    reader.readAsDataURL(file);
+  });
+};
+
+const translateDefect = (defect: string, lang: string): string => {
+  if (!defect) return '';
+  if (lang === 'vi') return defect;
+  
+  if (defect.startsWith('Lỗi khác:')) {
+    const text = defect.substring(9).trim();
+    if (lang === 'ja') return `その他指摘: ${text}`;
+    return `Other defect: ${text}`;
+  }
+  
+  switch (defect) {
+    case 'Chưa lau sàn / hút bụi':
+      return lang === 'ja' ? '床掃除・掃除機未実施' : 'Floor dusty/dirty';
+    case 'Thiếu khăn / đồ tiêu hao':
+      return lang === 'ja' ? 'アメニティ・タオル不足' : 'Missing towels/amenities';
+    case 'Bẩn nhà vệ sinh / bồn tắm':
+      return lang === 'ja' ? '水回り・浴室汚れ' : 'Dirty bathroom';
+    case 'Ga giường nhăn / bẩn':
+      return lang === 'ja' ? 'シーツしわ・汚れ' : 'Wrinkled/dirty sheet';
+    case 'Chưa đổ rác':
+      return lang === 'ja' ? 'ゴミ未回収' : 'Trash not emptied';
+    case 'Còn bụi bẩn trên bàn / tủ':
+      return lang === 'ja' ? '家具ほこり残り' : 'Dust on furniture';
+    default:
+      return defect;
+  }
+};
 
 const getVisiblePages = (current: number, total: number) => {
   if (total <= 5) {
@@ -263,7 +336,7 @@ export const CheckerDashboard: React.FC = () => {
 
   // Filter States
   const [floorFilter, setFloorFilter] = useState<string>('all');
-  const [checkFilter, setCheckFilter] = useState<'all' | 'pending' | 'approved'>('all');
+    const [checkFilter, setCheckFilter] = useState<'all' | 'pending' | 'approved'>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Modal / Inspection state
@@ -281,8 +354,34 @@ export const CheckerDashboard: React.FC = () => {
   const [defectDust, setDefectDust] = useState(false);
   const [defectOther, setDefectOther] = useState(false);
   const [defectOtherText, setDefectOtherText] = useState('');
+  const [checkerNotes, setCheckerNotes] = useState('');
+  const [viewedCleanerNotes, setViewedCleanerNotes] = useState(false);
+
+  // Housekeeper-like cleaning states
+  const [cleaningNotes, setCleaningNotes] = useState('');
+  const [cleaningPhoto, setCleaningPhoto] = useState<string | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [showSourceChoice, setShowSourceChoice] = useState(false);
+  const [activeHotel, setActiveHotel] = useState<any>(null);
 
   useEffect(() => {
+    const fetchHotel = async () => {
+      try {
+        const hotelsList = await db.getHotels();
+        const hotel = hotelsList.find(h => h.id === hotelId);
+        setActiveHotel(hotel || null);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    if (hotelId) {
+      fetchHotel();
+    }
+  }, [hotelId]);
+
+  useEffect(() => {
+    db.setDate(activeDate);
+
     // Subscribe to room updates
     const unsubscribeRooms = db.subscribeRooms((updatedRooms) => {
       setRooms(updatedRooms);
@@ -297,7 +396,7 @@ export const CheckerDashboard: React.FC = () => {
       unsubscribeRooms();
       unsubscribeLogs();
     };
-  }, [hotelId]);
+  }, [hotelId, activeDate]);
 
   // Fetch cleaning log for the selected room when the modal opens
   useEffect(() => {
@@ -310,8 +409,12 @@ export const CheckerDashboard: React.FC = () => {
     setDefectDust(false);
     setDefectOther(false);
     setDefectOtherText('');
+    setCheckerNotes('');
+    setViewedCleanerNotes(false);
 
     if (selectedRoom) {
+      setCheckerNotes(selectedRoom.checkerNotes || '');
+      setViewedCleanerNotes(!!selectedRoom.viewedCleanerNotes);
       const activeDatePrefix = activeDate; // e.g. "2026-06-20"
       const matchingLog = logs
         .filter(log => log.roomId === selectedRoom.id && log.endedAt.startsWith(activeDatePrefix))
@@ -324,6 +427,266 @@ export const CheckerDashboard: React.FC = () => {
     setShowRecleanInput(false);
   }, [selectedRoom, logs, activeDate]);
 
+  const getFormattedRoomType = (type: string) => {
+    if (!type) return '';
+    const t = type.toLowerCase().trim();
+    if (t === '1 bed') return language === 'vi' ? '🛏️ 1 Giường' : language === 'ja' ? '🛏️ 1ベッド' : '🛏️ 1 Bed';
+    if (t === '2 beds') return language === 'vi' ? '🛏️🛏️ 2 Giường' : language === 'ja' ? '🛏️🛏️ 2ベッド' : '🛏️🛏️ 2 Beds';
+    if (t === '3 beds') return language === 'vi' ? '🛏️🛏️🛏️ 3 Giường' : language === 'ja' ? '🛏️🛏️🛏️ 3ベッド' : '🛏️🛏️🛏️ 3 Beds';
+    if (t === '4 beds') return language === 'vi' ? '🛏️🛏️🛏️🛏️ 4 Giường' : language === 'ja' ? '🛏️🛏️🛏️🛏️ 4ベッド' : '🛏️🛏️🛏️🛏️ 4 Beds';
+    if (t === 'minpaku') return language === 'vi' ? '🏡 Homestay / Minpaku' : language === 'ja' ? '🏡 民泊' : '🏡 Minpaku';
+    return type;
+  };
+
+  const getTargetCleanMinutes = (roomType: string) => {
+    if (!activeHotel) return 30;
+    if (activeHotel.roomTypes) {
+      const typeConfig = activeHotel.roomTypes.find((t: any) => t.name === roomType || t.id === roomType);
+      if (typeConfig && typeConfig.cleanMinutes > 0) {
+        return typeConfig.cleanMinutes;
+      }
+    }
+    return activeHotel.defaultCleanMinutes || 30;
+  };
+
+  const triggerCameraMock = () => {
+    setCameraActive(true);
+    setShowSourceChoice(false);
+    setTimeout(() => {
+      const mockPhotos = [
+        'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=400&q=80',
+        'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=400&q=80',
+        'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=400&q=80'
+      ];
+      const randomPhoto = mockPhotos[Math.floor(Math.random() * mockPhotos.length)];
+      setCleaningPhoto(randomPhoto);
+      setCameraActive(false);
+      addToast(
+        language === 'vi' ? 'Đã lấy ảnh mẫu!' : language === 'ja' ? 'デモ写真を使用しました！' : 'Demo photo applied!',
+        'success'
+      );
+    }, 800);
+  };
+
+  const triggerRealCamera = () => {
+    const fileInput = document.getElementById('camera-file-input-checker');
+    if (fileInput) {
+      fileInput.click();
+    }
+  };
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setCameraActive(true);
+    setShowSourceChoice(false);
+    try {
+      const compressedBase64 = await compressImage(file);
+      setCleaningPhoto(compressedBase64);
+      addToast(
+        language === 'vi' ? 'Đã tải ảnh & nén thành công!' : language === 'ja' ? '写真をアップロードし、圧縮しました！' : 'Photo uploaded and compressed!',
+        'success'
+      );
+    } catch (err) {
+      console.error(err);
+      addToast(
+        language === 'vi' ? 'Lỗi xử lý ảnh!' : language === 'ja' ? '画像処理エラー！' : 'Error processing image!',
+        'warning'
+      );
+    } finally {
+      setCameraActive(false);
+      e.target.value = '';
+    }
+  };
+
+  const showMutationError = (error: unknown, fallback: string) => {
+    console.error(error);
+    addToast(isDateLockedError(error) ? getDateLockedMessage(language) : fallback, 'warning');
+  };
+
+  const submitFinishedCleaning = async () => {
+    if (!selectedRoom || !currentUser) return;
+    try {
+      const endedAt = new Date().toISOString();
+      const durationMinutes = getTargetCleanMinutes(selectedRoom.type);
+      const startedAt = new Date(Date.now() - durationMinutes * 60000).toISOString();
+      
+      await db.createLog({
+        roomId: selectedRoom.id,
+        roomNumber: selectedRoom.roomNumber,
+        floor: selectedRoom.floor,
+        cleanerId: currentUser.id,
+        cleanerName: currentUser.name,
+        startedAt,
+        endedAt,
+        durationMinutes,
+        notes: cleaningNotes || 'Cleaned & inspected',
+        photoAfter: cleaningPhoto || undefined
+      });
+
+      await db.updateRoomStatus(selectedRoom.id, 'clean', currentUser.name, currentUser.id, currentUser.name);
+
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.8 }
+      });
+
+      addToast(getTranslation(language, 'successClean'), 'success');
+      setSelectedRoom(null);
+    } catch (e) {
+      showMutationError(e, 'Error finishing cleaning report');
+    }
+  };
+
+  const submitHangingDNDOnly = async () => {
+    if (!selectedRoom || !currentUser) return;
+    try {
+      const endedAt = new Date().toISOString();
+      const durationMinutes = getTargetCleanMinutes(selectedRoom.type);
+      const startedAt = new Date(Date.now() - durationMinutes * 60000).toISOString();
+      
+      await db.createLog({
+        roomId: selectedRoom.id,
+        roomNumber: selectedRoom.roomNumber,
+        floor: selectedRoom.floor,
+        cleanerId: currentUser.id,
+        cleanerName: currentUser.name,
+        startedAt,
+        endedAt,
+        durationMinutes,
+        notes: cleaningNotes ? cleaningNotes + ' - Chỉ cần treo đồ (DND)' : 'Chỉ cần treo đồ (DND)',
+        photoAfter: cleaningPhoto || undefined
+      });
+
+      await db.updateRoom({
+        ...selectedRoom,
+        status: 'clean',
+        isChecked: false,
+        checkedBy: undefined,
+        checkedAt: undefined,
+        photoDefect: undefined,
+        notes: selectedRoom.notes ? selectedRoom.notes + ' - Chỉ cần treo đồ (DND)' : 'Chỉ cần treo đồ (DND)',
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser.name,
+        assignedTo: currentUser.id,
+        cleanerName: currentUser.name
+      });
+
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.8 }
+      });
+
+      addToast(
+        language === 'vi' 
+          ? 'Đã báo cáo chỉ cần treo đồ!' 
+          : language === 'ja'
+            ? 'アメニティ吊り下げのみと報告しました！'
+            : 'Reported hang amenities only!',
+        'success'
+      );
+      setSelectedRoom(null);
+    } catch (e) {
+      showMutationError(e, 'Error saving report');
+    }
+  };
+
+  const submitDNDRoom = async () => {
+    if (!selectedRoom || !currentUser) return;
+    try {
+      const endedAt = new Date().toISOString();
+      const durationMinutes = 0;
+      const startedAt = endedAt;
+      
+      await db.createLog({
+        roomId: selectedRoom.id,
+        roomNumber: selectedRoom.roomNumber,
+        floor: selectedRoom.floor,
+        cleanerId: currentUser.id,
+        cleanerName: currentUser.name,
+        startedAt,
+        endedAt,
+        durationMinutes,
+        notes: cleaningNotes ? cleaningNotes + ' - Khách treo DND (DD)' : 'Khách treo DND (DD)',
+        photoAfter: cleaningPhoto || undefined
+      });
+
+      await db.updateRoom({
+        ...selectedRoom,
+        status: 'dnd',
+        isChecked: false,
+        checkedBy: undefined,
+        checkedAt: undefined,
+        photoDefect: undefined,
+        notes: selectedRoom.notes ? selectedRoom.notes + ' - Khách treo DND (DD)' : 'Khách treo DND (DD)',
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser.name,
+        assignedTo: currentUser.id,
+        cleanerName: currentUser.name
+      });
+
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.8 }
+      });
+
+      addToast(
+        language === 'vi' 
+          ? 'Đã chuyển trạng thái phòng thành DND (DD)!' 
+          : language === 'ja'
+            ? '部屋のステータスをDNDに変更しました！'
+            : 'Room status set to DND successfully!',
+        'success'
+      );
+      setSelectedRoom(null);
+    } catch (e) {
+      showMutationError(e, 'Error saving DND room status');
+    }
+  };
+
+  const handleRevertDND = async () => {
+    if (!selectedRoom || !currentUser) return;
+    if (isLocked) {
+      addToast(
+        language === 'vi'
+          ? 'Ngày này đã chốt hoàn tất, không thể chỉnh sửa dữ liệu.'
+          : language === 'ja'
+            ? 'この日付はすでに締め切られているため、データを変更できません。'
+            : 'This date is finalized and locked. No changes are allowed.',
+        'warning'
+      );
+      return;
+    }
+    try {
+      await db.updateRoom({
+        ...selectedRoom,
+        status: 'dirty',
+        isChecked: false,
+        checkedBy: undefined,
+        checkedAt: undefined,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser.name
+      });
+
+      addToast(
+        language === 'vi' 
+          ? `Đã hủy trạng thái DND và chuyển phòng ${selectedRoom.roomNumber} về cần dọn.` 
+          : language === 'ja'
+            ? `DND状態を取り消し、部屋 ${selectedRoom.roomNumber} を要清掃に戻しました。`
+            : `Reverted DND status and set room ${selectedRoom.roomNumber} to dirty.`,
+        'success'
+      );
+      setSelectedRoom(null);
+    } catch (e) {
+      console.error(e);
+      addToast('Error reverting DND room status', 'warning');
+    }
+  };
+
   const handleRoomCardClick = (room: Room) => {
     setSelectedRoom(room);
     if (gridMode === 'setup') {
@@ -334,6 +697,13 @@ export const CheckerDashboard: React.FC = () => {
         notes: room.notes || ''
       });
       setSetupModalOpen(true);
+    } else {
+      if (room.status === 'dirty' || room.status === 'cleaning' || room.status === 'eco' || room.status === 'dnd' || (room.isStay && room.status === 'occupied')) {
+        setCleaningNotes('');
+        setCleaningPhoto(null);
+        setCameraActive(false);
+        setShowSourceChoice(false);
+      }
     }
   };
 
@@ -423,12 +793,19 @@ export const CheckerDashboard: React.FC = () => {
     try {
       const defects = getSelectedDefects();
 
+      const isDndHanging = selectedRoom.isStay && selectedRoom.notes && (
+        selectedRoom.notes.includes('Chỉ cần treo đồ') || selectedRoom.notes.includes('DND')
+      );
+
       // Mark as checked (approved)
       await db.updateRoom({
         ...selectedRoom,
+        status: isDndHanging ? 'dnd' : selectedRoom.status,
         isChecked: true,
         checkedBy: currentUser.name,
         checkedAt: new Date().toISOString(),
+        checkerNotes: checkerNotes.trim() || undefined,
+        viewedCleanerNotes: viewedCleanerNotes,
         updatedAt: new Date().toISOString(),
         updatedBy: currentUser.name
       });
@@ -439,7 +816,9 @@ export const CheckerDashboard: React.FC = () => {
           ...roomLog,
           errors: defects,
           checkedBy: currentUser.name,
-          checkedAt: new Date().toISOString()
+          checkedAt: new Date().toISOString(),
+          checkerNotes: checkerNotes.trim() || undefined,
+          viewedCleanerNotes: viewedCleanerNotes
         });
       }
 
@@ -528,6 +907,44 @@ export const CheckerDashboard: React.FC = () => {
     }
   };
 
+  const handleRevertEco = async () => {
+    if (!selectedRoom || !currentUser) return;
+    if (isLocked) {
+      addToast(
+        language === 'vi'
+          ? 'Ngày này đã chốt hoàn tất, không thể chỉnh sửa dữ liệu.'
+          : language === 'ja'
+            ? 'この日付はすでに締め切られているため、データを変更できません。'
+            : 'This date is finalized and locked. No changes are allowed.',
+        'warning'
+      );
+      return;
+    }
+    try {
+      await db.updateRoom({
+        ...selectedRoom,
+        isChecked: false,
+        checkedBy: undefined,
+        checkedAt: undefined,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser.name
+      });
+
+      addToast(
+        language === 'vi' 
+          ? `Đã hủy duyệt phòng ${selectedRoom.roomNumber}` 
+          : language === 'ja'
+            ? `部屋 ${selectedRoom.roomNumber} の承認を取り消しました`
+            : `Reverted approval status for room ${selectedRoom.roomNumber}`,
+        'success'
+      );
+      setSelectedRoom(null);
+    } catch (e) {
+      console.error(e);
+      addToast('Error reverting room status', 'warning');
+    }
+  };
+
   // Unique floors list for dropdown filter
   const floors = useMemo(() => {
     return Array.from(new Set(rooms.map(r => r.floor))).sort((a, b) => a - b);
@@ -543,7 +960,7 @@ export const CheckerDashboard: React.FC = () => {
       if (checkFilter === 'pending') {
         matchesCheck = room.status === 'clean' && !room.isChecked;
       } else if (checkFilter === 'approved') {
-        matchesCheck = room.status === 'clean' && !!room.isChecked;
+        matchesCheck = (room.status === 'clean' || (room.status === 'dnd' && room.isStay)) && !!room.isChecked;
       }
       
       return matchesSearch && matchesFloor && matchesCheck;
@@ -570,7 +987,7 @@ export const CheckerDashboard: React.FC = () => {
       if (checkFilter === 'pending') {
         matchesCheck = room.status === 'clean' && !room.isChecked;
       } else if (checkFilter === 'approved') {
-        matchesCheck = room.status === 'clean' && !!room.isChecked;
+        matchesCheck = (room.status === 'clean' || (room.status === 'dnd' && room.isStay)) && !!room.isChecked;
       }
       
       return matchesSearch && matchesCheck;
@@ -713,9 +1130,9 @@ export const CheckerDashboard: React.FC = () => {
 
   const { totalCleaned, pendingCheck, approvedCheck } = useMemo(() => {
     return {
-      totalCleaned: rooms.filter(r => r.status === 'clean').length,
+      totalCleaned: rooms.filter(r => r.status === 'clean' || r.status === 'eco' || (r.status === 'dnd' && r.isStay && r.isChecked)).length,
       pendingCheck: rooms.filter(r => r.status === 'clean' && !r.isChecked).length,
-      approvedCheck: rooms.filter(r => r.status === 'clean' && r.isChecked).length
+      approvedCheck: rooms.filter(r => (r.status === 'clean' || (r.status === 'dnd' && r.isStay)) && r.isChecked).length
     };
   }, [rooms]);
 
@@ -2279,45 +2696,63 @@ export const CheckerDashboard: React.FC = () => {
                   paddingTop: '0.75rem' 
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.18)', backgroundColor: '#f1f5f9' }}></div>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.18)', backgroundColor: '#ffffff' }}></div>
                     <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                      {language === 'vi' ? 'Phòng trống (Trắng nhạt)' : language === 'ja' ? '空室 (薄白)' : 'Vacant (Off-White)'}
+                      {language === 'vi' ? 'Phòng trống (Trắng)' : language === 'ja' ? '空室 (白)' : 'Vacant (White)'}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#ef4444' }}></div>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#334155', border: '1px solid #1e293b' }}></div>
                     <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                      {language === 'vi' ? 'Phòng out cần dọn (Đỏ)' : language === 'ja' ? 'アウト清掃必要 (赤)' : 'Checkout Dirty (Red)'}
+                      {language === 'vi' ? 'Sửa chữa (Đen nhạt)' : language === 'ja' ? '故障・修繕中 (薄黒)' : 'Maintenance (Charcoal)'}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #ef4444 50%, #38bdf8 50%)' }}></div>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#22c55e', border: '1px solid #16a34a' }}></div>
                     <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                      {language === 'vi' ? 'Vệ sinh xong (Đỏ / Xanh da trời)' : language === 'ja' ? '清掃完了 (赤 / 水色)' : 'Cleaned (Red / Sky Blue)'}
+                      {language === 'vi' ? 'Phòng ECO chưa check (Xanh lá)' : language === 'ja' ? 'ECO未検査 (緑)' : 'ECO Unchecked (Green)'}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #38bdf8 50%, #22c55e 50%)' }}></div>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #22c55e 50%, #38bdf8 50%)', border: '1px solid #38bdf8' }}></div>
                     <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                      {language === 'vi' ? 'Đã duyệt (Xanh da trời / Xanh lá)' : language === 'ja' ? '客室検査合格 (水色 / 緑)' : 'Approved (Sky Blue / Green)'}
+                      {language === 'vi' ? 'Phòng ECO đã check (Xanh lá / Xanh nước biển)' : language === 'ja' ? 'ECO検査済 (緑 / 水色)' : 'ECO Checked (Green / Sky Blue)'}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#8b5cf6' }}></div>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#ef4444', border: '1px solid #dc2626' }}></div>
                     <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                      {language === 'vi' ? 'Phòng stay - dọn (Tím)' : language === 'ja' ? '滞在清掃 (紫)' : 'Stay Room (Purple)'}
+                      {language === 'vi' ? 'Phòng OUT chưa dọn (Đỏ)' : language === 'ja' ? 'OUT未清掃 (赤)' : 'OUT Dirty (Red)'}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #8b5cf6 50%, #38bdf8 50%)' }}></div>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #ef4444 50%, #22c55e 50%)', border: '1px solid #22c55e' }}></div>
                     <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                      {language === 'vi' ? 'Stay DND hoặc Đã dọn (Tím / Xanh da trời)' : language === 'ja' ? '滞在 DND または清掃完了 (紫 / 水色)' : 'Stay DND or Cleaned (Purple / Sky Blue)'}
+                      {language === 'vi' ? 'Phòng OUT dọn xong (Đỏ / Xanh lá)' : language === 'ja' ? 'OUT清掃完了 (赤 / 緑)' : 'OUT Cleaned (Red / Green)'}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#334155' }}></div>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #ef4444 33.33%, #22c55e 33.33% 66.66%, #38bdf8 66.66%)', border: '1px solid #38bdf8' }}></div>
                     <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                      {language === 'vi' ? 'Đang sửa chữa (Đen nhẹ)' : language === 'ja' ? '故障・修繕中 (薄黒)' : 'Maintenance (Charcoal)'}
+                      {language === 'vi' ? 'Phòng OUT đã check (Đỏ / Xanh lá / Xanh nước biển)' : language === 'ja' ? 'OUT検査済 (赤 / 緑 / 水色)' : 'OUT Checked (Red / Green / Sky Blue)'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#8b5cf6', border: '1px solid #7c3aed' }}></div>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                      {language === 'vi' ? 'Phòng STAY chưa dọn (Tím)' : language === 'ja' ? 'STAY未清掃 (紫)' : 'STAY Dirty (Purple)'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #8b5cf6 50%, #22c55e 50%)', border: '1px solid #22c55e' }}></div>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                      {language === 'vi' ? 'Phòng STAY/DD dọn xong (Tím / Xanh lá)' : language === 'ja' ? 'STAY/DD清掃完了 (紫 / 緑)' : 'STAY/DD Cleaned (Purple / Green)'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #8b5cf6 33.33%, #22c55e 33.33% 66.66%, #38bdf8 66.66%)', border: '1px solid #38bdf8' }}></div>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                      {language === 'vi' ? 'Phòng STAY/DD đã check (Tím / Xanh lá / Xanh nước biển)' : language === 'ja' ? 'STAY/DD検査済 (紫 / 緑 / 水色)' : 'STAY/DD Checked (Purple / Green / Sky Blue)'}
                     </span>
                   </div>
                 </div>
@@ -2411,7 +2846,7 @@ export const CheckerDashboard: React.FC = () => {
                                     </div>
                                   ) : (
                                     <>
-                                      {room.isStay && <span className="stay-badge">Stay</span>}
+                                      <span className="stay-badge">{room.status === 'maintenance' ? 'Sửa' : room.status === 'vacant' ? 'Trống' : room.status === 'eco' ? 'ECO' : (room.status === 'dirty' || room.status === 'cleaning' || (room.isStay && room.status === 'occupied')) ? (room.isStay ? 'STAY' : 'OUT') : (room.status === 'dnd' || room.notes?.includes('Chỉ cần treo đồ')) ? 'DD' : room.isStay ? 'STAY' : 'OUT'}</span>
                                       <div>
                                         <div className="room-type-text">{room.type}</div>
                                         <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -2524,7 +2959,7 @@ export const CheckerDashboard: React.FC = () => {
                         {logs
                           .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
                           .map(log => (
-                            <tr key={log.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                             <tr key={log.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
                               <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>
                                 {log.roomNumber} <span style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.6 }}>({log.floor}F)</span>
                               </td>
@@ -2534,28 +2969,54 @@ export const CheckerDashboard: React.FC = () => {
                                   <span style={{ fontWeight: 500 }}>
                                     {log.checkedBy}
                                     <span style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>
-                                      {new Date(log.checkedAt!).toLocaleTimeString()}
+                                      {new Date(log.checkedAt!).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
                                     </span>
                                   </span>
                                 ) : (
                                   <span style={{ opacity: 0.4 }}>—</span>
                                 )}
                               </td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.startedAt).toLocaleTimeString()}</td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.endedAt).toLocaleTimeString()}</td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
+                                {new Date(log.startedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
+                              </td>
+                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
+                                {new Date(log.endedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
+                              </td>
                               <td style={{ padding: '0.75rem 0.5rem' }}>
                                 <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
                               </td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.notes}>
-                                {log.notes}
+                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>
+                                {log.notes && (
+                                  <div style={{ marginBottom: '0.25rem' }}>
+                                    <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>🧹 {language === 'vi' ? 'Ghi chú NV:' : language === 'ja' ? '清掃員メモ:' : 'Cleaner Notes:'}</span> {log.notes}
+                                  </div>
+                                )}
+                                {log.checkerNotes && (
+                                  <div style={{ marginBottom: '0.25rem' }}>
+                                    <span style={{ fontSize: '0.75rem', opacity: 0.6, color: 'var(--status-maintenance)' }}>🔍 {language === 'vi' ? 'Người check:' : language === 'ja' ? '指摘メモ:' : 'Checker Notes:'}</span> {log.checkerNotes}
+                                  </div>
+                                )}
+                                {log.errors && log.errors.length > 0 ? (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.15rem', marginTop: '0.25rem' }}>
+                                    {log.errors.map((e, idx) => (
+                                      <span key={idx} style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '3px' }}>
+                                        {translateDefect(e, language)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : log.checkedBy ? (
+                                  <div style={{ fontSize: '0.75rem', color: 'var(--status-clean)', fontWeight: 500, marginTop: '0.25rem' }}>
+                                    ✓ {language === 'vi' ? 'Đạt 100%' : language === 'ja' ? '100%合格' : 'Passed 100%'}
+                                  </div>
+                                ) : null}
                               </td>
                               <td style={{ padding: '0.75rem 0.5rem' }}>
                                 {log.photoAfter ? (
                                   <a href={log.photoAfter} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.8rem', fontWeight: 600 }}>
-                                    View Photo
+                                    {language === 'vi' ? 'Xem ảnh' : language === 'ja' ? '写真を見る' : 'View Photo'}
                                   </a>
                                 ) : (
-                                  <span style={{ opacity: 0.4, fontSize: '0.8rem' }}>No Photo</span>
+                                  <span style={{ opacity: 0.4, fontSize: '0.8rem' }}>{language === 'vi' ? 'Không ảnh' : language === 'ja' ? '写真なし' : 'No Photo'}</span>
                                 )}
                               </td>
                             </tr>
@@ -2579,16 +3040,34 @@ export const CheckerDashboard: React.FC = () => {
                           </div>
                           {log.checkedBy && (
                             <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                              <strong>{language === 'vi' ? 'Người duyệt:' : language === 'ja' ? '検査者:' : 'Checked By:'}</strong> {log.checkedBy} <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>({new Date(log.checkedAt!).toLocaleTimeString()})</span>
+                              <strong>{language === 'vi' ? 'Người duyệt:' : language === 'ja' ? '検査者:' : 'Checked By:'}</strong> {log.checkedBy} <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>({new Date(log.checkedAt!).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })})</span>
                             </div>
                           )}
                           <div style={{ fontSize: '0.8rem', opacity: 0.8, display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
-                            <span>🕒 {language === 'vi' ? 'Bắt đầu' : 'Start'}: {new Date(log.startedAt).toLocaleTimeString()}</span>
-                            <span>⌛ {language === 'vi' ? 'Kết thúc' : 'Finish'}: {new Date(log.endedAt).toLocaleTimeString()}</span>
+                            <span>🕒 {language === 'vi' ? 'Bắt đầu' : 'Start'}: {new Date(log.startedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                            <span>⌛ {language === 'vi' ? 'Kết thúc' : 'Finish'}: {new Date(log.endedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}</span>
                           </div>
-                          {log.notes && (
-                            <div style={{ fontSize: '0.8rem', backgroundColor: 'rgba(0,0,0,0.02)', padding: '0.35rem 0.5rem', borderRadius: '4px', marginBottom: '0.5rem', borderLeft: '2px solid #eab308' }}>
-                              <strong>{getTranslation(language, 'notes')}:</strong> {log.notes}
+                          {(log.notes || log.checkerNotes || (log.errors && log.errors.length > 0)) && (
+                            <div style={{ fontSize: '0.8rem', backgroundColor: 'rgba(0,0,0,0.02)', padding: '0.5rem', borderRadius: '6px', marginBottom: '0.5rem', borderLeft: '3px solid var(--primary-color)' }}>
+                              {log.notes && (
+                                <div style={{ marginBottom: '0.25rem' }}>
+                                  <strong>🧹 {language === 'vi' ? 'Ghi chú NV:' : language === 'ja' ? '清掃員メモ:' : 'Cleaner Notes:'}</strong> {log.notes}
+                                </div>
+                              )}
+                              {log.checkerNotes && (
+                                <div style={{ marginBottom: '0.25rem' }}>
+                                  <strong>🔍 {language === 'vi' ? 'Ghi chú kiểm phòng:' : language === 'ja' ? '検査指摘メモ:' : 'Checker Notes:'}</strong> {log.checkerNotes}
+                                </div>
+                              )}
+                              {log.errors && log.errors.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginTop: '0.35rem' }}>
+                                  {log.errors.map((e, idx) => (
+                                    <span key={idx} style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '3px' }}>
+                                      ❌ {translateDefect(e, language)}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
                           <div style={{ marginTop: '0.5rem' }}>
@@ -3124,202 +3603,692 @@ export const CheckerDashboard: React.FC = () => {
 
       {/* Checker Inspection Modal */}
       {selectedRoom && gridMode === 'work' && (
-        <div className="modal-overlay">
-          <div className="modal-content glass-panel" style={{ maxWidth: '460px' }}>
-            <h3 className="modal-title">
-              {language === 'vi' ? 'Chi tiết kiểm phòng' : language === 'ja' ? '客室検査詳細' : 'Room Inspection Details'} - Room {selectedRoom.roomNumber}
-            </h3>
+        (selectedRoom.status === 'dirty' || selectedRoom.status === 'cleaning' || (selectedRoom.isStay && selectedRoom.status === 'occupied')) ? (
+          /* Housekeeper-style clean reporting sheet */
+          <div className="modal-overlay">
+            <div className="modal-content glass-panel" style={{ maxWidth: '440px', position: 'relative' }}>
+              <button 
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setSelectedRoom(null)}
+                style={{
+                  position: 'absolute',
+                  top: '0.75rem',
+                  right: '0.75rem',
+                  padding: '0.25rem',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: 'rgba(0, 0, 0, 0.05)',
+                  color: 'var(--text-color)',
+                  zIndex: 10
+                }}
+              >
+                ✕
+              </button>
+              <h3 className="modal-title" style={{ fontSize: '1.25rem', fontWeight: 700, paddingRight: '2.5rem' }}>
+                {getTranslation(language, 'cleaningSummary')} - Room {selectedRoom.roomNumber}
+              </h3>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', margin: '1rem 0' }}>
-              <div style={{ fontSize: '0.9rem' }}>
-                <strong>{language === 'vi' ? 'Kiểu phòng:' : 'Type:'} </strong> {selectedRoom.type} - {selectedRoom.floor}F
-              </div>
-              <div style={{ fontSize: '0.9rem' }}>
-                <strong>{language === 'vi' ? 'Trạng thái phòng:' : 'Room Status:'} </strong>
-                <span className={`badge badge-${selectedRoom.status}`} style={{ fontSize: '0.65rem', marginLeft: '0.25rem' }}>
-                  {selectedRoom.status.toUpperCase()}
-                </span>
-                {selectedRoom.status === 'clean' && (
-                  <span className={`badge badge-${selectedRoom.isChecked ? 'clean' : 'dirty'}`} style={{ fontSize: '0.65rem', marginLeft: '0.25rem' }}>
-                    {selectedRoom.isChecked 
-                      ? (language === 'vi' ? 'Đã duyệt ✓' : 'Checked ✓') 
-                      : (language === 'vi' ? 'Chờ duyệt 🔍' : 'Pending 🔍')}
-                  </span>
-                )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem', padding: '0.75rem', backgroundColor: 'var(--panel-bg-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', fontSize: '0.9rem', textAlign: 'left' }}>
+                <div>
+                  <strong>{language === 'vi' ? 'Kiểu phòng:' : language === 'ja' ? '部屋タイプ:' : 'Room Type:'}</strong> {getFormattedRoomType(selectedRoom.type)} - {selectedRoom.floor}F
+                </div>
+                <div>
+                  <strong>{language === 'vi' ? 'Số khách dọn (Set):' : language === 'ja' ? '設定人数:' : 'Guests Count (Set):'}</strong> {selectedRoom.guestCount} {language === 'vi' ? 'người' : language === 'ja' ? '人' : 'Pax'}
+                </div>
               </div>
 
               {selectedRoom.notes && (
                 <div style={{
+                  marginBottom: '1.25rem',
                   padding: '0.75rem',
                   backgroundColor: 'rgba(239, 68, 68, 0.08)',
                   borderLeft: '4px solid var(--status-maintenance)',
                   borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.85rem'
+                  textAlign: 'left'
                 }}>
-                  <strong>{language === 'vi' ? 'Ghi chú phòng:' : 'Room Notes:'} </strong>
-                  <span style={{ color: 'var(--status-maintenance)', fontWeight: 600 }}>{selectedRoom.notes}</span>
+                  <div style={{ 
+                    fontWeight: 700, 
+                    color: 'var(--status-maintenance)', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.25rem',
+                    fontSize: '0.85rem',
+                    marginBottom: '0.25rem'
+                  }}>
+                    <AlertTriangle size={14} className="animate-pulse" />
+                    {language === 'vi' ? 'Ghi chú quan trọng:' : language === 'ja' ? '重要メモ:' : 'Important Note:'}
+                  </div>
+                  <p style={{ 
+                    fontSize: '0.85rem', 
+                    color: 'var(--status-maintenance)', 
+                    fontWeight: 600,
+                    margin: 0,
+                    whiteSpace: 'pre-wrap'
+                  }}>
+                    {selectedRoom.notes}
+                  </p>
                 </div>
               )}
-            </div>
 
-            {selectedRoom.status === 'clean' ? (
-              <div style={{ borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1rem', marginTop: '1rem' }}>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.75rem' }}>
-                  {language === 'vi' ? 'Báo cáo từ dọn phòng:' : 'Housekeeping Report:'}
-                </h4>
-
-                {roomLog ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <div style={{ fontSize: '0.85rem' }}>
-                      <strong>{language === 'vi' ? 'Nhân viên dọn:' : 'Cleaner:'} </strong> {roomLog.cleanerName}
-                    </div>
-                    <div style={{ fontSize: '0.85rem' }}>
-                      <strong>{language === 'vi' ? 'Thời gian dọn:' : 'Duration:'} </strong> {roomLog.durationMinutes} phút ({new Date(roomLog.startedAt).toLocaleTimeString()} - {new Date(roomLog.endedAt).toLocaleTimeString()})
-                    </div>
-                    <div style={{ fontSize: '0.85rem' }}>
-                      <strong>{language === 'vi' ? 'Ghi chú của NV:' : 'Cleaner Notes:'} </strong> {roomLog.notes}
-                    </div>
-
-                    {roomLog.photoAfter && (
-                      <div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem' }}>
-                          {language === 'vi' ? 'Ảnh chụp dọn phòng sạch:' : 'Verification Photo:'}
-                        </div>
-                        <img 
-                          src={roomLog.photoAfter} 
-                          alt="Verification Clean" 
-                          style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(0,0,0,0.1)' }} 
-                        />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <p style={{ fontSize: '0.85rem', opacity: 0.6 }}>
-                    {language === 'vi' ? 'Chưa tìm thấy log dọn phòng của ngày hôm nay.' : 'No cleaning logs found for this date.'}
-                  </p>
-                )}
-
-                {/* Inspection Checklist */}
-                {!selectedRoom.isChecked && (
-                  <div style={{
-                    backgroundColor: 'var(--panel-bg-subtle)',
-                    padding: '1rem',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--border-color)',
-                    marginTop: '1.25rem'
+              {selectedRoom.photoDefect && (
+                <div style={{
+                  marginBottom: '1.25rem',
+                  padding: '0.75rem',
+                  backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  borderRadius: 'var(--radius-sm)',
+                  textAlign: 'left'
+                }}>
+                  <div style={{ 
+                    fontWeight: 700, 
+                    color: 'var(--status-maintenance)', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.25rem',
+                    fontSize: '0.85rem',
+                    marginBottom: '0.5rem'
                   }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-color)' }}>
-                      🔍 {language === 'vi' ? 'Phiếu Kiểm Tra Chất Lượng:' : language === 'ja' ? '客室インスペクションシート:' : 'Quality Inspection Checklist:'}
-                    </div>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
-                        <input type="checkbox" checked={defectFloor} onChange={e => setDefectFloor(e.target.checked)} disabled={isEditDisabled} />
-                        <span>{language === 'vi' ? 'Chưa lau sàn / hút bụi' : language === 'ja' ? '床掃除・掃除機未実施' : 'Floor dusty/dirty'}</span>
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
-                        <input type="checkbox" checked={defectAmenities} onChange={e => setDefectAmenities(e.target.checked)} disabled={isEditDisabled} />
-                        <span>{language === 'vi' ? 'Thiếu đồ dùng / khăn' : language === 'ja' ? 'アメニティ・タオル不足' : 'Missing towels/amenities'}</span>
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
-                        <input type="checkbox" checked={defectBathroom} onChange={e => setDefectBathroom(e.target.checked)} disabled={isEditDisabled} />
-                        <span>{language === 'vi' ? 'Bần nhà vệ sinh / bồn tắm' : language === 'ja' ? '水回り・浴室汚れ' : 'Dirty bathroom'}</span>
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
-                        <input type="checkbox" checked={defectBed} onChange={e => setDefectBed(e.target.checked)} disabled={isEditDisabled} />
-                        <span>{language === 'vi' ? 'Ga giường nhăn / bẩn' : language === 'ja' ? 'シーツしわ・汚れ' : 'Wrinkled/dirty sheet'}</span>
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
-                        <input type="checkbox" checked={defectTrash} onChange={e => setDefectTrash(e.target.checked)} disabled={isEditDisabled} />
-                        <span>{language === 'vi' ? 'Chưa đổ rác' : language === 'ja' ? 'ゴミ未回収' : 'Trash not emptied'}</span>
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
-                        <input type="checkbox" checked={defectDust} onChange={e => setDefectDust(e.target.checked)} disabled={isEditDisabled} />
-                        <span>{language === 'vi' ? 'Còn bụi trên bàn / tủ' : language === 'ja' ? '家具ほこり残り' : 'Dust on furniture'}</span>
-                      </label>
-                    </div>
+                    <AlertTriangle size={14} className="animate-pulse" />
+                    {language === 'vi' ? 'Hình ảnh lỗi dọn dẹp:' : language === 'ja' ? '指摘された清掃不良画像:' : 'Defect Photo:'}
+                  </div>
+                  <img 
+                    src={selectedRoom.photoDefect} 
+                    alt="Defect" 
+                    style={{
+                      width: '100%',
+                      maxHeight: '200px',
+                      objectFit: 'contain',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid rgba(0,0,0,0.1)'
+                    }} 
+                  />
+                </div>
+              )}
 
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)', marginBottom: '0.25rem' }}>
-                        <input type="checkbox" checked={defectOther} onChange={e => setDefectOther(e.target.checked)} disabled={isEditDisabled} />
-                        <span>{language === 'vi' ? 'Lỗi khác' : language === 'ja' ? 'その他指摘事項' : 'Other defect'}</span>
-                      </label>
-                      {defectOther && (
-                        <input 
-                          type="text" 
-                          className="form-input" 
-                          value={defectOtherText} 
-                          onChange={e => setDefectOtherText(e.target.value)} 
-                          placeholder={language === 'vi' ? 'Nhập mô tả lỗi khác...' : language === 'ja' ? '指摘内容を入力...' : 'Enter details...'}
-                          style={{ fontSize: '0.8rem', padding: '0.35rem 0.5rem', height: 'auto' }}
-                          disabled={isEditDisabled}
-                        />
+              {/* Photo Capture Area */}
+              <div className="form-group" style={{ textAlign: 'left' }}>
+                <label className="form-label">{getTranslation(language, 'uploadPhoto')}</label>
+                
+                <input
+                  type="file"
+                  id="camera-file-input-checker"
+                  style={{ display: 'none' }}
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleImageFileChange}
+                />
+                
+                <div className="camera-box" onClick={() => {
+                  if (cleaningPhoto) {
+                    setCleaningPhoto(null);
+                    setShowSourceChoice(true);
+                  } else {
+                    setShowSourceChoice(true);
+                  }
+                }}>
+                  {cameraActive ? (
+                    <div style={{ textAlign: 'center' }}>
+                      <div className="animate-spin" style={{ display: 'inline-block', width: '24px', height: '24px', border: '3px solid var(--primary-color)', borderTopColor: 'transparent', borderRadius: '50%', marginBottom: '0.5rem' }} />
+                      <p style={{ fontSize: '0.85rem' }}>{getTranslation(language, 'loading')}</p>
+                    </div>
+                  ) : cleaningPhoto ? (
+                    <>
+                      <img src={cleaningPhoto} alt="Verification Preview" className="camera-preview" />
+                      <div style={{ position: 'absolute', bottom: '8px', right: '8px', backgroundColor: 'var(--status-clean)', color: 'white', padding: '0.2rem', borderRadius: '50%', zIndex: 10 }}>
+                        <Check size={14} />
+                      </div>
+                    </>
+                  ) : showSourceChoice ? (
+                    <div 
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: '0.5rem', 
+                        width: '100%', 
+                        padding: '0.75rem',
+                        boxSizing: 'border-box' 
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.4rem' }}
+                        onClick={triggerRealCamera}
+                      >
+                        <Camera size={16} />
+                        <span style={{ fontSize: '0.85rem' }}>{getTranslation(language, 'takeRealPhoto')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.4rem' }}
+                        onClick={triggerCameraMock}
+                      >
+                        <Sparkles size={16} />
+                        <span style={{ fontSize: '0.85rem' }}>{getTranslation(language, 'useDemoPhoto')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        style={{ 
+                          background: 'none', 
+                          border: 'none', 
+                          color: 'var(--text-secondary)', 
+                          fontSize: '0.75rem',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          marginTop: '0.1rem',
+                          alignSelf: 'center'
+                        }}
+                        onClick={() => setShowSourceChoice(false)}
+                      >
+                        {getTranslation(language, 'cancel')}
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      <Camera size={32} style={{ marginBottom: '0.5rem', opacity: 0.6 }} />
+                      <p style={{ fontSize: '0.85rem', fontWeight: 600 }}>{getTranslation(language, 'takePhoto')}</p>
+                      <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>({language === 'vi' ? 'Nhấp để chụp hoặc chọn ảnh mẫu' : 'クリックして撮影・デモ選択'})</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes Textarea */}
+              <div className="form-group" style={{ textAlign: 'left' }}>
+                <label className="form-label">{getTranslation(language, 'notes')}</label>
+                <textarea
+                  className="form-input"
+                  style={{ minHeight: '80px', resize: 'vertical' }}
+                  value={cleaningNotes}
+                  onChange={e => setCleaningNotes(e.target.value)}
+                  placeholder={getTranslation(language, 'notesPlaceholder')}
+                />
+              </div>
+
+              {/* Quick tag actions for notes */}
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setCleaningNotes(prev => (prev ? prev + ', ' : '') + (language === 'ja' ? '忘れ物あり' : language === 'vi' ? 'Có đồ để quên' : 'Lost & Found item found'))}
+                >
+                  🎒 {language === 'ja' ? '忘れ物' : 'Đồ để quên'}
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setCleaningNotes(prev => (prev ? prev + ', ' : '') + (language === 'ja' ? '設備破損あり' : language === 'vi' ? 'Hỏng hóc thiết bị' : 'Maintenance issue'))}
+                >
+                  🛠️ {language === 'ja' ? '設備破損' : 'Thiết bị hỏng'}
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setCleaningNotes(prev => (prev ? prev + ', ' : '') + (language === 'ja' ? 'シーツ交換完了' : language === 'vi' ? 'Đã thay drap giường' : 'Bed sheets replaced'))}
+                >
+                  🛏️ {language === 'ja' ? 'シーツ交換' : 'Thay drap'}
+                </button>
+              </div>
+
+              {/* Action buttons */}
+              <div className="modal-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', width: '100%' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => setSelectedRoom(null)}
+                  style={{ flex: 1, justifyContent: 'center' }}
+                >
+                  {getTranslation(language, 'cancel')}
+                </button>
+                {selectedRoom.isStay && (
+                  <>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ backgroundColor: '#f97316', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', flex: 1 }}
+                      onClick={submitHangingDNDOnly}
+                    >
+                      <Sparkles size={18} />
+                      <span style={{ whiteSpace: 'nowrap' }}>{language === 'vi' ? 'Chỉ cần treo đồ' : language === 'ja' ? 'アメニティ吊り下げのみ' : 'Hang items only'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ backgroundColor: '#64748b', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', flex: 1 }}
+                      onClick={submitDNDRoom}
+                    >
+                      <AlertTriangle size={18} />
+                      <span style={{ whiteSpace: 'nowrap' }}>{language === 'vi' ? 'Trở thành phòng DD' : language === 'ja' ? 'DND部屋にする' : 'Make DD Room'}</span>
+                    </button>
+                  </>
+                )}
+                <button 
+                  type="button" 
+                  className="btn"
+                  style={{ backgroundColor: 'var(--status-clean)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', flex: 1 }}
+                  onClick={submitFinishedCleaning}
+                >
+                  <Check size={18} />
+                  <span style={{ whiteSpace: 'nowrap' }}>{language === 'vi' ? 'Dọn xong ✓' : language === 'ja' ? '清掃完了 ✓' : 'Finish Clean ✓'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Checker Inspection Modal */
+          <div className="modal-overlay">
+            <div className="modal-content glass-panel" style={{ maxWidth: '460px', position: 'relative' }}>
+              <button 
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setSelectedRoom(null)}
+                style={{
+                  position: 'absolute',
+                  top: '0.75rem',
+                  right: '0.75rem',
+                  padding: '0.25rem',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: 'rgba(0, 0, 0, 0.05)',
+                  color: 'var(--text-color)',
+                  zIndex: 10
+                }}
+              >
+                ✕
+              </button>
+              <h3 className="modal-title" style={{ paddingRight: '2.5rem' }}>
+                {language === 'vi' ? 'Chi tiết kiểm phòng' : language === 'ja' ? '客室検査詳細' : 'Room Inspection Details'} - Room {selectedRoom.roomNumber}
+              </h3>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', margin: '1rem 0' }}>
+                <div style={{ fontSize: '0.9rem' }}>
+                  <strong>{language === 'vi' ? 'Kiểu phòng:' : 'Type:'} </strong> {selectedRoom.type} - {selectedRoom.floor}F
+                </div>
+                <div style={{ fontSize: '0.9rem' }}>
+                  <strong>{language === 'vi' ? 'Trạng thái phòng:' : 'Room Status:'} </strong>
+                  <span className={`badge badge-${selectedRoom.status}`} style={{ fontSize: '0.65rem', marginLeft: '0.25rem' }}>
+                    {selectedRoom.status.toUpperCase()}
+                  </span>
+                  {(selectedRoom.status === 'clean' || selectedRoom.status === 'eco' || (selectedRoom.status === 'dnd' && selectedRoom.isStay)) && (
+                    <span className={`badge badge-${selectedRoom.isChecked ? 'clean' : 'dirty'}`} style={{ fontSize: '0.65rem', marginLeft: '0.25rem' }}>
+                      {selectedRoom.isChecked 
+                        ? (language === 'vi' ? 'Đã duyệt ✓' : 'Checked ✓') 
+                        : (language === 'vi' ? 'Chờ duyệt 🔍' : 'Pending 🔍')}
+                    </span>
+                  )}
+                </div>
+
+                {selectedRoom.notes && (
+                  <div style={{
+                    padding: '0.75rem',
+                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                    borderLeft: '4px solid var(--status-maintenance)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '0.85rem'
+                  }}>
+                    <strong>{language === 'vi' ? 'Ghi chú phòng:' : 'Room Notes:'} </strong>
+                    <span style={{ color: 'var(--status-maintenance)', fontWeight: 600 }}>{selectedRoom.notes}</span>
+                  </div>
+                )}
+              </div>
+
+              {(selectedRoom.status === 'clean' || selectedRoom.status === 'eco' || (selectedRoom.status === 'dnd' && selectedRoom.isStay)) ? (
+                <div style={{ borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1rem', marginTop: '1rem' }}>
+                  <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.75rem' }}>
+                    {language === 'vi' ? 'Báo cáo từ dọn phòng:' : 'Housekeeping Report:'}
+                  </h4>
+
+                  {roomLog ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem' }}>
+                        <strong>{language === 'vi' ? 'Nhân viên dọn:' : 'Cleaner:'} </strong> {roomLog.cleanerName}
+                      </div>
+                      <div style={{ fontSize: '0.85rem' }}>
+                        <strong>{language === 'vi' ? 'Giờ hoàn thành:' : language === 'ja' ? '完了時間:' : 'Completion Time:'} </strong> {new Date(roomLog.endedAt).toLocaleTimeString()} ({roomLog.durationMinutes} {language === 'vi' ? 'phút' : 'mins'})
+                      </div>
+                      <div style={{ fontSize: '0.85rem' }}>
+                        <strong>{language === 'vi' ? 'Ghi chú của NV:' : 'Cleaner Notes:'} </strong> {roomLog.notes || 'N/A'}
+                      </div>
+
+                      {roomLog.photoAfter && (
+                        <div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+                            {language === 'vi' ? 'Ảnh chụp dọn phòng sạch:' : 'Verification Photo:'}
+                          </div>
+                          <img 
+                            src={roomLog.photoAfter} 
+                            alt="Verification Clean" 
+                            style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(0,0,0,0.1)' }} 
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem' }}>
+                        <strong>{language === 'vi' ? 'Nhân viên dọn:' : 'Cleaner:'} </strong> {selectedRoom.cleanerName || 'N/A'}
+                      </div>
+                      <div style={{ fontSize: '0.85rem' }}>
+                        <strong>{language === 'vi' ? 'Giờ hoàn thành:' : language === 'ja' ? '完了時間:' : 'Completion Time:'} </strong> {selectedRoom.updatedAt ? new Date(selectedRoom.updatedAt).toLocaleTimeString() : 'N/A'}
+                      </div>
+                      <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>
+                        {language === 'vi' ? '(Chưa tìm thấy chi tiết log dọn phòng ngày hôm nay)' : '(No detailed cleaning log found for today)'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Checker Report */}
+                  <div style={{ borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1rem', marginTop: '1rem', marginBottom: '1.25rem', textAlign: 'left' }}>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.75rem' }}>
+                      {language === 'vi' ? '🔍 Báo cáo từ kiểm phòng (Check):' : language === 'ja' ? '🔍 検査レポート:' : '🔍 Inspection Report:'}
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.85rem' }}>
+                      <div>
+                        <strong>{language === 'vi' ? 'Người kiểm tra:' : language === 'ja' ? '検査担当:' : 'Checked By:'}</strong>{' '}
+                        {selectedRoom.checkedBy || (language === 'vi' ? 'Chưa kiểm tra / Đang chờ' : language === 'ja' ? '未検査 / 待機中' : 'Pending')}
+                      </div>
+                      {selectedRoom.checkedBy && selectedRoom.checkedAt && (
+                        <div>
+                          <strong>{language === 'vi' ? 'Thời gian duyệt:' : language === 'ja' ? '検査時間:' : 'Inspected At:'}</strong>{' '}
+                          {new Date(selectedRoom.checkedAt).toLocaleString()}
+                        </div>
+                      )}
+                      {selectedRoom.isChecked && (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <strong>{language === 'vi' ? 'Đã xem ghi chú của người dọn:' : language === 'ja' ? '清掃員メモ確認済:' : 'Viewed cleaner notes:'}</strong>{' '}
+                            {selectedRoom.viewedCleanerNotes ? (
+                              <span style={{ color: 'var(--status-clean)', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                ☑ {language === 'vi' ? 'Đã xem' : language === 'ja' ? '確認済' : 'Viewed'}
+                              </span>
+                            ) : (
+                              <span style={{ opacity: 0.6 }}>
+                                ☐ {language === 'vi' ? 'Chưa xem hoặc không có ghi chú' : language === 'ja' ? '未確認 hoặc không có ghi chú' : 'Not viewed or no notes'}
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <strong>{language === 'vi' ? 'Ghi chú sự cố / kiểm phòng:' : language === 'ja' ? '指摘/異常報告メモ:' : 'Incident / Inspection Notes:'}</strong>{' '}
+                            <span style={{ color: 'var(--status-maintenance)', fontWeight: 600 }}>
+                              {selectedRoom.checkerNotes || (language === 'vi' ? 'Không có ghi chú sự cố' : language === 'ja' ? '指摘事項なし' : 'None')}
+                            </span>
+                          </div>
+                          <div style={{ marginTop: '0.5rem' }}>
+                            <strong>{language === 'vi' ? '🔍 Kết quả đánh giá chất lượng:' : language === 'ja' ? '🔍 品質インスペクション結果:' : '🔍 Quality Inspection Results:'}</strong>{' '}
+                            {roomLog && roomLog.errors && roomLog.errors.length > 0 ? (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.35rem' }}>
+                                {roomLog.errors.map((e, idx) => (
+                                  <span key={idx} style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    ❌ {translateDefect(e, language)}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span style={{ color: 'var(--status-clean)', fontWeight: 600, marginLeft: '0.25rem' }}>
+                                ✓ {language === 'vi' ? 'Đạt 100% (Không phát hiện lỗi)' : language === 'ja' ? '100%合格 (指摘なし)' : 'Passed 100% (No defects)'}
+                              </span>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
-                )}
 
-                {/* Reclean Input Area */}
-                {showRecleanInput && (
-                  <div className="form-group" style={{ marginTop: '1.25rem', animation: 'slideInRight 0.2s ease-out' }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--status-maintenance)' }}>
-                      ⚠️ {language === 'vi' ? 'Lý do yêu cầu dọn lại:' : language === 'ja' ? '再清掃の理由:' : 'Reason for Recleaning:'}
-                    </label>
-                    <textarea
-                      className="form-input"
-                      value={recleanReason}
-                      onChange={e => setRecleanReason(e.target.value)}
-                      placeholder={language === 'vi' ? 'e.g. Quên trải drap gối, sàn chưa lau kỹ...' : 'e.g. Sheet has wrinkles, floor dusty...'}
-                      style={{ minHeight: '60px', resize: 'vertical', border: '1px solid var(--status-maintenance)' }}
-                      required
-                    />
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                      <button 
-                        type="button" 
-                        className="btn btn-danger btn-sm" 
-                        onClick={handleRequestReclean}
-                        style={{ flex: 1, justifyContent: 'center' }}
-                      >
-                        {language === 'vi' ? 'Xác nhận cần dọn lại' : 'Submit Reclean'}
-                      </button>
-                      <button 
-                        type="button" 
-                        className="btn btn-secondary btn-sm" 
-                        onClick={() => setShowRecleanInput(false)}
-                      >
-                        {language === 'vi' ? 'Hủy' : 'Cancel'}
-                      </button>
+                  {/* Checker Inputs for Unchecked Rooms */}
+                  {!selectedRoom.isChecked && (
+                    <div style={{
+                      backgroundColor: 'var(--panel-bg-subtle)',
+                      padding: '1rem',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-color)',
+                      marginTop: '1rem',
+                      marginBottom: '1rem',
+                      textAlign: 'left'
+                    }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-color)' }}>
+                        📝 {language === 'vi' ? 'Nhận xét kiểm phòng:' : language === 'ja' ? '検査メモ/確認:' : 'Inspection Notes & Verification:'}
+                      </div>
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)', marginBottom: '0.75rem' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={viewedCleanerNotes} 
+                          onChange={e => setViewedCleanerNotes(e.target.checked)} 
+                          disabled={isEditDisabled} 
+                        />
+                        <strong>
+                          {language === 'vi' 
+                            ? '☑ Đã xem ghi chú của người dọn' 
+                            : language === 'ja' 
+                              ? '☑ 清掃員のメモを確認しました' 
+                              : '☑ Viewed cleaner\'s notes'}
+                        </strong>
+                      </label>
+
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                          {language === 'vi' ? 'Ghi chú sự cố / kiểm phòng:' : language === 'ja' ? '指摘/異常報告メモ:' : 'Incident / Inspection Notes:'}
+                        </label>
+                        <textarea
+                          className="form-input"
+                          value={checkerNotes}
+                          onChange={e => setCheckerNotes(e.target.value)}
+                          placeholder={language === 'vi' ? 'Nhập ghi chú sự cố hoặc nhận xét kiểm phòng...' : language === 'ja' ? '設備不具合や特記事項を入力...' : 'Enter inspection details or incidents...'}
+                          style={{ minHeight: '60px', resize: 'vertical', fontSize: '0.85rem', padding: '0.5rem' }}
+                          disabled={isEditDisabled}
+                        />
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Main Action Buttons */}
-                {!showRecleanInput && (
-                  <div className="modal-actions" style={{ marginTop: '1.5rem', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {!selectedRoom.isChecked && !isEditDisabled && (
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{ backgroundColor: 'var(--status-maintenance)', color: 'white', marginRight: 'auto' }}
-                        onClick={() => setShowRecleanInput(true)}
-                      >
-                        🔄 {language === 'vi' ? 'Yêu cầu dọn lại' : language === 'ja' ? '再清掃要求' : 'Reclean'}
-                      </button>
-                    )}
-                    
-                    <button 
-                      type="button" 
-                      className="btn btn-secondary" 
-                      onClick={() => setSelectedRoom(null)}
-                    >
-                      {language === 'vi' ? 'Đóng' : 'Close'}
-                    </button>
+                  {/* Inspection Checklist */}
+                  {!selectedRoom.isChecked && selectedRoom.status !== 'eco' && selectedRoom.status !== 'dnd' && (
+                    <div style={{
+                      backgroundColor: 'var(--panel-bg-subtle)',
+                      padding: '1rem',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-color)',
+                      marginTop: '1.25rem'
+                    }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-color)' }}>
+                        🔍 {language === 'vi' ? 'Phiếu Kiểm Tra Chất Lượng:' : language === 'ja' ? '客室インスペクションシート:' : 'Quality Inspection Checklist:'}
+                      </div>
+                      
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                          <input type="checkbox" checked={defectFloor} onChange={e => setDefectFloor(e.target.checked)} disabled={isEditDisabled} />
+                          <span>{language === 'vi' ? 'Chưa lau sàn / hút bụi' : language === 'ja' ? '床掃除・掃除機未実施' : 'Floor dusty/dirty'}</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                          <input type="checkbox" checked={defectAmenities} onChange={e => setDefectAmenities(e.target.checked)} disabled={isEditDisabled} />
+                          <span>{language === 'vi' ? 'Thiếu đồ dùng / khăn' : language === 'ja' ? 'アメニティ・タオル不足' : 'Missing towels/amenities'}</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                          <input type="checkbox" checked={defectBathroom} onChange={e => setDefectBathroom(e.target.checked)} disabled={isEditDisabled} />
+                          <span>{language === 'vi' ? 'Bần nhà vệ sinh / bồn tắm' : language === 'ja' ? '水回り・浴室汚れ' : 'Dirty bathroom'}</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                          <input type="checkbox" checked={defectBed} onChange={e => setDefectBed(e.target.checked)} disabled={isEditDisabled} />
+                          <span>{language === 'vi' ? 'Ga giường nhăn / bẩn' : language === 'ja' ? 'シーツしわ・汚れ' : 'Wrinkled/dirty sheet'}</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                          <input type="checkbox" checked={defectTrash} onChange={e => setDefectTrash(e.target.checked)} disabled={isEditDisabled} />
+                          <span>{language === 'vi' ? 'Chưa đổ rác' : language === 'ja' ? 'ゴミ未回収' : 'Trash not emptied'}</span>
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)' }}>
+                          <input type="checkbox" checked={defectDust} onChange={e => setDefectDust(e.target.checked)} disabled={isEditDisabled} />
+                          <span>{language === 'vi' ? 'Còn bụi trên bàn / tủ' : language === 'ja' ? '家具ほこり残り' : 'Dust on furniture'}</span>
+                        </label>
+                      </div>
 
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)', marginBottom: '0.25rem' }}>
+                          <input type="checkbox" checked={defectOther} onChange={e => setDefectOther(e.target.checked)} disabled={isEditDisabled} />
+                          <span>{language === 'vi' ? 'Lỗi khác' : language === 'ja' ? 'その他指摘事項' : 'Other defect'}</span>
+                        </label>
+                        {defectOther && (
+                          <input 
+                            type="text" 
+                            className="form-input" 
+                            value={defectOtherText} 
+                            onChange={e => setDefectOtherText(e.target.value)} 
+                            placeholder={language === 'vi' ? 'Nhập mô tả lỗi khác...' : language === 'ja' ? '指摘内容を入力...' : 'Enter details...'}
+                            style={{ fontSize: '0.8rem', padding: '0.35rem 0.5rem', height: 'auto' }}
+                            disabled={isEditDisabled}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reclean Input Area */}
+                  {showRecleanInput && (
+                    <div className="form-group" style={{ marginTop: '1.25rem', animation: 'slideInRight 0.2s ease-out' }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--status-maintenance)' }}>
+                        ⚠️ {language === 'vi' ? 'Lý do yêu cầu dọn lại:' : language === 'ja' ? '再清掃の理由:' : 'Reason for Recleaning:'}
+                      </label>
+                      <textarea
+                        className="form-input"
+                        value={recleanReason}
+                        onChange={e => setRecleanReason(e.target.value)}
+                        placeholder={language === 'vi' ? 'e.g. Quên trải drap gối, sàn chưa lau kỹ...' : 'e.g. Sheet has wrinkles, floor dusty...'}
+                        style={{ minHeight: '60px', resize: 'vertical', border: '1px solid var(--status-maintenance)' }}
+                        required
+                      />
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                        <button 
+                          type="button" 
+                          className="btn btn-danger btn-sm" 
+                          onClick={handleRequestReclean}
+                          style={{ flex: 1, justifyContent: 'center' }}
+                        >
+                          {language === 'vi' ? 'Xác nhận cần dọn lại' : 'Submit Reclean'}
+                        </button>
+                        <button 
+                          type="button" 
+                          className="btn btn-secondary btn-sm" 
+                          onClick={() => setShowRecleanInput(false)}
+                        >
+                          {language === 'vi' ? 'Hủy' : 'Cancel'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Main Action Buttons */}
+                  {!showRecleanInput && (
+                    <div className="modal-actions" style={{ marginTop: '1.5rem', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {/* Left Actions */}
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {!selectedRoom.isChecked && !isEditDisabled && selectedRoom.status !== 'eco' && (
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{ backgroundColor: 'var(--status-maintenance)', color: 'white' }}
+                            onClick={() => setShowRecleanInput(true)}
+                          >
+                            🔄 {language === 'vi' ? 'Yêu cầu dọn lại' : language === 'ja' ? '再清掃要求' : 'Reclean'}
+                          </button>
+                        )}
+
+                        {/* Revert DND button: if status is 'dnd' and not checked yet, show revert button */}
+                        {!selectedRoom.isChecked && !isEditDisabled && selectedRoom.status === 'dnd' && (
+                          <button 
+                            type="button" 
+                            className="btn"
+                            style={{ backgroundColor: 'var(--status-maintenance)', color: 'white' }}
+                            onClick={handleRevertDND}
+                          >
+                            ↩️ {language === 'vi' ? 'Quay lại' : language === 'ja' ? '戻す' : 'Revert'}
+                          </button>
+                        )}
+
+                        {selectedRoom.isChecked && !isEditDisabled && (selectedRoom.status === 'clean' || selectedRoom.status === 'eco' || selectedRoom.status === 'dnd') && (
+                          <button 
+                            type="button" 
+                            className="btn"
+                            style={{ backgroundColor: 'var(--status-maintenance)', color: 'white' }}
+                            onClick={handleRevertEco}
+                          >
+                            ↩️ {language === 'vi' ? 'Quay lại' : language === 'ja' ? '戻す' : 'Revert'}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Right Actions */}
+                      <div style={{ display: 'flex', gap: '0.5rem', marginLeft: 'auto' }}>
+                        {!isEditDisabled && (
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{ backgroundColor: 'var(--primary-color)', color: 'white', padding: '0.5rem 0.75rem' }}
+                            title={language === 'vi' ? 'Cài đặt phòng' : language === 'ja' ? '客室設定' : 'Room Setup'}
+                            onClick={() => {
+                              setGridMode('setup');
+                              setSetupForm({
+                                status: selectedRoom.status,
+                                isStay: selectedRoom.isStay,
+                                guestCount: selectedRoom.guestCount,
+                                notes: selectedRoom.notes || ''
+                              });
+                              setSetupModalOpen(true);
+                            }}
+                          >
+                            ⚙️
+                          </button>
+                        )}
+                        
+                        {!selectedRoom.isChecked && !isEditDisabled && (
+                          <button 
+                            type="button" 
+                            className="btn"
+                            style={{ backgroundColor: selectedRoom.status === 'eco' ? 'var(--status-eco)' : selectedRoom.status === 'dnd' ? 'var(--status-maintenance)' : 'var(--status-clean)', color: 'white' }}
+                            onClick={handleApproveClean}
+                          >
+                            <CheckCircle size={18} />
+                            {selectedRoom.status === 'eco'
+                              ? (language === 'vi' ? 'Xác nhận hoàn thành' : language === 'ja' ? '完了を確認' : 'Confirm complete')
+                              : selectedRoom.status === 'dnd'
+                                ? (language === 'vi' ? 'Hoàn thành' : language === 'ja' ? '完了' : 'Complete')
+                                : (language === 'vi' ? 'Phê duyệt sạch' : language === 'ja' ? '清掃を承認' : 'Approve Ready')}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Status is NOT 'clean': show read-only/info and transition button to setup mode
+                <div style={{ borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1rem', marginTop: '1rem' }}>
+                  <p style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '1.25rem' }}>
+                    {language === 'vi' 
+                      ? 'Phòng chưa được dọn sạch. Bạn có thể xem thông tin chi tiết.' 
+                      : language === 'ja'
+                        ? 'この客室はまだ清掃されていません。詳細を確認できます。'
+                        : 'This room is not cleaned yet. You can view its details.'}
+                  </p>
+                  <div className="modal-actions" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                     {!isEditDisabled && (
                       <button
                         type="button"
                         className="btn"
-                        style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
+                        style={{ backgroundColor: 'var(--primary-color)', color: 'white', padding: '0.5rem 0.75rem' }}
+                        title={language === 'vi' ? 'Cài đặt phòng' : language === 'ja' ? '客室設定' : 'Room Setup'}
                         onClick={() => {
                           setGridMode('setup');
                           setSetupForm({
@@ -3331,66 +4300,15 @@ export const CheckerDashboard: React.FC = () => {
                           setSetupModalOpen(true);
                         }}
                       >
-                        ⚙️ {language === 'vi' ? 'Cài đặt phòng' : language === 'ja' ? '客室設定' : 'Room Setup'}
-                      </button>
-                    )}
-                    
-                    {!selectedRoom.isChecked && !isEditDisabled && (
-                      <button 
-                        type="button" 
-                        className="btn"
-                        style={{ backgroundColor: 'var(--status-clean)', color: 'white' }}
-                        onClick={handleApproveClean}
-                      >
-                        <CheckCircle size={18} />
-                        {language === 'vi' ? 'Phê duyệt sạch' : language === 'ja' ? '清掃を承認' : 'Approve Ready'}
+                        ⚙️
                       </button>
                     )}
                   </div>
-                )}
-              </div>
-            ) : (
-              // Status is NOT 'clean': show read-only/info and transition button to setup mode
-              <div style={{ borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1rem', marginTop: '1rem' }}>
-                <p style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '1.25rem' }}>
-                  {language === 'vi' 
-                    ? 'Phòng chưa được dọn sạch. Bạn có thể xem thông tin chi tiết.' 
-                    : language === 'ja'
-                      ? 'この客室はまだ清掃されていません。詳細を確認できます。'
-                      : 'This room is not cleaned yet. You can view its details.'}
-                </p>
-                <div className="modal-actions" style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setSelectedRoom(null)}
-                  >
-                    {language === 'vi' ? 'Đóng' : 'Close'}
-                  </button>
-                  {!isEditDisabled && (
-                    <button
-                      type="button"
-                      className="btn"
-                      style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
-                      onClick={() => {
-                        setGridMode('setup');
-                        setSetupForm({
-                          status: selectedRoom.status,
-                          isStay: selectedRoom.isStay,
-                          guestCount: selectedRoom.guestCount,
-                          notes: selectedRoom.notes || ''
-                        });
-                        setSetupModalOpen(true);
-                      }}
-                    >
-                      ⚙️ {language === 'vi' ? 'Cài đặt phòng' : language === 'ja' ? '客室設定' : 'Room Setup'}
-                    </button>
-                  )}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        )
       )}
 
       {/* Room Configuration Modal for Setup Mode */}
@@ -3414,9 +4332,9 @@ export const CheckerDashboard: React.FC = () => {
                   type="button"
                   className="btn btn-sm"
                   style={{
-                    backgroundColor: setupForm.status === 'dirty' && !setupForm.isStay ? 'var(--status-dirty)' : 'rgba(0,0,0,0.03)',
-                    color: setupForm.status === 'dirty' && !setupForm.isStay ? '#0f172a' : 'inherit',
-                    border: '1px solid rgba(0,0,0,0.05)',
+                    backgroundColor: setupForm.status === 'dirty' && !setupForm.isStay ? '#ef4444' : 'rgba(0,0,0,0.03)',
+                    color: setupForm.status === 'dirty' && !setupForm.isStay ? '#ffffff' : 'inherit',
+                    border: setupForm.status === 'dirty' && !setupForm.isStay ? '1px solid #dc2626' : '1px solid rgba(0,0,0,0.05)',
                     fontWeight: 600,
                     fontSize: '0.8rem',
                     padding: '0.5rem'
@@ -3429,9 +4347,9 @@ export const CheckerDashboard: React.FC = () => {
                   type="button"
                   className="btn btn-sm"
                   style={{
-                    backgroundColor: setupForm.status === 'dirty' && setupForm.isStay ? 'var(--status-dirty)' : 'rgba(0,0,0,0.03)',
-                    color: setupForm.status === 'dirty' && setupForm.isStay ? '#0f172a' : 'inherit',
-                    border: '1px solid rgba(0,0,0,0.05)',
+                    backgroundColor: setupForm.status === 'dirty' && setupForm.isStay ? '#8b5cf6' : 'rgba(0,0,0,0.03)',
+                    color: setupForm.status === 'dirty' && setupForm.isStay ? '#ffffff' : 'inherit',
+                    border: setupForm.status === 'dirty' && setupForm.isStay ? '1px solid #7c3aed' : '1px solid rgba(0,0,0,0.05)',
                     fontWeight: 600,
                     fontSize: '0.8rem',
                     padding: '0.5rem'
@@ -3512,8 +4430,14 @@ export const CheckerDashboard: React.FC = () => {
                 onChange={(e) => setSetupForm({ ...setupForm, status: e.target.value as Room['status'] })}
               >
                 <option value="vacant">{language === 'vi' ? 'Trống (Vacant) - Không màu' : language === 'ja' ? '空室 (Vacant) - 色なし' : 'Vacant - No color'}</option>
-                <option value="dirty">{getTranslation(language, 'statusDirty')}</option>
-                <option value="eco">{language === 'vi' ? 'Chỉ treo đồ (Eco) - Màu tím' : language === 'ja' ? 'ECO (吊り下げ) - 紫色' : 'Eco (Hang items) - Purple'}</option>
+                <option value="dirty">
+                  {language === 'vi'
+                    ? (setupForm.isStay ? 'Cần dọn (Dirty) - Màu tím' : 'Cần dọn (Dirty) - Màu đỏ')
+                    : language === 'ja'
+                    ? (setupForm.isStay ? '要清掃 (Dirty) - 紫色' : '要清掃 (Dirty) - 赤色')
+                    : (setupForm.isStay ? 'Dirty (Need clean) - Purple' : 'Dirty (Need clean) - Red')}
+                </option>
+                <option value="eco">{language === 'vi' ? 'Chỉ treo đồ (Eco) - Màu xanh lá' : language === 'ja' ? 'ECO (吊り下げ) - 緑色' : 'Eco (Hang items) - Green'}</option>
                 <option value="dnd">{language === 'vi' ? 'Không làm phiền (DND) - Màu xám' : language === 'ja' ? '起こさないで (DND) - 灰色' : 'Do Not Disturb (DND) - Slate'}</option>
                 <option value="occupied">{getTranslation(language, 'statusOccupied')}</option>
                 <option value="cleaning">{getTranslation(language, 'statusCleaning')}</option>
@@ -3838,7 +4762,7 @@ export const CheckerDashboard: React.FC = () => {
                          </div>
                        ) : (
                          <>
-                           {room.isStay && <span className="stay-badge">Stay</span>}
+                           <span className="stay-badge">{room.status === 'maintenance' ? 'Sửa' : room.status === 'vacant' ? 'Trống' : room.status === 'eco' ? 'ECO' : (room.status === 'dirty' || room.status === 'cleaning' || (room.isStay && room.status === 'occupied')) ? (room.isStay ? 'STAY' : 'OUT') : (room.status === 'dnd' || room.notes?.includes('Chỉ cần treo đồ')) ? 'DD' : room.isStay ? 'STAY' : 'OUT'}</span>
                            <div>
                              <div className="room-type-text">{room.type}</div>
                              <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>

@@ -148,11 +148,11 @@
 
 /* Room Card Status Variations */
 .room-card.vacant {
-  background-color: #f1f5f9 !important; /* light slate/gray */
+  background-color: #ffffff !important; /* white */
   border: 1px solid rgba(0, 0, 0, 0.18) !important; /* light black border */
 }
 
-.room-card.occupied {
+.room-card.occupied:not(.stay) {
   background-color: var(--status-occupied-light) !important;
   border: 1px solid var(--status-occupied-border) !important;
 }
@@ -164,16 +164,16 @@
   border-color: #dc2626 !important;
 }
 
-/* 2. Phòng vệ sinh xong rồi (clean checkout unchecked) -> đỏ 1/2, xanh da trời 1/2 */
+/* 2. Phòng vệ sinh xong rồi (clean checkout unchecked) -> đỏ 1/2, xanh lá 1/2 */
 .room-card.clean:not(.stay):not(.checked) {
-  background: linear-gradient(135deg, #ef4444 50%, #38bdf8 50%) !important;
-  border-color: #38bdf8 !important;
+  background: linear-gradient(135deg, #ef4444 50%, #22c55e 50%) !important;
+  border-color: #22c55e !important;
 }
 
-/* 3. Phòng check xong (clean checkout checked) -> xanh da trời 1/2, xanh lá 1/2 */
+/* 3. Phòng check xong (clean checkout checked) -> đỏ 1/3, xanh lá 1/3, xanh nước biển 1/3 */
 .room-card.clean:not(.stay).checked {
-  background: linear-gradient(135deg, #38bdf8 50%, #22c55e 50%) !important;
-  border-color: #22c55e !important;
+  background: linear-gradient(135deg, #ef4444 33.33%, #22c55e 33.33% 66.66%, #38bdf8 66.66%) !important;
+  border-color: #38bdf8 !important;
 }
 
 /* 4. Phòng đang sửa chữa (maintenance) -> màu đen nhẹ */
@@ -182,21 +182,46 @@
   border-color: #1e293b !important;
 }
 
-/* 5. Phòng stay -> màu tím */
-.room-card.stay:not(.dnd) {
+/* 5. Phòng stay mặc định cần dọn -> màu tím */
+.room-card.stay:not(.dnd):not(.clean):not(.eco) {
   background-color: #8b5cf6 !important;
   border-color: #7c3aed !important;
 }
 
-/* 6. DD (DND) -> tím 1/2, xanh da trời 1/2 */
-.room-card.dnd {
-  background: linear-gradient(135deg, #8b5cf6 50%, #38bdf8 50%) !important;
+/* 6. DD (DND) -> màu tím / xanh lá cây (chưa check), tím / xanh lá cây / xanh nước biển (đã check) */
+.room-card.dnd:not(.checked) {
+  background: linear-gradient(135deg, #8b5cf6 50%, #22c55e 50%) !important;
+  border-color: #22c55e !important;
+}
+
+.room-card.dnd.checked {
+  background: linear-gradient(135deg, #8b5cf6 33.33%, #22c55e 33.33% 66.66%, #38bdf8 66.66%) !important;
   border-color: #38bdf8 !important;
 }
 
-/* Phòng stay đã dọn xong -> tím 1/2, xanh da trời 1/2 */
-.room-card.clean.stay {
-  background: linear-gradient(135deg, #8b5cf6 50%, #38bdf8 50%) !important;
+/* 7. Phòng ECO (Phòng mặc định không cần dọn) -> màu xanh lá cây */
+.room-card.eco:not(.checked) {
+  background-color: #22c55e !important;
+  border-color: #16a34a !important;
+}
+
+/* Phòng ECO đã check -> xanh lá / xanh nước biển */
+.room-card.eco.checked {
+  background: linear-gradient(135deg, #22c55e 50%, #38bdf8 50%) !important;
+  border-color: #38bdf8 !important;
+}
+
+/* 8. Phòng STAY dọn xong (chưa check) & Phòng DD chưa check -> tím / xanh lá */
+.room-card.clean.stay:not(.checked),
+.room-card.clean.stay.dnd:not(.checked) {
+  background: linear-gradient(135deg, #8b5cf6 50%, #22c55e 50%) !important;
+  border-color: #22c55e !important;
+}
+
+/* 9. Phòng STAY đã check & Phòng DD đã check -> tím / xanh lá / xanh nước biển */
+.room-card.clean.stay.checked,
+.room-card.dnd.stay {
+  background: linear-gradient(135deg, #8b5cf6 33.33%, #22c55e 33.33% 66.66%, #38bdf8 66.66%) !important;
   border-color: #38bdf8 !important;
 }
 
@@ -217,6 +242,12 @@
   background-color: rgba(255, 255, 255, 0.25) !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
   color: #ffffff !important;
+}
+.room-card.vacant .stay-badge,
+.room-card.occupied:not(.stay) .stay-badge {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid rgba(0, 0, 0, 0.15) !important;
+  color: #475569 !important;
 }
 
 /* Override text color to black/slate for vacant and occupied rooms (not stay) to prevent white text on light background */
@@ -252,8 +283,8 @@
   transform: translateY(-4px);
   box-shadow: var(--shadow-md);
 }
-.room-card.dirty:hover,
-.room-card.cleaning:hover {
+.room-card.dirty:not(.stay):hover,
+.room-card.cleaning:not(.stay):hover {
   transform: translateY(-4px);
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
 }

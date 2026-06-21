@@ -66,7 +66,7 @@ export const translations = {
     notesPlaceholder: '破損箇所や忘れ物などがあれば入力...',
     cleaningSummary: '清掃レポート',
     successClean: '清掃が完了しました！お疲れ様でした！',
-    assignedToMe: '自分が担当中',
+    assignedToMe: '自分の担当',
     availableRooms: '清掃待ちの部屋',
 
     // Admin Dashboard
@@ -175,7 +175,7 @@ export const translations = {
     notesPlaceholder: 'Nhập đồ để quên, hư hỏng thiết bị nếu có...',
     cleaningSummary: 'Báo cáo dọn phòng',
     successClean: 'Đã dọn xong phòng! Cảm ơn bạn!',
-    assignedToMe: 'Tôi đang dọn',
+    assignedToMe: 'Phòng của tôi',
     availableRooms: 'Phòng chờ dọn',
 
     // Admin Dashboard

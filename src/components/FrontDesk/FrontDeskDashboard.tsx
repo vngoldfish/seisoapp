@@ -4,8 +4,36 @@ import { getTranslation } from '../../i18n/translations';
 import { db } from '../../db/firebaseDB';
 import type { Room, User, CleaningLog } from '../../db/dbInterface';
 import { getTodayDateString } from '../../db/localDB';
-import { Search, Bell, BellOff, CheckCircle2, Info, Play, CheckCircle, AlertTriangle, Hotel, Users, LayoutDashboard, Clock, Building, Sun, Moon, LogOut, User as UserIcon, LayoutGrid, List, Maximize2, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Bell, BellOff, CheckCircle2, Info, Play, CheckCircle, AlertTriangle, Hotel, Users, LayoutDashboard, Clock, Building, Sun, Moon, LogOut, User as UserIcon, LayoutGrid, List, Maximize2, Minimize2, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import confetti from 'canvas-confetti';
+
+const translateDefect = (defect: string, lang: string): string => {
+  if (!defect) return '';
+  if (lang === 'vi') return defect;
+  
+  if (defect.startsWith('Lỗi khác:')) {
+    const text = defect.substring(9).trim();
+    if (lang === 'ja') return `その他指摘: ${text}`;
+    return `Other defect: ${text}`;
+  }
+  
+  switch (defect) {
+    case 'Chưa lau sàn / hút bụi':
+      return lang === 'ja' ? '床掃除・掃除機未実施' : 'Floor dusty/dirty';
+    case 'Thiếu khăn / đồ tiêu hao':
+      return lang === 'ja' ? 'アメニティ・タオル不足' : 'Missing towels/amenities';
+    case 'Bẩn nhà vệ sinh / bồn tắm':
+      return lang === 'ja' ? '水回り・浴室汚れ' : 'Dirty bathroom';
+    case 'Ga giường nhăn / bẩn':
+      return lang === 'ja' ? 'シーツしわ・汚れ' : 'Wrinkled/dirty sheet';
+    case 'Chưa đổ rác':
+      return lang === 'ja' ? 'ゴミ未回収' : 'Trash not emptied';
+    case 'Còn bụi bẩn trên bàn / tủ':
+      return lang === 'ja' ? '家具ほこり残り' : 'Dust on furniture';
+    default:
+      return defect;
+  }
+};
 
 const getVisiblePages = (current: number, total: number) => {
   if (total <= 5) {
@@ -76,6 +104,8 @@ export const FrontDeskDashboard: React.FC = () => {
   const [defectDust, setDefectDust] = useState(false);
   const [defectOther, setDefectOther] = useState(false);
   const [defectOtherText, setDefectOtherText] = useState('');
+  const [checkerNotes, setCheckerNotes] = useState('');
+  const [viewedCleanerNotes, setViewedCleanerNotes] = useState(false);
   const [setupForm, setSetupForm] = useState({
     status: 'vacant' as Room['status'],
     isStay: false,
@@ -122,12 +152,12 @@ export const FrontDeskDashboard: React.FC = () => {
     if (localVal === 'grid' || localVal === 'list') return localVal;
     return 'grid';
   });
-  const [activeTab, setActiveTab] = useState<'stats' | 'grid' | 'staff'>(() => {
+  const [activeTab, setActiveTab] = useState<'stats' | 'grid' | 'staff' | 'logs'>(() => {
     const queryTab = new URLSearchParams(window.location.search).get('tab');
     const isKacho = currentUser?.role === 'kacho';
     const defaultTab = isKacho ? 'stats' : 'grid';
-    const validTabs = ['stats', 'grid', 'staff'];
-    return (queryTab && validTabs.includes(queryTab)) ? (queryTab as 'stats' | 'grid' | 'staff') : defaultTab;
+    const validTabs = ['stats', 'grid', 'staff', 'logs'];
+    return (queryTab && validTabs.includes(queryTab)) ? (queryTab as 'stats' | 'grid' | 'staff' | 'logs') : defaultTab;
   });
 
   const [gridMode, setGridMode] = useState<'work' | 'setup'>(() => {
@@ -367,8 +397,12 @@ export const FrontDeskDashboard: React.FC = () => {
     setDefectDust(false);
     setDefectOther(false);
     setDefectOtherText('');
+    setCheckerNotes('');
+    setViewedCleanerNotes(false);
 
     if (selectedRoom) {
+      setCheckerNotes(selectedRoom.checkerNotes || '');
+      setViewedCleanerNotes(!!selectedRoom.viewedCleanerNotes);
       const activeDatePrefix = activeDate; // e.g. "2026-06-20"
       const matchingLog = logs
         .filter(log => log.roomId === selectedRoom.id && log.endedAt.startsWith(activeDatePrefix))
@@ -400,6 +434,22 @@ export const FrontDeskDashboard: React.FC = () => {
           : language === 'ja'
             ? 'この日付はすでに締め切られているため、データを変更できません。'
             : 'This date is finalized and locked. No changes are allowed.',
+        'warning'
+      );
+      return;
+    }
+
+    const isRoomCleanOrChecked = selectedRoom.status === 'clean' || selectedRoom.isChecked;
+    const isNewStatusDirtyOrSimilar = setupForm.status !== 'clean';
+    const isPrivilegedRole = currentUser.role === 'kacho' || currentUser.role === 'admin';
+
+    if (isRoomCleanOrChecked && isNewStatusDirtyOrSimilar && !isPrivilegedRole) {
+      addToast(
+        language === 'vi'
+          ? 'Chỉ có Checker, Kacho hoặc Admin mới có thể hủy trạng thái dọn sạch của phòng này.'
+          : language === 'ja'
+            ? 'Checker、Kacho、またはAdminのみがこの部屋の清掃完了ステータスを取り消すことができます。'
+            : 'Only Checker, Kacho, or Admin can revert the clean status of this room.',
         'warning'
       );
       return;
@@ -483,6 +533,8 @@ export const FrontDeskDashboard: React.FC = () => {
         isChecked: true,
         checkedBy: currentUser.name,
         checkedAt: new Date().toISOString(),
+        checkerNotes: checkerNotes.trim() || undefined,
+        viewedCleanerNotes: viewedCleanerNotes,
         updatedAt: new Date().toISOString(),
         updatedBy: currentUser.name
       });
@@ -493,7 +545,9 @@ export const FrontDeskDashboard: React.FC = () => {
           ...roomLog,
           errors: defects,
           checkedBy: currentUser.name,
-          checkedAt: new Date().toISOString()
+          checkedAt: new Date().toISOString(),
+          checkerNotes: checkerNotes.trim() || undefined,
+          viewedCleanerNotes: viewedCleanerNotes
         });
       }
 
@@ -581,6 +635,113 @@ export const FrontDeskDashboard: React.FC = () => {
     } catch (e) {
       console.error(e);
       addToast('Error requesting reclean', 'warning');
+    }
+  };
+
+  const handleRevertDND = async () => {
+    if (!selectedRoom || !currentUser) return;
+    if (isLocked) {
+      addToast(
+        language === 'vi'
+          ? 'Ngày này đã chốt hoàn tất, không thể chỉnh sửa dữ liệu.'
+          : language === 'ja'
+            ? 'この日付はすでに締め切られているため、データを変更できません。'
+            : 'This date is finalized and locked. No changes are allowed.',
+        'warning'
+      );
+      return;
+    }
+
+    const isPrivilegedRole = currentUser.role === 'kacho' || currentUser.role === 'admin';
+    if (!isPrivilegedRole) {
+      addToast(
+        language === 'vi'
+          ? 'Chỉ có Checker, Kacho hoặc Admin mới có quyền thực hiện thao tác này.'
+          : language === 'ja'
+            ? 'Checker、Kacho、またはAdminのみがこの操作を実行できます。'
+            : 'Only Checker, Kacho, or Admin can perform this action.',
+        'warning'
+      );
+      return;
+    }
+
+    try {
+      await db.updateRoom({
+        ...selectedRoom,
+        status: 'dirty',
+        isChecked: false,
+        checkedBy: undefined,
+        checkedAt: undefined,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser.name
+      });
+
+      addToast(
+        language === 'vi' 
+          ? `Đã hủy trạng thái DND và chuyển phòng ${selectedRoom.roomNumber} về cần dọn.` 
+          : language === 'ja'
+            ? `DND状態を取り消し、部屋 ${selectedRoom.roomNumber} を要清 sở に戻しました。`
+            : `Reverted DND status and set room ${selectedRoom.roomNumber} to dirty.`,
+        'success'
+      );
+      setSetupModalOpen(false);
+      setSelectedRoom(null);
+    } catch (e) {
+      console.error(e);
+      addToast('Error reverting DND room status', 'warning');
+    }
+  };
+
+  const handleRevertEco = async () => {
+    if (!selectedRoom || !currentUser) return;
+    if (isLocked) {
+      addToast(
+        language === 'vi'
+          ? 'Ngày này đã chốt hoàn tất, không thể chỉnh sửa dữ liệu.'
+          : language === 'ja'
+            ? 'この日付はすでに締め切られているため、データを変更できません。'
+            : 'This date is finalized and locked. No changes are allowed.',
+        'warning'
+      );
+      return;
+    }
+
+    const isPrivilegedRole = currentUser.role === 'kacho' || currentUser.role === 'admin';
+    if (!isPrivilegedRole) {
+      addToast(
+        language === 'vi'
+          ? 'Chỉ có Checker, Kacho hoặc Admin mới có quyền thực hiện thao tác này.'
+          : language === 'ja'
+            ? 'Checker、Kacho、またはAdminのみがこの操作を実行できます。'
+            : 'Only Checker, Kacho, or Admin can perform this action.',
+        'warning'
+      );
+      return;
+    }
+
+    try {
+      await db.updateRoom({
+        ...selectedRoom,
+        isChecked: false,
+        checkedBy: undefined,
+        checkedAt: undefined,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser.name
+      });
+
+      addToast(
+        language === 'vi' 
+          ? `Đã hủy duyệt phòng ${selectedRoom.roomNumber}` 
+          : language === 'ja'
+            ? `部屋 ${selectedRoom.roomNumber} の承認を取り消しました`
+            : `Reverted approval status for room ${selectedRoom.roomNumber}`,
+        'success'
+      );
+      setSetupModalOpen(false);
+      setSelectedRoom(null);
+    } catch (e) {
+      console.error(e);
+      addToast('Error reverting room status', 'warning');
     }
   };
 
@@ -1203,6 +1364,14 @@ export const FrontDeskDashboard: React.FC = () => {
                 : (language === 'vi' ? 'Phân công dọn dẹp' : language === 'ja' ? '出勤スタッフ設定' : 'Staff Assignment')
               }
             </span>
+          </button>
+
+          <button
+            className={`sidebar-link ${activeTab === 'logs' ? 'active' : ''}`}
+            onClick={() => setActiveTab('logs')}
+          >
+            <History size={16} />
+            <span>{language === 'vi' ? 'Lịch sử dọn' : language === 'ja' ? '清掃履歴' : 'Logs'}</span>
           </button>
 
           <div className="sidebar-mobile-actions">
@@ -2463,7 +2632,7 @@ export const FrontDeskDashboard: React.FC = () => {
                                 </div>
                               ) : (
                                 <>
-                                  {room.isStay && <span className="stay-badge">Stay</span>}
+                                  <span className="stay-badge">{room.status === 'maintenance' ? 'Sửa' : room.status === 'vacant' ? 'Trống' : room.status === 'eco' ? 'ECO' : (room.status === 'dirty' || room.status === 'cleaning' || (room.isStay && room.status === 'occupied')) ? (room.isStay ? 'STAY' : 'OUT') : (room.status === 'dnd' || room.notes?.includes('Chỉ cần treo đồ')) ? 'DD' : room.isStay ? 'STAY' : 'OUT'}</span>
                                   
                                   <div>
                                     <div className="room-type-text">{getFormattedRoomType(room.type)}</div>
@@ -3198,6 +3367,164 @@ export const FrontDeskDashboard: React.FC = () => {
           </p>
         </div>
       )}
+
+      {activeTab === 'logs' && (
+        <div className="glass-panel" style={{ padding: '1.5rem' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem' }}>
+            {getTranslation(language, 'cleaningSummary')}
+          </h3>
+          {logs.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem', opacity: 0.6 }}>{getTranslation(language, 'noData')}</div>
+          ) : (
+            <>
+              {/* Desktop view: Table */}
+              <div className="desktop-only-block" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomNumber')}</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Người duyệt' : language === 'ja' ? '検査者' : 'Checked By'}</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Bắt đầu' : 'Start'}</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Kết thúc' : 'Finish'}</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Duration</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'notes')}</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>Photo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logs
+                      .filter(log => log.endedAt.startsWith(activeDate))
+                      .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
+                      .map(log => (
+                        <tr key={log.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                          <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>
+                            {log.roomNumber} <span style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.6 }}>({log.floor}F)</span>
+                          </td>
+                          <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{log.cleanerName}</td>
+                          <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>
+                            {log.checkedBy ? (
+                              <span style={{ fontWeight: 500 }}>
+                                {log.checkedBy}
+                                <span style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>
+                                  {new Date(log.checkedAt!).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
+                                </span>
+                              </span>
+                            ) : (
+                              <span style={{ opacity: 0.4 }}>—</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
+                            {new Date(log.startedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
+                            {new Date(log.endedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.5rem' }}>
+                            <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
+                          </td>
+                          <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>
+                            {log.notes && (
+                              <div style={{ marginBottom: '0.25rem' }}>
+                                <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>🧹 {language === 'vi' ? 'Ghi chú NV:' : language === 'ja' ? '清掃員メモ:' : 'Cleaner Notes:'}</span> {log.notes}
+                              </div>
+                            )}
+                            {log.checkerNotes && (
+                              <div style={{ marginBottom: '0.25rem' }}>
+                                <span style={{ fontSize: '0.75rem', opacity: 0.6, color: 'var(--status-maintenance)' }}>🔍 {language === 'vi' ? 'Người check:' : language === 'ja' ? '指摘メモ:' : 'Checker Notes:'}</span> {log.checkerNotes}
+                              </div>
+                            )}
+                            {log.errors && log.errors.length > 0 ? (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.15rem', marginTop: '0.25rem' }}>
+                                {log.errors.map((e, idx) => (
+                                  <span key={idx} style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '3px' }}>
+                                    {translateDefect(e, language)}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : log.checkedBy ? (
+                              <div style={{ fontSize: '0.75rem', color: 'var(--status-clean)', fontWeight: 500, marginTop: '0.25rem' }}>
+                                ✓ {language === 'vi' ? 'Đạt 100%' : language === 'ja' ? '100%合格' : 'Passed 100%'}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td style={{ padding: '0.75rem 0.5rem' }}>
+                            {log.photoAfter ? (
+                              <a href={log.photoAfter} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.8rem', fontWeight: 600 }}>
+                                {language === 'vi' ? 'Xem ảnh' : language === 'ja' ? '写真を見る' : 'View Photo'}
+                              </a>
+                            ) : (
+                              <span style={{ opacity: 0.4, fontSize: '0.8rem' }}>{language === 'vi' ? 'Không ảnh' : language === 'ja' ? '写真なし' : 'No Photo'}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile view: Cards/Boxes */}
+              <div className="mobile-only-block" style={{ width: '100%' }}>
+                {logs
+                  .filter(log => log.endedAt.startsWith(activeDate))
+                  .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
+                  .map(log => (
+                    <div key={log.id} className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: '4px solid var(--primary-color)', position: 'relative' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontWeight: 700, fontSize: '1rem' }}>Room {log.roomNumber} ({log.floor}F)</span>
+                        <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
+                      </div>
+                      <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
+                        <strong>{getTranslation(language, 'cleanerName')}:</strong> {log.cleanerName}
+                      </div>
+                      {log.checkedBy && (
+                        <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
+                          <strong>{language === 'vi' ? 'Người duyệt:' : language === 'ja' ? '検査者:' : 'Checked By:'}</strong> {log.checkedBy} <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>({new Date(log.checkedAt!).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })})</span>
+                        </div>
+                      )}
+                      <div style={{ fontSize: '0.8rem', opacity: 0.8, display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+                        <span>🕒 {language === 'vi' ? 'Bắt đầu' : 'Start'}: {new Date(log.startedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                        <span>⌛ {language === 'vi' ? 'Kết thúc' : 'Finish'}: {new Date(log.endedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                      </div>
+                      {(log.notes || log.checkerNotes || (log.errors && log.errors.length > 0)) && (
+                        <div style={{ fontSize: '0.8rem', backgroundColor: 'rgba(0,0,0,0.02)', padding: '0.5rem', borderRadius: '6px', marginBottom: '0.5rem', borderLeft: '3px solid var(--primary-color)' }}>
+                          {log.notes && (
+                            <div style={{ marginBottom: '0.25rem' }}>
+                              <strong>🧹 {language === 'vi' ? 'Ghi chú NV:' : language === 'ja' ? '清縮員メモ:' : 'Cleaner Notes:'}</strong> {log.notes}
+                            </div>
+                          )}
+                          {log.checkerNotes && (
+                            <div style={{ marginBottom: '0.25rem' }}>
+                              <strong>🔍 {language === 'vi' ? 'Ghi chú kiểm phòng:' : language === 'ja' ? '検査指摘メモ:' : 'Checker Notes:'}</strong> {log.checkerNotes}
+                            </div>
+                          )}
+                          {log.errors && log.errors.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginTop: '0.35rem' }}>
+                              {log.errors.map((e, idx) => (
+                                <span key={idx} style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '3px' }}>
+                                  ❌ {translateDefect(e, language)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <div style={{ marginTop: '0.5rem' }}>
+                        {log.photoAfter ? (
+                          <a href={log.photoAfter} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', padding: '0.25rem 0.75rem', fontSize: '0.75rem', alignItems: 'center' }}>
+                            🖼️ {language === 'vi' ? 'Xem ảnh' : language === 'ja' ? '写真を見る' : 'View Photo'}
+                          </a>
+                        ) : (
+                          <span style={{ opacity: 0.5, fontSize: '0.75rem' }}>🚫 {language === 'vi' ? 'Không có ảnh' : language === 'ja' ? '写真なし' : 'No Photo'}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
         </main>
       </div>
 
@@ -3424,7 +3751,7 @@ export const FrontDeskDashboard: React.FC = () => {
                   <span className={`badge badge-${selectedRoom.status}`} style={{ fontSize: '0.65rem', marginLeft: '0.25rem' }}>
                     {selectedRoom.status.toUpperCase()}
                   </span>
-                  {selectedRoom.status === 'clean' && (
+                  {(selectedRoom.status === 'clean' || (selectedRoom.status === 'dnd' && selectedRoom.isStay)) && (
                     <span className={`badge badge-${selectedRoom.isChecked ? 'clean' : 'dirty'}`} style={{ fontSize: '0.65rem', marginLeft: '0.25rem' }}>
                       {selectedRoom.isChecked 
                         ? (language === 'vi' ? 'Đã duyệt ✓' : 'Checked ✓') 
@@ -3454,7 +3781,7 @@ export const FrontDeskDashboard: React.FC = () => {
             )}
 
             {/* Housekeeping Report inside modal for clean rooms */}
-            {selectedRoom.status === 'clean' && (
+            {(selectedRoom.status === 'clean' || (selectedRoom.status === 'dnd' && selectedRoom.isStay)) && (
               <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: '1rem', marginTop: '1rem', marginBottom: '1rem' }}>
                 <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem' }}>
                   {language === 'vi' ? '📋 Báo cáo từ dọn phòng:' : language === 'ja' ? '📋 清掃レポート:' : '📋 Housekeeping Report:'}
@@ -3462,7 +3789,7 @@ export const FrontDeskDashboard: React.FC = () => {
                 {roomLog ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem' }}>
                     <div><strong>{language === 'vi' ? 'Nhân viên:' : language === 'ja' ? '清掃担当:' : 'Cleaner:'}</strong> {roomLog.cleanerName}</div>
-                    <div><strong>{language === 'vi' ? 'Thời gian dọn:' : language === 'ja' ? '清掃時間:' : 'Duration:'}</strong> {roomLog.durationMinutes} {language === 'vi' ? 'phút' : language === 'ja' ? '分' : 'mins'}</div>
+                    <div><strong>{language === 'vi' ? 'Giờ hoàn thành:' : language === 'ja' ? '完了時間:' : 'Completion Time:'}</strong> {new Date(roomLog.endedAt).toLocaleTimeString()} ({roomLog.durationMinutes} {language === 'vi' ? 'phút' : 'mins'})</div>
                     <div><strong>{language === 'vi' ? 'Ghi chú của NV:' : language === 'ja' ? '清掃メモ:' : 'Notes:'}</strong> {roomLog.notes || 'N/A'}</div>
                     {roomLog.photoAfter && (
                       <div style={{ marginTop: '0.25rem' }}>
@@ -3476,9 +3803,116 @@ export const FrontDeskDashboard: React.FC = () => {
                     )}
                   </div>
                 ) : (
-                  <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>
-                    {language === 'vi' ? 'Chưa tìm thấy log dọn phòng.' : language === 'ja' ? '清掃ログが見つかりません。' : 'No cleaning logs found.'}
-                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem' }}>
+                    <div><strong>{language === 'vi' ? 'Nhân viên:' : language === 'ja' ? '清掃担当:' : 'Cleaner:'}</strong> {selectedRoom.cleanerName || 'N/A'}</div>
+                    <div><strong>{language === 'vi' ? 'Giờ hoàn thành:' : language === 'ja' ? '完了時間:' : 'Completion Time:'}</strong> {selectedRoom.updatedAt ? new Date(selectedRoom.updatedAt).toLocaleTimeString() : 'N/A'}</div>
+                    <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>
+                      {language === 'vi' ? '(Chưa tìm thấy chi tiết log dọn phòng)' : language === 'ja' ? '(清掃ログ詳細が見つかりません)' : '(No detailed cleaning log found)'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Checker Report */}
+                <div style={{ borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '0.75rem', marginTop: '0.75rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                    {language === 'vi' ? '🔍 Báo cáo từ kiểm phòng (Check):' : language === 'ja' ? '🔍 検査レポート:' : '🔍 Inspection Report:'}
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem' }}>
+                    <div>
+                      <strong>{language === 'vi' ? 'Người kiểm tra:' : language === 'ja' ? '検査担当:' : 'Checked By:'}</strong>{' '}
+                      {selectedRoom.checkedBy || (language === 'vi' ? 'Chưa kiểm tra / Đang chờ' : language === 'ja' ? '未検査 / 待機chú' : 'Pending')}
+                    </div>
+                    {selectedRoom.checkedBy && selectedRoom.checkedAt && (
+                      <div>
+                        <strong>{language === 'vi' ? 'Thời gian duyệt:' : language === 'ja' ? '検査時間:' : 'Inspected At:'}</strong>{' '}
+                        {new Date(selectedRoom.checkedAt).toLocaleString()}
+                      </div>
+                    )}
+                    {selectedRoom.isChecked && (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <strong>{language === 'vi' ? 'Đã xem ghi chú của người dọn:' : language === 'ja' ? '清掃員メモ確認済:' : 'Viewed cleaner notes:'}</strong>{' '}
+                          {selectedRoom.viewedCleanerNotes ? (
+                            <span style={{ color: 'var(--status-clean)', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                              ☑ {language === 'vi' ? 'Đã xem' : language === 'ja' ? '確認済' : 'Viewed'}
+                            </span>
+                          ) : (
+                            <span style={{ opacity: 0.6 }}>
+                              ☐ {language === 'vi' ? 'Chưa xem hoặc không có ghi chú' : language === 'ja' ? '未確認 hoặc không có ghi chú' : 'Not viewed or no notes'}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <strong>{language === 'vi' ? 'Ghi chú sự cố / kiểm phòng:' : language === 'ja' ? '指摘/異常報告メモ:' : 'Incident / Inspection Notes:'}</strong>{' '}
+                          <span style={{ color: 'var(--status-maintenance)', fontWeight: 600 }}>
+                            {selectedRoom.checkerNotes || (language === 'vi' ? 'Không có ghi chú sự cố' : language === 'ja' ? '指摘事項なし' : 'None')}
+                          </span>
+                        </div>
+                        <div style={{ marginTop: '0.5rem' }}>
+                          <strong>{language === 'vi' ? '🔍 Kết quả đánh giá chất lượng:' : language === 'ja' ? '🔍 品質インスペクション結果:' : '🔍 Quality Inspection Results:'}</strong>{' '}
+                          {roomLog && roomLog.errors && roomLog.errors.length > 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.35rem' }}>
+                              {roomLog.errors.map((e, idx) => (
+                                <span key={idx} style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  ❌ {translateDefect(e, language)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--status-clean)', fontWeight: 600, marginLeft: '0.25rem' }}>
+                              ✓ {language === 'vi' ? 'Đạt 100% (Không phát hiện lỗi)' : language === 'ja' ? '100%合格 (指摘なし)' : 'Passed 100% (No defects)'}
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Checker Inputs for Unchecked Rooms */}
+                {!selectedRoom.isChecked && (
+                  <div style={{
+                    backgroundColor: 'var(--panel-bg-subtle)',
+                    padding: '0.75rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-color)',
+                    marginTop: '0.75rem',
+                    textAlign: 'left'
+                  }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-color)' }}>
+                      📝 {language === 'vi' ? 'Nhận xét kiểm phòng:' : language === 'ja' ? '検査メモ/確認:' : 'Inspection Notes & Verification:'}
+                    </div>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: isEditDisabled ? 'default' : 'pointer', color: 'var(--text-color)', marginBottom: '0.5rem' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={viewedCleanerNotes} 
+                        onChange={e => setViewedCleanerNotes(e.target.checked)} 
+                        disabled={isEditDisabled} 
+                      />
+                      <strong>
+                        {language === 'vi' 
+                          ? '☑ Đã xem ghi chú của người dọn' 
+                          : language === 'ja' 
+                            ? '☑ 清掃員のメモを確認しました' 
+                            : '☑ Viewed cleaner\'s notes'}
+                      </strong>
+                    </label>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>
+                        {language === 'vi' ? 'Ghi chú sự cố / kiểm phòng:' : language === 'ja' ? '指摘/異常報告メモ:' : 'Incident / Inspection Notes:'}
+                      </label>
+                      <textarea
+                        className="form-input"
+                        value={checkerNotes}
+                        onChange={e => setCheckerNotes(e.target.value)}
+                        placeholder={language === 'vi' ? 'Nhập ghi chú sự cố hoặc nhận xét kiểm phòng...' : language === 'ja' ? '設備不具合や特記事項を入力...' : 'Enter inspection details or incidents...'}
+                        style={{ minHeight: '50px', resize: 'vertical', fontSize: '0.8rem', padding: '0.4rem' }}
+                        disabled={isEditDisabled}
+                      />
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -3608,14 +4042,16 @@ export const FrontDeskDashboard: React.FC = () => {
 
               {selectedRoom.status === 'clean' && !selectedRoom.isChecked && !showRecleanInput && !isEditDisabled && (
                 <>
-                  <button
-                    type="button"
-                    className="btn"
-                    style={{ backgroundColor: 'var(--status-maintenance)', color: 'white' }}
-                    onClick={() => setShowRecleanInput(true)}
-                  >
-                    🔄 {language === 'vi' ? 'Yêu cầu dọn lại' : language === 'ja' ? '再清掃要求' : 'Reclean'}
-                  </button>
+                  {(currentUser?.role === 'kacho' || currentUser?.role === 'admin') && (
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ backgroundColor: 'var(--status-maintenance)', color: 'white' }}
+                      onClick={() => setShowRecleanInput(true)}
+                    >
+                      🔄 {language === 'vi' ? 'Yêu cầu dọn lại' : language === 'ja' ? '再清掃要求' : 'Reclean'}
+                    </button>
+                  )}
                   <button 
                     type="button" 
                     className="btn"
@@ -3626,6 +4062,41 @@ export const FrontDeskDashboard: React.FC = () => {
                     {language === 'vi' ? 'Duyệt sạch' : language === 'ja' ? '承認' : 'Approve'}
                   </button>
                 </>
+              )}
+
+              {selectedRoom.status === 'dnd' && selectedRoom.isStay && !selectedRoom.isChecked && !isEditDisabled && (
+                <>
+                  {(currentUser?.role === 'kacho' || currentUser?.role === 'admin') && (
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ backgroundColor: 'var(--status-maintenance)', color: 'white' }}
+                      onClick={handleRevertDND}
+                    >
+                      ↩️ {language === 'vi' ? 'Quay lại' : language === 'ja' ? '戻す' : 'Revert'}
+                    </button>
+                  )}
+                  <button 
+                    type="button" 
+                    className="btn"
+                    style={{ backgroundColor: 'var(--status-maintenance)', color: 'white' }}
+                    onClick={handleApproveClean}
+                  >
+                    <CheckCircle size={18} />
+                    {language === 'vi' ? 'Hoàn thành' : language === 'ja' ? '完了' : 'Complete'}
+                  </button>
+                </>
+              )}
+
+              {selectedRoom.isChecked && !isEditDisabled && (selectedRoom.status === 'clean' || selectedRoom.status === 'eco' || (selectedRoom.status === 'dnd' && selectedRoom.isStay)) && (currentUser?.role === 'kacho' || currentUser?.role === 'admin') && (
+                <button 
+                  type="button" 
+                  className="btn"
+                  style={{ backgroundColor: 'var(--status-maintenance)', color: 'white' }}
+                  onClick={handleRevertEco}
+                >
+                  ↩️ {language === 'vi' ? 'Quay lại' : language === 'ja' ? '戻す' : 'Revert'}
+                </button>
               )}
 
               {gridMode === 'setup' && !showRecleanInput && (
@@ -3855,7 +4326,7 @@ export const FrontDeskDashboard: React.FC = () => {
                         </div>
                       ) : (
                         <>
-                          {room.isStay && <span className="stay-badge">Stay</span>}
+                          <span className="stay-badge">{room.status === 'maintenance' ? 'Sửa' : room.status === 'vacant' ? 'Trống' : room.status === 'eco' ? 'ECO' : (room.status === 'dirty' || room.status === 'cleaning' || (room.isStay && room.status === 'occupied')) ? (room.isStay ? 'STAY' : 'OUT') : (room.status === 'dnd' || room.notes?.includes('Chỉ cần treo đồ')) ? 'DD' : room.isStay ? 'STAY' : 'OUT'}</span>
                           
                           <div>
                             <div className="room-type-text">{getFormattedRoomType(room.type)}</div>

@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Eye, EyeOff } from 'lucide-react';
 import type { User, Hotel as HotelType } from '../../../db/dbInterface';
-import { getLocalDB } from '../../../db/localDB';
+import { getDatabaseProvider } from '../../../db/firebaseDB';
+import { hashPassword } from '../../../utils/crypto';
 
 interface UserManagementTabProps {
   language: any;
@@ -60,6 +61,8 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
   const [showPasswords, setShowPasswords] = useState<{ [id: string]: boolean }>({});
   const [addMode, setAddMode] = useState<'link' | 'create'>('link');
   const [selectedLinkUserId, setSelectedLinkUserId] = useState('');
+  const [changePasswordOption, setChangePasswordOption] = useState(false);
+  const [autoGenerateCode, setAutoGenerateCode] = useState(true);
 
   const [userForm, setUserForm] = useState<{
     username: string;
@@ -69,6 +72,8 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
     language: User['language'];
     hotelIds: string[];
     status: User['status'];
+    employeeCode: string;
+    password: string;
   }>({
     username: '',
     name: '',
@@ -76,7 +81,9 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
     pin: '',
     language: 'ja',
     hotelIds: [],
-    status: 'working'
+    status: 'working',
+    employeeCode: '',
+    password: ''
   });
 
   const userViewMode = activeTab === 'users' ? 'global' : 'local';
@@ -158,32 +165,57 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
 
   const handleAddUserClick = () => {
     setEditingUser(null);
+    setChangePasswordOption(false);
     const nextUsername = getNextEmployeeId('housekeeping', globalUsers);
     const targetHotelId = managingHotel ? managingHotel.id : selectedHotelId;
+    
+    let initialHotelIds: string[] = [];
+    if (targetHotelId && targetHotelId !== 'admin' && targetHotelId !== 'portal') {
+      initialHotelIds = [targetHotelId];
+    } else if (hotels.length > 0) {
+      initialHotelIds = [hotels[0].id];
+    }
+
     setUserForm({
       username: nextUsername,
       name: '',
       role: 'housekeeping',
       pin: '',
       language: 'ja',
-      hotelIds: [targetHotelId],
-      status: 'working'
+      hotelIds: initialHotelIds,
+      status: 'working',
+      employeeCode: nextUsername.toUpperCase(),
+      password: ''
     });
     setAddMode('link');
     setSelectedLinkUserId('');
+    setAutoGenerateCode(true);
     setUserModalOpen(true);
   };
 
   const handleEditUserClick = (user: User) => {
     setEditingUser(user);
+    setChangePasswordOption(false);
+    
+    let initialHotelIds = (user.hotelIds || []).filter(id => id !== 'admin' && id !== 'portal');
+    if (initialHotelIds.length === 0) {
+      if (selectedHotelId && selectedHotelId !== 'admin' && selectedHotelId !== 'portal') {
+        initialHotelIds = [selectedHotelId];
+      } else if (hotels.length > 0) {
+        initialHotelIds = [hotels[0].id];
+      }
+    }
+
     setUserForm({
       username: user.username || '',
       name: user.name,
       role: user.role,
       pin: user.pin || '',
       language: user.language,
-      hotelIds: user.hotelIds || [selectedHotelId],
-      status: user.status || 'working'
+      hotelIds: initialHotelIds,
+      status: user.status || 'working',
+      employeeCode: user.employeeCode || '',
+      password: ''
     });
     setUserModalOpen(true);
   };
@@ -212,7 +244,7 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
             : 'Are you sure you want to remove this user from the current hotel?');
 
     if (window.confirm(confirmMessage)) {
-      const targetDb = getLocalDB(selectedHotelId);
+      const targetDb = getDatabaseProvider(selectedHotelId);
       if (isGlobal) {
         await targetDb.deleteUserCompletely(id);
         addToast(
@@ -233,7 +265,53 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
   const handleUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const targetDb = getLocalDB(selectedHotelId);
+      const targetDb = getDatabaseProvider(selectedHotelId);
+
+      // Validate that employeeCode is not empty
+      if (!userForm.employeeCode.trim()) {
+        addToast(
+          language === 'vi' 
+            ? 'Mã nhân viên là bắt buộc!' 
+            : language === 'ja'
+              ? '社員コードは必須です！'
+              : 'Employee Code is required!',
+          'warning'
+        );
+        return;
+      }
+
+      // Validate that employeeCode is unique across all global users
+      const codeCheck = userForm.employeeCode.trim().toUpperCase();
+      const duplicateUser = globalUsers.find(
+        u => u.id !== editingUser?.id && u.employeeCode?.trim().toUpperCase() === codeCheck
+      );
+      if (duplicateUser) {
+        addToast(
+          language === 'vi'
+            ? `Mã nhân viên "${userForm.employeeCode}" đã trùng với nhân viên "${duplicateUser.name}"!`
+            : language === 'ja'
+              ? `社員コード "${userForm.employeeCode}" は " ${duplicateUser.name} " に重複しています！`
+              : `Employee Code "${userForm.employeeCode}" is duplicate with "${duplicateUser.name}"!`,
+          'warning'
+        );
+        return;
+      }
+
+      const sanitizedHotelIds = (userForm.hotelIds || []).filter(hId => hId !== 'admin' && hId !== 'portal');
+
+      const isAddingHotels = editingUser 
+        ? sanitizedHotelIds.some(id => !editingUser.hotelIds?.includes(id)) 
+        : (userViewMode === 'local' ? true : (sanitizedHotelIds.length > 0));
+
+      if (userForm.status === 'quit' && isAddingHotels) {
+        addToast(
+          language === 'vi'
+            ? 'Không thể thêm nhân viên đã nghỉ việc (❌) vào khách sạn. Vui lòng đổi trạng thái sang "Đang làm" trước.'
+            : 'Cannot add a quit employee (❌) to a hotel. Please change status to "Working" first.',
+          'warning'
+        );
+        return;
+      }
       
       if (!editingUser && userViewMode === 'local' && addMode === 'link') {
         if (!selectedLinkUserId) {
@@ -242,8 +320,17 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
         }
         const userToLink = globalUsers.find(u => u.id === selectedLinkUserId);
         if (userToLink) {
-          const updatedHotelIds = userToLink.hotelIds || [];
-          if (!updatedHotelIds.includes(selectedHotelId)) {
+          if (userToLink.status === 'quit') {
+            addToast(
+              language === 'vi'
+                ? 'Nhân viên này đã nghỉ việc (❌), không thể thêm vào khách sạn'
+                : 'This employee has quit (❌) and cannot be added to the hotel',
+              'warning'
+            );
+            return;
+          }
+          const updatedHotelIds = (userToLink.hotelIds || []).filter(id => id !== 'admin' && id !== 'portal');
+          if (!updatedHotelIds.includes(selectedHotelId) && selectedHotelId !== 'admin' && selectedHotelId !== 'portal') {
             updatedHotelIds.push(selectedHotelId);
           }
           await targetDb.updateUser({
@@ -258,29 +345,43 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
           );
         }
       } else {
+        let passwordHash = editingUser?.passwordHash;
+        if (userForm.password.trim()) {
+          passwordHash = await hashPassword(userForm.password.trim());
+        } else if (!editingUser) {
+          const defaultPassword = userForm.username.trim() + '123';
+          passwordHash = await hashPassword(defaultPassword);
+        }
+
         if (editingUser) {
           await targetDb.updateUser({
             ...editingUser,
-            username: userForm.username,
-            name: userForm.name,
+            username: userForm.username.trim(),
+            name: userForm.name.trim(),
             role: userForm.role,
             pin: userForm.pin,
             language: userForm.language,
-            hotelIds: userForm.hotelIds,
-            status: userForm.status
+            hotelIds: sanitizedHotelIds,
+            status: userForm.status,
+            employeeCode: userForm.employeeCode.trim().toUpperCase(),
+            passwordHash: passwordHash
           });
           addToast('User details updated', 'success');
         } else {
-          let finalHotelIds = userForm.hotelIds;
+          let finalHotelIds = sanitizedHotelIds;
           if (userViewMode === 'local') {
-            finalHotelIds = [selectedHotelId];
+            if (selectedHotelId !== 'admin' && selectedHotelId !== 'portal') {
+              finalHotelIds = [selectedHotelId];
+            } else if (hotels.length > 0) {
+              finalHotelIds = [hotels[0].id];
+            }
           }
 
           const allGlobal = await targetDb.getAllGlobalUsers();
           let existingUser = allGlobal.find(u => u.username?.trim().toLowerCase() === userForm.username.trim().toLowerCase());
           
           if (existingUser) {
-            const nextHotelIds = [...(existingUser.hotelIds || [])];
+            const nextHotelIds = [...(existingUser.hotelIds || [])].filter(id => id !== 'admin' && id !== 'portal');
             finalHotelIds.forEach(id => {
               if (!nextHotelIds.includes(id)) {
                 nextHotelIds.push(id);
@@ -288,22 +389,26 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
             });
             const updatedUser: User = {
               ...existingUser,
-              name: userForm.name,
+              name: userForm.name.trim(),
               role: userForm.role,
               language: userForm.language,
               status: userForm.status,
-              hotelIds: nextHotelIds
+              hotelIds: nextHotelIds,
+              employeeCode: userForm.employeeCode.trim().toUpperCase() || existingUser.employeeCode,
+              passwordHash: passwordHash || existingUser.passwordHash
             };
             await targetDb.updateUser(updatedUser);
           } else {
             const newUser: Omit<User, 'id'> = {
-              username: userForm.username,
-              name: userForm.name,
+              username: userForm.username.trim(),
+              name: userForm.name.trim(),
               role: userForm.role,
               pin: userForm.pin,
               language: userForm.language,
               hotelIds: finalHotelIds,
-              status: userForm.status
+              status: userForm.status,
+              employeeCode: userForm.employeeCode.trim().toUpperCase(),
+              passwordHash: passwordHash
             };
             await targetDb.createUser(newUser);
           }
@@ -481,6 +586,9 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '500px' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
+                  <th style={{ padding: '0.75rem 0.5rem', width: '50px' }}>
+                    {language === 'vi' ? 'STT' : 'No.'}
+                  </th>
                   <th 
                     style={{ padding: '0.75rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
                     onClick={() => {
@@ -489,7 +597,10 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
                     }}
                     title="Click to sort by Name"
                   >
-                    {getTranslation(language, 'cleanerName')} {userSortField === 'name' ? (userSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+                    {language === 'vi' ? 'Họ tên' : language === 'ja' ? '名前' : 'Name'} {userSortField === 'name' ? (userSortOrder === 'asc' ? ' ▲' : ' ▼') : ''}
+                  </th>
+                  <th style={{ padding: '0.75rem 0.5rem' }}>
+                    {language === 'vi' ? 'Mã NV' : 'Emp Code'}
                   </th>
                   <th 
                     style={{ padding: '0.75rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
@@ -527,39 +638,47 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {currentUsers.map(user => (
+                {currentUsers.map((user, idx) => (
                   <tr key={user.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                    <td style={{ padding: '0.75rem 0.5rem', opacity: 0.7 }}>
+                      {indexOfFirstUser + idx + 1}
+                    </td>
                     <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>{user.name}</td>
+                    <td style={{ padding: '0.75rem 0.5rem' }}>{user.employeeCode || '-'}</td>
                     <td style={{ padding: '0.75rem 0.5rem' }}>{user.username || '-'}</td>
                     <td style={{ padding: '0.75rem 0.5rem' }}>
                       <span className="badge badge-occupied" style={{ fontSize: '0.65rem' }}>{user.role.toUpperCase()}</span>
                     </td>
                     <td style={{ padding: '0.75rem 0.5rem', whiteSpace: 'nowrap' }}>
                       <span style={{ marginRight: '0.5rem' }}>
-                        {showPasswords[user.id] ? `${user.username || 'cleaner'}123` : '••••••••'}
+                        {user.passwordHash 
+                          ? '••••••••' 
+                          : showPasswords[user.id] ? `${user.username || 'cleaner'}123` : '••••••••'}
                       </span>
-                      <button
-                        onClick={() => setShowPasswords(prev => ({ ...prev, [user.id]: !prev[user.id] }))}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', verticalAlign: 'middle', color: '#64748b' }}
-                        title={showPasswords[user.id] ? 'Hide' : 'Show'}
-                      >
-                        {showPasswords[user.id] ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
+                      {!user.passwordHash && (
+                        <button
+                          onClick={() => setShowPasswords(prev => ({ ...prev, [user.id]: !prev[user.id] }))}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', verticalAlign: 'middle', color: '#64748b' }}
+                          title={showPasswords[user.id] ? 'Hide' : 'Show'}
+                        >
+                          {showPasswords[user.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                      )}
                     </td>
                     <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', fontWeight: 600 }}>
-                      {user.hotelIds?.map(hId => {
+                      {user.hotelIds?.filter(hId => hId !== 'admin' && hId !== 'portal').map(hId => {
                         const match = hotels.find(h => h.id === hId);
                         return match ? match.name : hId;
                       }).join(', ') || '-'}
                     </td>
                     <td style={{ padding: '0.75rem 0.5rem' }}>
                       {user.status === 'quit' ? (
-                        <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                          {language === 'vi' ? 'Đã nghỉ' : language === 'ja' ? '退職' : 'Quit'}
+                        <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }} title={language === 'vi' ? 'Đã nghỉ' : language === 'ja' ? '退職' : 'Quit'}>
+                          ❌
                         </span>
                       ) : (
-                        <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                          {language === 'vi' ? 'Đang làm' : language === 'ja' ? '在職' : 'Working'}
+                        <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }} title={language === 'vi' ? 'Đang làm' : language === 'ja' ? '在職' : 'Working'}>
+                          ✔️
                         </span>
                       )}
                     </td>
@@ -593,8 +712,14 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>👤 {user.name}</span>
-                  <span style={{ fontSize: '0.9rem', opacity: 0.8 }}>
-                    {user.username || '-'}
+                  <span style={{ fontSize: '0.85rem', opacity: 0.7, display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <span>{user.username || '-'}</span>
+                    {user.employeeCode && (
+                      <>
+                        <span style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: 'currentColor', opacity: 0.5 }}></span>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{user.employeeCode}</span>
+                      </>
+                    )}
                   </span>
                 </div>
               </div>
@@ -692,18 +817,25 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <strong style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.6, marginBottom: '0.25rem' }}>
-                    {language === 'vi' ? 'Mã NV (Tên đăng nhập)' : language === 'ja' ? 'ユーザー名 / スタッフID' : 'Username'}
+                    {language === 'vi' ? 'Tên đăng nhập' : language === 'ja' ? 'ユーザー名' : 'Username'}
                   </strong>
                   <span style={{ fontSize: '0.9rem', fontFamily: 'monospace', fontWeight: 600 }}>{viewingUser.username || '-'}</span>
                 </div>
                 <div>
                   <strong style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.6, marginBottom: '0.25rem' }}>
-                    Vai trò (Role)
+                    {language === 'vi' ? 'Mã NV' : 'Employee Code'}
                   </strong>
-                  <span className="badge badge-occupied" style={{ fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: 'bold' }}>
-                    {viewingUser.role}
-                  </span>
+                  <span style={{ fontSize: '0.9rem', fontFamily: 'monospace', fontWeight: 600 }}>{viewingUser.employeeCode || '-'}</span>
                 </div>
+              </div>
+
+              <div>
+                <strong style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.6, marginBottom: '0.25rem' }}>
+                  Vai trò (Role)
+                </strong>
+                <span className="badge badge-occupied" style={{ fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: 'bold' }}>
+                  {viewingUser.role}
+                </span>
               </div>
 
               <div>
@@ -712,16 +844,20 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
                 </strong>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'rgba(0,0,0,0.02)', padding: '0.4rem 0.75rem', borderRadius: '6px', border: '1px solid rgba(0,0,0,0.04)', width: 'fit-content' }}>
                   <span style={{ fontSize: '0.9rem', fontFamily: 'monospace' }}>
-                    {showPasswords[viewingUser.id] ? `${viewingUser.username || 'cleaner'}123` : '••••••••'}
+                    {viewingUser.passwordHash 
+                      ? '••••••••' 
+                      : showPasswords[viewingUser.id] ? `${viewingUser.username || 'cleaner'}123` : '••••••••'}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswords(prev => ({ ...prev, [viewingUser.id]: !prev[viewingUser.id] }))}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', color: '#64748b', display: 'flex', alignItems: 'center' }}
-                    title={showPasswords[viewingUser.id] ? 'Hide' : 'Show'}
-                  >
-                    {showPasswords[viewingUser.id] ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
+                  {!viewingUser.passwordHash && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswords(prev => ({ ...prev, [viewingUser.id]: !prev[viewingUser.id] }))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem', color: '#64748b', display: 'flex', alignItems: 'center' }}
+                      title={showPasswords[viewingUser.id] ? 'Hide' : 'Show'}
+                    >
+                      {showPasswords[viewingUser.id] ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -730,8 +866,8 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
                   {language === 'vi' ? 'Khách sạn làm việc' : language === 'ja' ? '所属ホテル' : 'Assigned Hotels'}
                 </strong>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.25rem' }}>
-                  {viewingUser.hotelIds && viewingUser.hotelIds.length > 0 ? (
-                    viewingUser.hotelIds.map(hId => {
+                  {viewingUser.hotelIds && viewingUser.hotelIds.filter(hId => hId !== 'admin' && hId !== 'portal').length > 0 ? (
+                    viewingUser.hotelIds.filter(hId => hId !== 'admin' && hId !== 'portal').map(hId => {
                       const match = hotels.find(h => h.id === hId);
                       return (
                         <span key={hId} className="badge badge-clean" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}>
@@ -751,12 +887,12 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
                 </strong>
                 <div style={{ marginTop: '0.25rem' }}>
                   {viewingUser.status === 'quit' ? (
-                    <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)', padding: '0.25rem 0.6rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                      {language === 'vi' ? 'Đã nghỉ việc' : language === 'ja' ? '退職' : 'Quit'}
+                    <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)', padding: '0.25rem 0.6rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }} title={language === 'vi' ? 'Đã nghỉ việc' : language === 'ja' ? '退職' : 'Quit'}>
+                      ❌
                     </span>
                   ) : (
-                    <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)', padding: '0.25rem 0.6rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                      {language === 'vi' ? 'Đang làm việc' : language === 'ja' ? '在職' : 'Working'}
+                    <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)', padding: '0.25rem 0.6rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center' }} title={language === 'vi' ? 'Đang làm việc' : language === 'ja' ? '在職' : 'Working'}>
+                      ✔️
                     </span>
                   )}
                 </div>
@@ -868,7 +1004,7 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
                 >
                   <option value="">-- {language === 'vi' ? 'Chọn nhân viên' : 'Select employee'} --</option>
                   {globalUsers
-                    .filter(u => !u.hotelIds?.includes(selectedHotelId))
+                    .filter(u => !u.hotelIds?.includes(selectedHotelId) && u.status !== 'quit')
                     .map(u => (
                       <option key={u.id} value={u.id}>
                         {u.name} ({u.username}) - {u.role.toUpperCase()}
@@ -887,7 +1023,7 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
             ) : (
               <>
                 <div className="form-group">
-                  <label className="form-label">{getTranslation(language, 'cleanerName')}</label>
+                  <label className="form-label">{language === 'vi' ? 'Họ tên' : language === 'ja' ? '氏名' : 'Full Name'}</label>
                   <input
                     type="text"
                     className="form-input"
@@ -899,7 +1035,9 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Role</label>
+                  <label className="form-label">
+                    {language === 'vi' ? 'Vai trò / Phân quyền' : language === 'ja' ? '権限 / 役割' : 'Role'}
+                  </label>
                   <select
                     className="form-input"
                     value={userForm.role}
@@ -907,43 +1045,124 @@ export const UserManagementTab: React.FC<UserManagementTabProps> = ({
                       const newRole = e.target.value as User['role'];
                       if (!editingUser) {
                         const nextUsername = getNextEmployeeId(newRole, globalUsers);
-                        setUserForm({ ...userForm, role: newRole, username: nextUsername });
+                        setUserForm({ 
+                          ...userForm, 
+                          role: newRole, 
+                          username: nextUsername, 
+                          employeeCode: autoGenerateCode ? nextUsername.toUpperCase() : userForm.employeeCode 
+                        });
                       } else {
                         setUserForm({ ...userForm, role: newRole });
                       }
                     }}
                   >
-                    <option value="admin">Administrator (Admin)</option>
-                    <option value="front_desk">Front Desk (Receptionist)</option>
-                    <option value="housekeeping">Housekeeping (Cleaner)</option>
-                    <option value="checka">{language === 'vi' ? 'Giám sát / Kiểm phòng (Checker)' : language === 'ja' ? '検査スタッフ (Checker)' : 'Room Checker (Checker)'}</option>
-                    <option value="kacho">{language === 'vi' ? 'Trưởng bộ phận (Kacho)' : language === 'ja' ? '課長 (Kacho)' : 'Section Manager (Kacho)'}</option>
+                    <option value="housekeeping">{getTranslation(language, 'roleHousekeeping')}</option>
+                    <option value="front_desk">{getTranslation(language, 'roleFrontDesk')}</option>
+                    <option value="checka">{getTranslation(language, 'roleChecker')}</option>
+                    <option value="kacho">{getTranslation(language, 'roleKacho')}</option>
+                    <option value="admin">{getTranslation(language, 'roleAdmin')}</option>
                   </select>
                 </div>
 
                 <div className="form-group">
                   <label className="form-label">
-                    {userForm.role === 'housekeeping' 
-                      ? (language === 'vi' ? 'Mã nhân viên (Username)' : language === 'ja' ? 'スタッフID (ユーザー名)' : 'Employee ID (Username)') 
-                      : getTranslation(language, 'username')}
+                    {language === 'vi' ? 'Mã NV (Mã nhân viên)' : language === 'ja' ? 'スタッフコード (Mã NV)' : 'Employee Code (Mã NV)'}
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    required
+                    disabled={!!editingUser || autoGenerateCode}
+                    value={userForm.employeeCode}
+                    onChange={e => setUserForm({ ...userForm, employeeCode: e.target.value })}
+                    placeholder="e.g. NV001"
+                    style={(editingUser || autoGenerateCode) ? { backgroundColor: 'rgba(0,0,0,0.05)', cursor: 'not-allowed' } : {}}
+                  />
+                  {!editingUser && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.4rem' }}>
+                      <input
+                        type="checkbox"
+                        id="autoGenerateCode"
+                        checked={autoGenerateCode}
+                        onChange={e => {
+                          const checked = e.target.checked;
+                          setAutoGenerateCode(checked);
+                          if (checked) {
+                            const nextUsername = getNextEmployeeId(userForm.role, globalUsers);
+                            setUserForm(prev => ({
+                              ...prev,
+                              employeeCode: nextUsername.toUpperCase()
+                            }));
+                          }
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <label htmlFor="autoGenerateCode" style={{ fontSize: '0.75rem', cursor: 'pointer', userSelect: 'none', opacity: 0.8 }}>
+                        {language === 'vi' ? 'Tự động sinh mã nhân viên' : language === 'ja' ? '社員コードを自動生成する' : 'Auto-generate employee code'}
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    {language === 'vi' ? 'Tên đăng nhập (Username)' : language === 'ja' ? 'ユーザー名 (Username)' : 'Username'}
                   </label>
                   <input
                     type="text"
                     className="form-input"
                     required
                     value={userForm.username}
-                    disabled={true}
+                    disabled={editingUser !== null}
+                    onChange={e => setUserForm({ ...userForm, username: e.target.value })}
                     placeholder={userForm.role === 'housekeeping' ? 'e.g. nv01' : 'e.g. front2'}
                   />
-
-                  <span style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '0.25rem', display: 'block' }}>
-                    {language === 'vi' 
-                      ? `Mật khẩu đăng nhập sẽ là: Tên đăng nhập + "123"` 
-                      : language === 'ja'
-                        ? `ログインパスワードは ユーザー名 + "123" になります。`
-                        : `Password will be username + "123".`}
-                  </span>
                 </div>
+
+                {editingUser !== null && (
+                  <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                    <input
+                      type="checkbox"
+                      id="changePasswordCheckbox"
+                      checked={changePasswordOption}
+                      onChange={e => {
+                        setChangePasswordOption(e.target.checked);
+                        if (!e.target.checked) {
+                          setUserForm(prev => ({ ...prev, password: '' }));
+                        }
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <label htmlFor="changePasswordCheckbox" style={{ cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                      {language === 'vi' ? 'Thay đổi mật khẩu' : language === 'ja' ? 'パスワードを変更する' : 'Change Password'}
+                    </label>
+                  </div>
+                )}
+
+                {(!editingUser || changePasswordOption) && (
+                  <div className="form-group">
+                    <label className="form-label">
+                      {language === 'vi' ? 'Mật khẩu (Password)' : language === 'ja' ? 'パスワード (Password)' : 'Password'}
+                    </label>
+                    <input
+                      type="password"
+                      className="form-input"
+                      required={!editingUser || changePasswordOption}
+                      value={userForm.password}
+                      onChange={e => setUserForm({ ...userForm, password: e.target.value })}
+                      placeholder={editingUser ? (language === 'vi' ? 'Nhập mật khẩu mới' : 'Enter new password') : 'e.g. secret123'}
+                    />
+                    {!editingUser && (
+                      <span style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '0.25rem', display: 'block' }}>
+                        {language === 'vi' 
+                          ? `* Nếu để trống, mật khẩu mặc định sẽ là: Tên đăng nhập + "123"` 
+                          : language === 'ja'
+                            ? `※ 空白の場合、初期パスワードはユーザー名 + "123" になります。`
+                            : `* If left empty, default password is username + "123".`}
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {/* Employment Status Selector (Only when editing user) */}
                 {editingUser !== null && (

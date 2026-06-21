@@ -265,8 +265,8 @@ select option {
   border: 1px solid var(--status-eco-border);
 }
 .dark-mode .badge-eco {
-  background-color: rgba(139, 92, 246, 0.15);
-  border-color: rgba(139, 92, 246, 0.3);
+  background-color: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.3);
 }
 
 .badge-dnd {

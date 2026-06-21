@@ -3,8 +3,9 @@ import { useApp } from '../Common/AppContext';
 import { getTranslation } from '../../i18n/translations';
 import { db } from '../../db/firebaseDB';
 import type { Room } from '../../db/dbInterface';
-import { Play, CheckCircle, Camera, Check, Sparkles, Filter, ClipboardList, AlertTriangle, Sun, Moon, LogOut, User } from 'lucide-react';
+import { Play, CheckCircle, Camera, Check, Sparkles, Filter, ClipboardList, AlertTriangle, Sun, Moon, LogOut, User, Maximize2, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { getDateLockedMessage, isDateLockedError } from '../../utils/errors';
 
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -49,13 +50,88 @@ const compressImage = (file: File): Promise<string> => {
   });
 };
 
-export const HousekeepingDashboard: React.FC = () => {
-  const { currentUser, language, addToast, activeDate, logout, darkMode, toggleDarkMode, setLanguage, hotelId, isLocked } = useApp();
+export interface HousekeepingDashboardProps {
+  isNested?: boolean;
+}
+
+export const HousekeepingDashboard: React.FC<HousekeepingDashboardProps> = ({ isNested = false }) => {
+  const { currentUser, language, addToast, activeDate, logout, darkMode, toggleDarkMode, setLanguage, hotelId, isLocked, selectHotel } = useApp();
+  const [hasSchedule, setHasSchedule] = useState<boolean>(false);
+  const [isCheckingSchedule, setIsCheckingSchedule] = useState<boolean>(true);
+  const [countdown, setCountdown] = useState<number>(5);
+
+  const isHousekeeper = currentUser?.role === 'housekeeping';
+
+  // Poll schedule status for housekeeper
+  useEffect(() => {
+    if (!isHousekeeper || isNested || !currentUser || !hotelId) {
+      setHasSchedule(true);
+      setIsCheckingSchedule(false);
+      return;
+    }
+
+    setCountdown(5);
+    let isSubscribed = true;
+    const checkSchedule = async () => {
+      try {
+        const activeStaff = await db.getActiveStaff(activeDate);
+        if (isSubscribed) {
+          const scheduled = activeStaff.includes(currentUser.id);
+          setHasSchedule(scheduled);
+          setIsCheckingSchedule(false);
+        }
+      } catch (e) {
+        console.error('Failed to check housekeeper schedule:', e);
+        if (isSubscribed) {
+          setIsCheckingSchedule(false);
+        }
+      }
+    };
+
+    checkSchedule();
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          checkSchedule();
+          return 5;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [hotelId, activeDate, currentUser, isHousekeeper, isNested]);
+
   const [rooms, setRooms] = useState<Room[]>([]);
   const [floorFilter, setFloorFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [assignedFilter, setAssignedFilter] = useState<'all' | 'mine'>('all');
   const [showLegend, setShowLegend] = useState(false);
+  const [isFullScreenFloorView, setIsFullScreenFloorView] = useState(false);
+  const [activeFloorIndex, setActiveFloorIndex] = useState(0);
+  const [gridColumns, setGridColumns] = useState<string>('6');
+
+  // Swipe handlers for fullscreen floor carousel
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart) return;
+    const current = e.changedTouches[0].clientX;
+    const diff = touchStart - current;
+    if (diff > 50) {
+      setActiveFloorIndex(prev => Math.min(prev + 1, floors.length - 1));
+    } else if (diff < -50) {
+      setActiveFloorIndex(prev => Math.max(prev - 1, 0));
+    }
+    setTouchStart(null);
+  };
   
   const getFormattedRoomType = (type: string) => {
     if (!type) return '';
@@ -75,62 +151,51 @@ export const HousekeepingDashboard: React.FC = () => {
   const [cameraActive, setCameraActive] = useState(false);
   const [showSourceChoice, setShowSourceChoice] = useState(false);
 
-  // Start Cleaning Confirmation Modal State
-  const [selectedStartRoom, setSelectedStartRoom] = useState<Room | null>(null);
-
   // Revert Clean Room Modal State
   const [selectedCleanRevertRoom, setSelectedCleanRevertRoom] = useState<Room | null>(null);
 
-  // Map to track when a cleaner starts cleaning a room (stored locally or in memory)
-  // key: roomId, value: startedAt ISOString
-  const [startedTimestamps, setStartedTimestamps] = useState<Record<string, string>>({});
+  const [activeHotel, setActiveHotel] = useState<any>(null);
+
+  const showMutationError = (error: unknown, fallback: string) => {
+    console.error(error);
+    addToast(isDateLockedError(error) ? getDateLockedMessage(language) : fallback, 'warning');
+  };
 
   useEffect(() => {
+    db.setDate(activeDate);
+
     // Subscribe to rooms updates
     const unsubscribe = db.subscribeRooms((updatedRooms) => {
       setRooms(updatedRooms);
     });
 
-    // Load started times from localStorage to survive page refresh
-    const savedTimestamps = localStorage.getItem('hotel_clean_started_times');
-    if (savedTimestamps) {
-      setStartedTimestamps(JSON.parse(savedTimestamps));
+    const fetchHotel = async () => {
+      try {
+        const hotelsList = await db.getHotels();
+        const hotel = hotelsList.find(h => h.id === hotelId);
+        setActiveHotel(hotel || null);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    if (hotelId) {
+      fetchHotel();
     }
 
     return () => unsubscribe();
-  }, [hotelId]);
+  }, [hotelId, activeDate]);
 
-  const saveStartedTimestamps = (newTimestamps: Record<string, string>) => {
-    setStartedTimestamps(newTimestamps);
-    localStorage.setItem('hotel_clean_started_times', JSON.stringify(newTimestamps));
-  };
-
-  const handleStartCleaning = async (room: Room) => {
-    if (!currentUser) return;
-    try {
-      // Transition room status to "cleaning" and assign to active cleaner
-      await db.updateRoomStatus(room.id, 'cleaning', currentUser.name, currentUser.id, currentUser.name);
-      
-      const startTime = new Date().toISOString();
-      saveStartedTimestamps({
-        ...startedTimestamps,
-        [room.id]: startTime
-      });
-
-      addToast(
-        language === 'vi' 
-          ? `Đã bắt đầu dọn phòng ${room.roomNumber}`
-          : language === 'ja'
-            ? `部屋 ${room.roomNumber} の清掃を開始しました`
-            : `Started cleaning room ${room.roomNumber}`,
-        'info'
-      );
-      setSelectedStartRoom(null);
-    } catch (e) {
-      console.error(e);
-      addToast('Error updating status', 'warning');
+  const getTargetCleanMinutes = (roomType: string) => {
+    if (!activeHotel) return 30;
+    if (activeHotel.roomTypes) {
+      const typeConfig = activeHotel.roomTypes.find((t: any) => t.name === roomType || t.id === roomType);
+      if (typeConfig && typeConfig.cleanMinutes > 0) {
+        return typeConfig.cleanMinutes;
+      }
     }
+    return activeHotel.defaultCleanMinutes || 30;
   };
+
 
   const handleFinishCleaningClick = (room: Room) => {
     setActiveSheetRoom(room);
@@ -207,12 +272,9 @@ export const HousekeepingDashboard: React.FC = () => {
     if (!activeSheetRoom || !currentUser) return;
     try {
       const endedAt = new Date().toISOString();
-      const startedAt = startedTimestamps[activeSheetRoom.id] || new Date(Date.now() - 1800000).toISOString(); // fallback 30m ago
+      const durationMinutes = getTargetCleanMinutes(activeSheetRoom.type);
+      const startedAt = new Date(Date.now() - durationMinutes * 60000).toISOString();
       
-      // Calculate duration
-      const diffMs = new Date(endedAt).getTime() - new Date(startedAt).getTime();
-      const durationMinutes = Math.max(1, Math.round(diffMs / 60000));
-
       // 1. Create a cleaning report log entry
       await db.createLog({
         roomId: activeSheetRoom.id,
@@ -230,11 +292,6 @@ export const HousekeepingDashboard: React.FC = () => {
       // 2. Mark room status as clean/ready
       await db.updateRoomStatus(activeSheetRoom.id, 'clean', currentUser.name, currentUser.id, currentUser.name);
 
-      // 3. Clear start timestamp
-      const nextTimestamps = { ...startedTimestamps };
-      delete nextTimestamps[activeSheetRoom.id];
-      saveStartedTimestamps(nextTimestamps);
-
       // Trigger success celebration effect!
       confetti({
         particleCount: 80,
@@ -246,63 +303,149 @@ export const HousekeepingDashboard: React.FC = () => {
       
       setActiveSheetRoom(null);
     } catch (e) {
-      console.error(e);
-      addToast('Error finishing cleaning report', 'warning');
+      showMutationError(e, 'Error finishing cleaning report');
     }
   };
 
-  const handleCancelCleaning = async (room: Room) => {
+  const submitHangingDNDOnly = async () => {
+    if (!activeSheetRoom || !currentUser) return;
     try {
-      await db.updateRoomStatus(room.id, 'dirty', currentUser?.name || 'System', '', '');
+      const endedAt = new Date().toISOString();
+      const durationMinutes = getTargetCleanMinutes(activeSheetRoom.type);
+      const startedAt = new Date(Date.now() - durationMinutes * 60000).toISOString();
       
-      // Clear timestamp
-      const nextTimestamps = { ...startedTimestamps };
-      delete nextTimestamps[room.id];
-      saveStartedTimestamps(nextTimestamps);
+      // 1. Create a cleaning report log entry
+      await db.createLog({
+        roomId: activeSheetRoom.id,
+        roomNumber: activeSheetRoom.roomNumber,
+        floor: activeSheetRoom.floor,
+        cleanerId: currentUser.id,
+        cleanerName: currentUser.name,
+        startedAt,
+        endedAt,
+        durationMinutes,
+        notes: notes ? notes + ' - Chỉ cần treo đồ (DND)' : 'Chỉ cần treo đồ (DND)',
+        photoAfter: photo || undefined
+      });
 
-      addToast(
-        language === 'vi' 
-          ? `Đã hủy dọn phòng ${room.roomNumber}`
-          : language === 'ja'
-            ? `部屋 ${room.roomNumber} の清掃をキャンセルしました`
-            : `Cancelled cleaning for room ${room.roomNumber}`,
-        'info'
-      );
-      
-      setActiveSheetRoom(null);
-    } catch (e) {
-      console.error(e);
-      addToast('Error reverting status', 'warning');
-    }
-  };
+      // 2. Mark room status as clean with note reflecting DND hanging
+      await db.updateRoom({
+        ...activeSheetRoom,
+        status: 'clean',
+        isChecked: false,
+        checkedBy: undefined,
+        checkedAt: undefined,
+        photoDefect: undefined,
+        notes: activeSheetRoom.notes ? activeSheetRoom.notes + ' - Chỉ cần treo đồ (DND)' : 'Chỉ cần treo đồ (DND)',
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser.name,
+        assignedTo: currentUser.id,
+        cleanerName: currentUser.name
+      });
 
-  const handleRevertCleanToCleaning = async (room: Room) => {
-    if (!currentUser) return;
-    try {
-      await db.updateRoomStatus(room.id, 'cleaning', currentUser.name, currentUser.id, currentUser.name);
-      
-      const startTime = new Date().toISOString();
-      saveStartedTimestamps({
-        ...startedTimestamps,
-        [room.id]: startTime
+      // Trigger success celebration effect!
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.8 }
       });
 
       addToast(
         language === 'vi' 
-          ? `Đã chuyển phòng ${room.roomNumber} về trạng thái đang dọn`
+          ? 'Đã báo cáo chỉ cần treo đồ!' 
           : language === 'ja'
-            ? `部屋 ${room.roomNumber} を清掃中ステータスに戻しました`
-            : `Reverted room ${room.roomNumber} to cleaning status`,
+            ? 'アメニティ吊り下げのみと報告しました！'
+            : 'Reported hang amenities only!',
         'success'
       );
-      setSelectedCleanRevertRoom(null);
+      
+      setActiveSheetRoom(null);
     } catch (e) {
-      console.error(e);
-      addToast('Error updating status', 'warning');
+      showMutationError(e, 'Error saving report');
     }
   };
 
+  const submitDNDRoom = async () => {
+    if (!activeSheetRoom || !currentUser) return;
+    try {
+      const endedAt = new Date().toISOString();
+      const durationMinutes = 0;
+      const startedAt = endedAt;
+      
+      await db.createLog({
+        roomId: activeSheetRoom.id,
+        roomNumber: activeSheetRoom.roomNumber,
+        floor: activeSheetRoom.floor,
+        cleanerId: currentUser.id,
+        cleanerName: currentUser.name,
+        startedAt,
+        endedAt,
+        durationMinutes,
+        notes: notes ? notes + ' - Khách treo DND (DD)' : 'Khách treo DND (DD)',
+        photoAfter: photo || undefined
+      });
+
+      await db.updateRoom({
+        ...activeSheetRoom,
+        status: 'dnd',
+        isChecked: false,
+        checkedBy: undefined,
+        checkedAt: undefined,
+        photoDefect: undefined,
+        notes: activeSheetRoom.notes ? activeSheetRoom.notes + ' - Khách treo DND (DD)' : 'Khách treo DND (DD)',
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser.name,
+        assignedTo: currentUser.id,
+        cleanerName: currentUser.name
+      });
+
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.8 }
+      });
+
+      addToast(
+        language === 'vi' 
+          ? 'Đã chuyển trạng thái phòng thành DND (DD)!' 
+          : language === 'ja'
+            ? '部屋のステータスをDNDに変更しました！'
+            : 'Room status set to DND successfully!',
+        'success'
+      );
+      
+      setActiveSheetRoom(null);
+    } catch (e) {
+      showMutationError(e, 'Error saving DND room status');
+    }
+  };
+
+
+
+
+
+
   const handleRevertCleanToDirty = async (room: Room) => {
+    const canRevert = 
+      currentUser?.role === 'admin' || 
+      currentUser?.role === 'kacho' || 
+      currentUser?.role === 'checka' || 
+      (!room.isChecked && 
+        (room.assignedTo === currentUser?.id || 
+         (room.cleanerName && room.cleanerName === currentUser?.name)));
+
+    if (!canRevert) {
+      addToast(
+        language === 'vi'
+          ? 'Bạn không có quyền hủy trạng thái dọn sạch của phòng này.'
+          : language === 'ja'
+            ? 'この部屋の清掃完了ステータスを取り消す権限がありません。'
+            : 'You do not have permission to revert the clean status of this room.',
+        'warning'
+      );
+      return;
+    }
+
     try {
       await db.updateRoomStatus(room.id, 'dirty', currentUser?.name || 'System', '', '');
       addToast(
@@ -315,27 +458,66 @@ export const HousekeepingDashboard: React.FC = () => {
       );
       setSelectedCleanRevertRoom(null);
     } catch (e) {
-      console.error(e);
-      addToast('Error updating status', 'warning');
+      showMutationError(e, 'Error updating status');
     }
   };
 
+  const handleRevertDNDToStay = async (room: Room) => {
+    const canRevert = 
+      currentUser?.role === 'admin' || 
+      currentUser?.role === 'kacho' || 
+      currentUser?.role === 'checka' || 
+      (!room.isChecked && 
+        (room.assignedTo === currentUser?.id || 
+         (room.cleanerName && room.cleanerName === currentUser?.name)));
+
+    if (!canRevert) {
+      addToast(
+        language === 'vi'
+          ? 'Bạn không có quyền hủy trạng thái dọn sạch của phòng này.'
+          : language === 'ja'
+            ? 'この部屋の清掃完了ステータスを取り消す権限がありません。'
+            : 'You do not have permission to revert the clean status of this room.',
+        'warning'
+      );
+      return;
+    }
+
+    try {
+      const cleanedNotes = (room.notes || '')
+        .replace(' - Chỉ cần treo đồ (DND)', '')
+        .replace('Chỉ cần treo đồ (DND)', '')
+        .trim();
+
+      await db.updateRoom({
+        ...room,
+        status: 'occupied',
+        isChecked: false,
+        notes: cleanedNotes || undefined,
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUser?.name || 'System',
+        assignedTo: currentUser?.id || '',
+        cleanerName: currentUser?.name || ''
+      });
+
+      addToast(
+        language === 'vi' 
+          ? `Đã chuyển phòng ${room.roomNumber} về phòng STAY cần dọn.` 
+          : language === 'ja'
+            ? `部屋 ${room.roomNumber} を連泊要清掃に戻しました。`
+            : `Reverted room ${room.roomNumber} to STAY.`,
+        'success'
+      );
+      setSelectedCleanRevertRoom(null);
+    } catch (e) {
+      showMutationError(e, 'Error reverting room');
+    }
+  };
+
+
   const handleRoomCardClick = (room: Room) => {
-    if (room.status === 'dirty') {
-      setSelectedStartRoom(room);
-    } else if (room.status === 'eco') {
+    if (room.status === 'dirty' || room.status === 'eco' || room.status === 'cleaning' || (room.isStay && room.status === 'occupied')) {
       handleFinishCleaningClick(room);
-    } else if (room.status === 'cleaning') {
-      if (room.assignedTo === currentUser?.id) {
-        handleFinishCleaningClick(room);
-      } else {
-        addToast(
-          language === 'vi' 
-            ? `Phòng đang được dọn bởi ${room.cleanerName}`
-            : `この部屋は ${room.cleanerName} が清掃中です`,
-          'warning'
-        );
-      }
     } else if (room.status === 'clean') {
       setSelectedCleanRevertRoom(room);
     }
@@ -346,7 +528,7 @@ export const HousekeepingDashboard: React.FC = () => {
     return rooms.filter(room => {
       const matchesFloor = floorFilter === 'all' || room.floor.toString() === floorFilter;
       const matchesStatus = statusFilter === 'all' || room.status === statusFilter;
-      const matchesAssigned = assignedFilter === 'all' || (assignedFilter === 'mine' && room.assignedTo === currentUser?.id);
+      const matchesAssigned = assignedFilter === 'all' || (assignedFilter === 'mine' && room.assignedTo === currentUser?.id && (room.status === 'clean' || room.status === 'dnd'));
       return matchesFloor && matchesStatus && matchesAssigned;
     });
   }, [rooms, floorFilter, statusFilter, assignedFilter, currentUser]);
@@ -363,13 +545,12 @@ export const HousekeepingDashboard: React.FC = () => {
   }, [filteredRooms]);
 
   // Metrics
-  const { totalRooms, dirtyRooms, cleaningRooms, cleanRooms, myCleaningRooms } = useMemo(() => {
+  const { totalRooms, dirtyRooms, cleanRooms, myCleaningRooms } = useMemo(() => {
     return {
       totalRooms: rooms.length,
       dirtyRooms: rooms.filter(r => r.status === 'dirty').length,
-      cleaningRooms: rooms.filter(r => r.status === 'cleaning').length,
       cleanRooms: rooms.filter(r => r.status === 'clean').length,
-      myCleaningRooms: rooms.filter(r => r.status === 'cleaning' && r.assignedTo === currentUser?.id).length
+      myCleaningRooms: rooms.filter(r => (r.status === 'clean' || r.status === 'dnd') && r.assignedTo === currentUser?.id).length
     };
   }, [rooms, currentUser]);
 
@@ -377,10 +558,14 @@ export const HousekeepingDashboard: React.FC = () => {
     return Array.from(new Set(rooms.map(r => r.floor))).sort((a, b) => a - b);
   }, [rooms]);
 
-  return (
-    <div className="main-content">
-      <div className="dashboard-layout">
-        <aside className="sidebar-menu mobile-only-sidebar glass-panel">
+  const renderLayout = (content: React.ReactNode) => {
+    if (isNested) {
+      return content;
+    }
+    return (
+      <div className="main-content">
+        <div className="dashboard-layout">
+          <aside className="sidebar-menu mobile-only-sidebar glass-panel">
           <div className="sidebar-mobile-actions" style={{ marginTop: '0' }}>
             {/* User Profile & Logout */}
             <div className="mobile-action-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -480,8 +665,135 @@ export const HousekeepingDashboard: React.FC = () => {
             </div>
           </div>
         </aside>
+        {content}
+      </div>
+    </div>
+  );
+};
 
-        <main className="dashboard-content-panel">
+  if (isHousekeeper && !isNested && isCheckingSchedule) {
+    return renderLayout(
+      <main className="dashboard-content-panel" style={{ width: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', width: '100%', gap: '1rem' }}>
+          <div className="animate-spin" style={{ fontSize: '2rem' }}>⏳</div>
+          <p style={{ opacity: 0.8, fontSize: '0.95rem', fontWeight: 600 }}>
+            {language === 'vi' ? 'Đang kiểm tra lịch làm việc...' : language === 'ja' ? 'シフト確認中...' : 'Checking schedule...'}
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (isHousekeeper && !isNested && !hasSchedule) {
+    return renderLayout(
+      <main className="dashboard-content-panel" style={{ width: '100%' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          minHeight: '60vh', 
+          width: '100%',
+          padding: '1rem',
+          boxSizing: 'border-box'
+        }}>
+          <div className="glass-panel" style={{ 
+            maxWidth: '480px', 
+            width: '100%', 
+            padding: '2.5rem 2rem', 
+            textAlign: 'center',
+            boxShadow: 'var(--shadow-lg)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: 'var(--radius-md)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '1.5rem'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(249, 115, 22, 0.1)',
+              color: 'var(--status-cleaning)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.75rem'
+            }}>
+              🛎️
+            </div>
+            
+            <div>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: '0 0 0.5rem 0', color: 'var(--primary-color)' }}>
+                {language === 'vi' ? 'Phòng Chờ Nhân Sự' : language === 'ja' ? 'スタッフ控室' : 'Staff Waiting Room'}
+              </h2>
+              <p style={{ fontSize: '0.9rem', opacity: 0.6, fontWeight: 700, margin: 0 }}>
+                🏨 {activeHotel ? activeHotel.name : hotelId}
+              </p>
+            </div>
+
+            <div style={{ 
+              backgroundColor: 'rgba(0,0,0,0.02)', 
+              padding: '1rem', 
+              borderRadius: '8px', 
+              border: '1px solid rgba(0,0,0,0.05)',
+              fontSize: '0.9rem',
+              lineHeight: 1.5,
+              color: 'var(--text-color)'
+            }}>
+              {language === 'vi' ? (
+                <>
+                  <p style={{ margin: '0 0 0.5rem 0' }}>Bạn hiện chưa có lịch phân công dọn phòng tại khách sạn này hôm nay.</p>
+                  <strong style={{ color: 'var(--status-clean)' }}>Vui lòng đợi quản lý hoặc lễ tân thêm bạn vào danh sách phân công dọn dẹp.</strong>
+                </>
+              ) : language === 'ja' ? (
+                <>
+                  <p style={{ margin: '0 0 0.5rem 0' }}>本日、このホテルでの清掃シフトがまだ割り当てられていません。</p>
+                  <strong style={{ color: 'var(--status-clean)' }}>管理者が清掃割り当てリストにあなたを追加するまでお待ちください。</strong>
+                </>
+              ) : (
+                <>
+                  <p style={{ margin: '0 0 0.5rem 0' }}>You do not have a cleaning assignment for this hotel today yet.</p>
+                  <strong style={{ color: 'var(--status-clean)' }}>Please wait for the manager or front desk to assign your schedule.</strong>
+                </>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', opacity: 0.8 }}>
+              <span className="animate-pulse" style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--status-clean)' }}></span>
+              <span>
+                {language === 'vi' 
+                  ? `Đang tự động kiểm tra lại sau ${countdown} giây...` 
+                  : language === 'ja' 
+                    ? `あと ${countdown} 秒後に自動チェック中...` 
+                    : `Checking again in ${countdown} seconds...`}
+              </span>
+            </div>
+
+            <button 
+              type="button" 
+              className="btn btn-secondary w-full"
+              onClick={() => selectHotel('portal')}
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: '0.5rem', 
+                padding: '0.6rem',
+                fontWeight: 600
+              }}
+            >
+              <span>🚪</span>
+              {language === 'vi' ? 'Quay lại cổng chọn khách sạn' : language === 'ja' ? 'ホテル選択に戻る' : 'Back to Hotel Selection'}
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  return renderLayout(
+    <main className="dashboard-content-panel" style={isNested ? { padding: '1rem 0' } : undefined}>
           {isLocked && (
             <div style={{
               backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -506,9 +818,11 @@ export const HousekeepingDashboard: React.FC = () => {
               </span>
             </div>
           )}
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1.5rem' }}>
-        {getTranslation(language, 'hkDashboard')}
-      </h2>
+          {!isNested && (
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1.5rem' }}>
+              {getTranslation(language, 'hkDashboard')}
+            </h2>
+          )}
 
       {/* Metrics Row */}
       <div className="metrics-grid" style={{ marginBottom: '1.5rem' }}>
@@ -529,16 +843,6 @@ export const HousekeepingDashboard: React.FC = () => {
           <div>
             <div className="metric-value">{dirtyRooms}</div>
             <div className="metric-label">{getTranslation(language, 'statsDirtyRooms')}</div>
-          </div>
-        </div>
-
-        <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-cleaning)' }}>
-          <div className="metric-icon" style={{ backgroundColor: 'rgba(249, 115, 22, 0.1)', color: 'var(--status-cleaning)' }}>
-            <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>CLN</span>
-          </div>
-          <div>
-            <div className="metric-value">{cleaningRooms}</div>
-            <div className="metric-label">{getTranslation(language, 'statsCleaningRooms')}</div>
           </div>
         </div>
 
@@ -610,12 +914,40 @@ export const HousekeepingDashboard: React.FC = () => {
           >
             <option value="all">{getTranslation(language, 'all')}</option>
             <option value="dirty">{getTranslation(language, 'statusDirty')}</option>
-            <option value="cleaning">{getTranslation(language, 'statusCleaning')}</option>
             <option value="clean">{getTranslation(language, 'statusClean')}</option>
             <option value="vacant">{language === 'vi' ? 'Trống (Vacant)' : language === 'ja' ? '空室 (Vacant)' : 'Vacant'}</option>
             <option value="occupied">{getTranslation(language, 'statusOccupied')}</option>
             <option value="maintenance">{getTranslation(language, 'statusMaintenance')}</option>
           </select>
+        </div>
+
+        {/* Full screen button */}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn-outline"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.4rem 0.75rem',
+              borderColor: 'var(--primary-color)',
+              color: 'var(--primary-color)',
+              fontWeight: 600,
+              fontSize: '0.8rem',
+              borderRadius: 'var(--radius-sm)'
+            }}
+            onClick={() => {
+              const initialFloor = floorFilter !== 'all' ? Number(floorFilter) : floors[0] || 0;
+              const idx = floors.indexOf(initialFloor);
+              setActiveFloorIndex(idx !== -1 ? idx : 0);
+              setIsFullScreenFloorView(true);
+            }}
+            disabled={floors.length === 0}
+          >
+            <Maximize2 size={14} />
+            <span>{language === 'vi' ? 'Xem full tầng' : language === 'ja' ? '全画面表示' : 'Full Screen'}</span>
+          </button>
         </div>
       </div>
 
@@ -641,45 +973,63 @@ export const HousekeepingDashboard: React.FC = () => {
             paddingTop: '0.75rem' 
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.18)', backgroundColor: '#f1f5f9' }}></div>
+              <div style={{ width: '28px', height: '28px', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.18)', backgroundColor: '#ffffff' }}></div>
               <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                {language === 'vi' ? 'Phòng trống (Trắng nhạt)' : language === 'ja' ? '空室 (薄白)' : 'Vacant (Off-White)'}
+                {language === 'vi' ? 'Phòng trống (Trắng)' : language === 'ja' ? '空室 (白)' : 'Vacant (White)'}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#ef4444' }}></div>
+              <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#334155', border: '1px solid #1e293b' }}></div>
               <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                {language === 'vi' ? 'Phòng out cần dọn (Đỏ)' : language === 'ja' ? 'アウト清掃必要 (赤)' : 'Checkout Dirty (Red)'}
+                {language === 'vi' ? 'Sửa chữa (Đen nhạt)' : language === 'ja' ? '故障・修繕中 (薄黒)' : 'Maintenance (Charcoal)'}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #ef4444 50%, #38bdf8 50%)' }}></div>
+              <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#22c55e', border: '1px solid #16a34a' }}></div>
               <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                {language === 'vi' ? 'Vệ sinh xong (Đỏ / Xanh da trời)' : language === 'ja' ? '清掃完了 (赤 / 水色)' : 'Cleaned (Red / Sky Blue)'}
+                {language === 'vi' ? 'Phòng ECO chưa check (Xanh lá)' : language === 'ja' ? 'ECO未検査 (緑)' : 'ECO Unchecked (Green)'}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #38bdf8 50%, #22c55e 50%)' }}></div>
+              <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #22c55e 50%, #38bdf8 50%)', border: '1px solid #38bdf8' }}></div>
               <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                {language === 'vi' ? 'Đã duyệt (Xanh da trời / Xanh lá)' : language === 'ja' ? '客室検査合格 (水色 / 緑)' : 'Approved (Sky Blue / Green)'}
+                {language === 'vi' ? 'Phòng ECO đã check (Xanh lá / Xanh nước biển)' : language === 'ja' ? 'ECO検査済 (緑 / 水色)' : 'ECO Checked (Green / Sky Blue)'}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#8b5cf6' }}></div>
+              <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#ef4444', border: '1px solid #dc2626' }}></div>
               <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                {language === 'vi' ? 'Phòng stay - dọn (Tím)' : language === 'ja' ? '滞在清掃 (紫)' : 'Stay Room (Purple)'}
-              </span>
-            </div>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #8b5cf6 50%, #38bdf8 50%)' }}></div>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                {language === 'vi' ? 'Stay DND hoặc Đã dọn (Tím / Xanh da trời)' : language === 'ja' ? '滞在 DND または清掃完了 (紫 / 水色)' : 'Stay DND or Cleaned (Purple / Sky Blue)'}
+                {language === 'vi' ? 'Phòng OUT chưa dọn (Đỏ)' : language === 'ja' ? 'OUT未清掃 (赤)' : 'OUT Dirty (Red)'}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#334155' }}></div>
+              <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #ef4444 50%, #22c55e 50%)', border: '1px solid #22c55e' }}></div>
               <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                {language === 'vi' ? 'Đang sửa chữa (Đen nhẹ)' : language === 'ja' ? '故障・修繕中 (薄黒)' : 'Maintenance (Charcoal)'}
+                {language === 'vi' ? 'Phòng OUT dọn xong (Đỏ / Xanh lá)' : language === 'ja' ? 'OUT清掃完了 (赤 / 緑)' : 'OUT Cleaned (Red / Green)'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #ef4444 33.33%, #22c55e 33.33% 66.66%, #38bdf8 66.66%)', border: '1px solid #38bdf8' }}></div>
+              <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                {language === 'vi' ? 'Phòng OUT đã check (Đỏ / Xanh lá / Xanh nước biển)' : language === 'ja' ? 'OUT検査済 (赤 / 緑 / 水色)' : 'OUT Checked (Red / Green / Sky Blue)'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '4px', backgroundColor: '#8b5cf6', border: '1px solid #7c3aed' }}></div>
+              <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                {language === 'vi' ? 'Phòng STAY chưa dọn (Tím)' : language === 'ja' ? 'STAY未清掃 (紫)' : 'STAY Dirty (Purple)'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #8b5cf6 50%, #22c55e 50%)', border: '1px solid #22c55e' }}></div>
+              <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                {language === 'vi' ? 'Phòng STAY/DD dọn xong (Tím / Xanh lá)' : language === 'ja' ? 'STAY/DD清掃完了 (紫 / 緑)' : 'STAY/DD Cleaned (Purple / Green)'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '4px', background: 'linear-gradient(135deg, #8b5cf6 33.33%, #22c55e 33.33% 66.66%, #38bdf8 66.66%)', border: '1px solid #38bdf8' }}></div>
+              <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                {language === 'vi' ? 'Phòng STAY/DD đã check (Tím / Xanh lá / Xanh nước biển)' : language === 'ja' ? 'STAY/DD検査済 (紫 / 緑 / 水色)' : 'STAY/DD Checked (Purple / Green / Sky Blue)'}
               </span>
             </div>
           </div>
@@ -718,8 +1068,6 @@ export const HousekeepingDashboard: React.FC = () => {
                       return a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true });
                     })
                     .map((room: Room) => {
-                      const isAssignedToMe = room.assignedTo === currentUser?.id;
-                      const isCleaning = room.status === 'cleaning';
                       const isDirty = room.status === 'dirty';
                       
                       const guestLabel = language === 'vi' 
@@ -730,12 +1078,12 @@ export const HousekeepingDashboard: React.FC = () => {
 
                       const isEco = room.status === 'eco';
                       // Determine cursor style
-                      const isClickable = !isLocked && (isDirty || isEco || (isCleaning && isAssignedToMe) || room.status === 'clean');
+                      const isClickable = !isLocked && (isDirty || isEco || room.status === 'cleaning' || room.status === 'clean' || (room.isStay && room.status === 'occupied'));
 
                       return (
                         <div 
                           key={room.id} 
-                          className={`room-card ${room.status} ${isClickable ? 'clickable' : ''}`}
+                          className={`room-card ${room.status} ${room.isStay ? 'stay' : ''} ${room.isChecked ? 'checked' : ''} ${isClickable ? 'clickable' : ''}`}
                           onClick={() => isClickable && handleRoomCardClick(room)}
                           style={{ 
                             cursor: isClickable ? 'pointer' : 'default',
@@ -743,7 +1091,7 @@ export const HousekeepingDashboard: React.FC = () => {
                           }}
                           title={room.notes ? `Ghi chú: ${room.notes}` : undefined}
                         >
-                          {room.isStay && <span className="stay-badge">Stay</span>}
+                          <span className="stay-badge">{room.status === 'maintenance' ? 'Sửa' : room.status === 'vacant' ? 'Trống' : room.status === 'eco' ? 'ECO' : (room.status === 'dirty' || room.status === 'cleaning' || (room.isStay && room.status === 'occupied')) ? (room.isStay ? 'STAY' : 'OUT') : (room.status === 'dnd' || room.notes?.includes('Chỉ cần treo đồ')) ? 'DD' : room.isStay ? 'STAY' : 'OUT'}</span>
                           <div>
                             <div className="room-type-text">{getFormattedRoomType(room.type)}</div>
                             <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
@@ -765,7 +1113,6 @@ export const HousekeepingDashboard: React.FC = () => {
                                 </span>
                               )}
                               {(isDirty || isEco) && <Play size={14} style={isEco ? { color: 'var(--status-eco)' } : { color: 'var(--status-dirty)' }} fill={isEco ? 'var(--status-eco)' : 'var(--status-dirty)'} />}
-                              {isCleaning && isAssignedToMe && <CheckCircle size={14} style={{ color: 'var(--status-cleaning)' }} />}
                               {room.notes && <AlertTriangle size={14} style={{ color: 'var(--status-maintenance)' }} className="animate-pulse" />}
                             </div>
                           </div>
@@ -775,7 +1122,7 @@ export const HousekeepingDashboard: React.FC = () => {
                             <span className="room-guest-count">
                               ※ {guestLabel}
                             </span>
-                            {(room.status === 'cleaning' || room.status === 'clean') && room.cleanerName && (
+                            {room.status === 'clean' && room.cleanerName && (
                               <span className="room-assignee" title={room.cleanerName}>
                                 👤 {room.cleanerName.split(' ')[0]}
                               </span>
@@ -809,159 +1156,166 @@ export const HousekeepingDashboard: React.FC = () => {
           })
       )}
 
-      {/* Start Cleaning Confirmation Modal */}
-      {selectedStartRoom && (
-        <div className="modal-overlay">
-          <div className="modal-content glass-panel" style={{ maxWidth: '400px' }}>
-            <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary-color)' }}>
-              <Play size={20} fill="var(--primary-color)" />
-              {language === 'vi' ? 'Bắt đầu dọn phòng' : language === 'ja' ? '清掃開始の確認' : 'Start Cleaning Confirm'}
-            </h3>
-            
-            <p className="modal-description">
-              {language === 'vi' 
-                ? `Bạn có muốn bắt đầu dọn phòng ${selectedStartRoom.roomNumber} không?`
-                : language === 'ja'
-                  ? `部屋 ${selectedStartRoom.roomNumber} の清掃を開始しますか？`
-                  : `Do you want to start cleaning room ${selectedStartRoom.roomNumber}?`}
-            </p>
 
-            {selectedStartRoom.notes && (
-              <div style={{
-                marginTop: '1rem',
-                padding: '0.75rem',
-                backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                borderLeft: '4px solid var(--status-maintenance)',
-                borderRadius: 'var(--radius-sm)',
-                textAlign: 'left'
-              }}>
-                <div style={{ 
-                  fontWeight: 700, 
-                  color: 'var(--status-maintenance)', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '0.25rem',
-                  fontSize: '0.85rem',
-                  marginBottom: '0.25rem'
-                }}>
-                  <AlertTriangle size={14} className="animate-pulse" />
-                  {language === 'vi' ? 'Ghi chú quan trọng:' : language === 'ja' ? '重要メモ:' : 'Important Note:'}
-                </div>
-                <p style={{ 
-                  fontSize: '0.85rem', 
-                  color: 'var(--status-maintenance)', 
-                  fontWeight: 600,
-                  margin: 0,
-                  whiteSpace: 'pre-wrap'
-                }}>
-                  {selectedStartRoom.notes}
-                </p>
-              </div>
-            )}
-
-            {selectedStartRoom.photoDefect && (
-              <div style={{
-                marginTop: '1rem',
-                padding: '0.75rem',
-                backgroundColor: 'rgba(239, 68, 68, 0.05)',
-                border: '1px solid rgba(239, 68, 68, 0.2)',
-                borderRadius: 'var(--radius-sm)',
-                textAlign: 'left'
-              }}>
-                <div style={{ 
-                  fontWeight: 700, 
-                  color: 'var(--status-maintenance)', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '0.25rem',
-                  fontSize: '0.85rem',
-                  marginBottom: '0.5rem'
-                }}>
-                  <AlertTriangle size={14} className="animate-pulse" />
-                  {language === 'vi' ? 'Hình ảnh lỗi dọn dẹp:' : language === 'ja' ? '指摘された清掃不良画像:' : 'Defect Photo:'}
-                </div>
-                <img 
-                  src={selectedStartRoom.photoDefect} 
-                  alt="Defect" 
-                  style={{
-                    width: '100%',
-                    maxHeight: '200px',
-                    objectFit: 'contain',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid rgba(0,0,0,0.1)'
-                  }} 
-                />
-              </div>
-            )}
-
-            <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
-              <button 
-                type="button" 
-                className="btn btn-secondary" 
-                onClick={() => setSelectedStartRoom(null)}
-              >
-                {getTranslation(language, 'cancel')}
-              </button>
-              <button 
-                type="button" 
-                className="btn btn-primary"
-                onClick={() => handleStartCleaning(selectedStartRoom)}
-              >
-                {getTranslation(language, 'confirm')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Revert Clean Confirmation Modal */}
-      {selectedCleanRevertRoom && (
-        <div className="modal-overlay">
-          <div className="modal-content glass-panel" style={{ maxWidth: '420px' }}>
-            <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--status-maintenance)' }}>
-              <AlertTriangle size={20} className="animate-pulse" />
-              {language === 'vi' ? 'Hủy trạng thái dọn sạch' : language === 'ja' ? '清掃完了の取り消し' : 'Revert Clean Status'}
-            </h3>
-            
-            <p className="modal-description">
-              {language === 'vi' 
-                ? `Phòng ${selectedCleanRevertRoom.roomNumber} đã được báo dọn sạch. Bạn muốn chuyển phòng này về trạng thái nào?`
-                : language === 'ja'
-                  ? `部屋 ${selectedCleanRevertRoom.roomNumber} は清掃完了と報告されています。どのステータスに戻しますか？`
-                  : `Room ${selectedCleanRevertRoom.roomNumber} is marked as clean. Which status do you want to revert it to?`}
-            </p>
+      {selectedCleanRevertRoom && (() => {
+        const canRevert = 
+          currentUser?.role === 'admin' || 
+          currentUser?.role === 'kacho' || 
+          currentUser?.role === 'checka' || 
+          (!selectedCleanRevertRoom.isChecked && 
+            (selectedCleanRevertRoom.assignedTo === currentUser?.id || 
+             (selectedCleanRevertRoom.cleanerName && selectedCleanRevertRoom.cleanerName === currentUser?.name)));
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem' }}>
-              <button 
-                type="button" 
-                className="btn"
-                style={{ backgroundColor: 'var(--status-cleaning)', color: 'white', justifyContent: 'center' }}
-                onClick={() => handleRevertCleanToCleaning(selectedCleanRevertRoom)}
-              >
-                🔄 {language === 'vi' ? 'Quay lại "Đang dọn" (Nhận lại dọn)' : language === 'ja' ? '「清掃中」に戻す (自分に割当)' : 'Revert to "Cleaning" (Assign to me)'}
-              </button>
+        return (
+          <div className="modal-overlay">
+            <div className="modal-content glass-panel" style={{ maxWidth: '420px' }}>
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--status-maintenance)' }}>
+                <AlertTriangle size={20} className="animate-pulse" />
+                {language === 'vi' ? 'Hủy trạng thái dọn sạch' : language === 'ja' ? '清掃完了の取り消し' : 'Revert Clean Status'}
+              </h3>
               
-              <button 
-                type="button" 
-                className="btn btn-danger"
-                style={{ justifyContent: 'center' }}
-                onClick={() => handleRevertCleanToDirty(selectedCleanRevertRoom)}
-              >
-                🚪 {language === 'vi' ? 'Quay lại "Cần dọn" (Bỏ dọn/Chờ dọn)' : language === 'ja' ? '「要清掃」に戻す (未割当)' : 'Revert to "Dirty" (Unassigned)'}
-              </button>
-              
-              <button 
-                type="button" 
-                className="btn btn-secondary"
-                style={{ justifyContent: 'center', marginTop: '0.5rem' }}
-                onClick={() => setSelectedCleanRevertRoom(null)}
-              >
-                {getTranslation(language, 'cancel')}
-              </button>
+              <p className="modal-description">
+                {language === 'vi' 
+                  ? `Phòng ${selectedCleanRevertRoom.roomNumber} đã được báo dọn sạch. Bạn muốn chuyển phòng này về trạng thái nào?`
+                  : language === 'ja'
+                    ? `部屋 ${selectedCleanRevertRoom.roomNumber} は清掃完了と報告されています。どのステータスに戻しますか？`
+                    : `Room ${selectedCleanRevertRoom.roomNumber} is marked as clean. Which status do you want to revert it to?`}
+              </p>
+
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '0.5rem', 
+                margin: '1.25rem 0', 
+                padding: '0.75rem', 
+                backgroundColor: 'var(--panel-bg-subtle)', 
+                borderRadius: 'var(--radius-sm)', 
+                border: '1px solid var(--border-color)', 
+                fontSize: '0.85rem', 
+                textAlign: 'left' 
+              }}>
+                <div>
+                  <strong>{language === 'vi' ? '👤 Nhân viên dọn:' : language === 'ja' ? '👤 清掃担当:' : '👤 Cleaner:'}</strong>{' '}
+                  {selectedCleanRevertRoom.cleanerName || 'N/A'}
+                </div>
+                <div>
+                  <strong>{language === 'vi' ? '🕒 Giờ hoàn thành:' : language === 'ja' ? '🕒 完了時間:' : '🕒 Completion Time:'}</strong>{' '}
+                  {selectedCleanRevertRoom.updatedAt ? new Date(selectedCleanRevertRoom.updatedAt).toLocaleTimeString() : 'N/A'}
+                </div>
+                <div>
+                  <strong>{language === 'vi' ? '📝 Ghi chú NV:' : language === 'ja' ? '📝 清掃員メモ:' : '📝 Cleaner Notes:'}</strong>{' '}
+                  {selectedCleanRevertRoom.notes || 'N/A'}
+                </div>
+                <div style={{ borderTop: '1px dashed rgba(0,0,0,0.1)', marginTop: '0.25rem', paddingTop: '0.25rem' }}>
+                  <strong>{language === 'vi' ? '🔍 Người kiểm tra (Check):' : language === 'ja' ? '🔍 検査担当:' : '🔍 Checked By:'}</strong>{' '}
+                  {selectedCleanRevertRoom.checkedBy || (language === 'vi' ? 'Chưa kiểm tra' : language === 'ja' ? '未検査' : 'Pending')}
+                  {selectedCleanRevertRoom.checkedBy && selectedCleanRevertRoom.checkedAt && (
+                    <span style={{ fontSize: '0.75rem', opacity: 0.6, marginLeft: '0.25rem' }}>
+                      ({new Date(selectedCleanRevertRoom.checkedAt).toLocaleTimeString()})
+                    </span>
+                  )}
+                </div>
+                {selectedCleanRevertRoom.isChecked && (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <strong>{language === 'vi' ? 'Đã xem ghi chú của người dọn:' : language === 'ja' ? '清掃員メモ確認済:' : 'Viewed cleaner notes:'}</strong>{' '}
+                      {selectedCleanRevertRoom.viewedCleanerNotes ? (
+                        <span style={{ color: 'var(--status-clean)', fontWeight: 'bold' }}>☑ {language === 'vi' ? 'Đã xem' : '確認済'}</span>
+                      ) : (
+                        <span style={{ opacity: 0.6 }}>☐ {language === 'vi' ? 'Chưa xem' : '未確認'}</span>
+                      )}
+                    </div>
+                    <div>
+                      <strong>{language === 'vi' ? 'Ghi chú sự cố / kiểm phòng:' : language === 'ja' ? '指摘/異常報告メモ:' : 'Incident / Inspection Notes:'}</strong>{' '}
+                      <span style={{ color: 'var(--status-maintenance)', fontWeight: 600 }}>{selectedCleanRevertRoom.checkerNotes || (language === 'vi' ? 'Không có ghi chú sự cố' : language === 'ja' ? '指摘なし' : 'None')}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Warning Message if Cannot Revert */}
+              {!canRevert && (
+                <div style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '0.75rem',
+                  color: '#ef4444',
+                  fontSize: '0.85rem',
+                  textAlign: 'left',
+                  margin: '1.25rem 0',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '0.5rem'
+                }}>
+                  <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+                  <div>
+                    {selectedCleanRevertRoom.isChecked ? (
+                      language === 'vi' 
+                        ? 'Phòng này đã được nghiệm thu (Check). Bạn không thể quay lại trạng thái cần dọn. Chỉ có Checker, Kacho hoặc Admin mới có quyền thực hiện.'
+                        : language === 'ja'
+                          ? 'この客室はすでに検査済みです。要清掃ステータスに戻すことはできません。検査担当、Kacho、またはAdminのみが実行できます。'
+                          : 'This room is already checked/approved. You cannot revert it to dirty. Only Checker, Kacho, or Admin can perform this action.'
+                    ) : (
+                      language === 'vi'
+                        ? 'Bạn không được phân công dọn phòng này. Chỉ có nhân viên dọn phòng đó, Checker, Kacho hoặc Admin mới có thể quay lại trạng thái cần dọn.'
+                        : language === 'ja'
+                          ? 'この客室の清掃担当ではありません。担当の清掃員、検査担当、Kacho、またはAdminのみが要清掃に戻すことができます。'
+                          : 'You are not assigned to clean this room. Only the assigned cleaner, Checker, Kacho, or Admin can revert its status.'
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1.5rem' }}>
+                {canRevert ? (
+                  <>
+                    {selectedCleanRevertRoom.isStay && selectedCleanRevertRoom.notes?.includes('Chỉ cần treo đồ') ? (
+                      <button 
+                        type="button" 
+                        className="btn btn-warning"
+                        style={{ justifyContent: 'center', backgroundColor: '#f97316', color: 'white' }}
+                        onClick={() => handleRevertDNDToStay(selectedCleanRevertRoom)}
+                      >
+                        🔁 {language === 'vi' ? 'Quay lại phòng STAY cần dọn' : language === 'ja' ? '連泊要清掃に戻す' : 'Revert to STAY (Dirty)'}
+                      </button>
+                    ) : (
+                      <button 
+                        type="button" 
+                        className="btn btn-danger"
+                        style={{ justifyContent: 'center' }}
+                        onClick={() => handleRevertCleanToDirty(selectedCleanRevertRoom)}
+                      >
+                        🚪 {language === 'vi' ? 'Quay lại "Cần dọn" (Chờ dọn)' : language === 'ja' ? '「要清掃」に戻す' : 'Revert to "Dirty"'}
+                      </button>
+                    )}
+                    
+                    <button 
+                      type="button" 
+                      className="btn btn-secondary"
+                      style={{ justifyContent: 'center', marginTop: '0.5rem' }}
+                      onClick={() => setSelectedCleanRevertRoom(null)}
+                    >
+                      {getTranslation(language, 'cancel')}
+                    </button>
+                  </>
+                ) : (
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary"
+                    style={{ justifyContent: 'center' }}
+                    onClick={() => setSelectedCleanRevertRoom(null)}
+                  >
+                    {language === 'vi' ? 'Đóng' : language === 'ja' ? '閉じる' : 'Close'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Finish Cleaning Bottom-Sheet / Dialog Panel */}
       {activeSheetRoom && (
@@ -970,6 +1324,15 @@ export const HousekeepingDashboard: React.FC = () => {
             <h3 className="modal-title" style={{ fontSize: '1.25rem', fontWeight: 700 }}>
               {getTranslation(language, 'cleaningSummary')} - Room {activeSheetRoom.roomNumber}
             </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem', padding: '0.75rem', backgroundColor: 'var(--panel-bg-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', fontSize: '0.9rem', textAlign: 'left' }}>
+              <div>
+                <strong>{language === 'vi' ? 'Kiểu phòng:' : language === 'ja' ? '部屋タイプ:' : 'Room Type:'}</strong> {getFormattedRoomType(activeSheetRoom.type)} - {activeSheetRoom.floor}F
+              </div>
+              <div>
+                <strong>{language === 'vi' ? 'Số khách dọn (Set):' : language === 'ja' ? '設定人数:' : 'Guests Count (Set):'}</strong> {activeSheetRoom.guestCount} {language === 'vi' ? 'người' : language === 'ja' ? '人' : 'Pax'}
+              </div>
+            </div>
 
             {activeSheetRoom.notes && (
               <div style={{
@@ -1161,16 +1524,6 @@ export const HousekeepingDashboard: React.FC = () => {
 
             {/* Action buttons */}
             <div className="modal-actions">
-              {activeSheetRoom.status === 'cleaning' && (
-                <button 
-                  type="button" 
-                  className="btn btn-danger" 
-                  style={{ marginRight: 'auto' }}
-                  onClick={() => handleCancelCleaning(activeSheetRoom)}
-                >
-                  {language === 'vi' ? 'Hủy dọn phòng' : language === 'ja' ? '清掃をキャンセル' : 'Stop Cleaning'}
-                </button>
-              )}
               <button 
                 type="button" 
                 className="btn btn-secondary" 
@@ -1178,6 +1531,28 @@ export const HousekeepingDashboard: React.FC = () => {
               >
                 {getTranslation(language, 'cancel')}
               </button>
+              {activeSheetRoom.isStay && (
+                <>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ backgroundColor: '#f97316', color: 'white', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                    onClick={submitHangingDNDOnly}
+                  >
+                    <Sparkles size={18} />
+                    {language === 'vi' ? 'Chỉ cần treo đồ' : language === 'ja' ? 'アメニティ吊り下げのみ' : 'Hang items only'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ backgroundColor: '#64748b', color: 'white', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                    onClick={submitDNDRoom}
+                  >
+                    <AlertTriangle size={18} />
+                    {language === 'vi' ? 'Trở thành phòng DD' : language === 'ja' ? 'DND部屋にする' : 'Make DD Room'}
+                  </button>
+                </>
+              )}
               <button 
                 type="button" 
                 className="btn"
@@ -1185,15 +1560,231 @@ export const HousekeepingDashboard: React.FC = () => {
                 onClick={submitFinishedCleaning}
               >
                 <Check size={18} />
-                {getTranslation(language, 'save')}
+                {language === 'vi' ? 'Dọn xong ✓' : language === 'ja' ? '清掃完了 ✓' : 'Finish Clean ✓'}
               </button>
             </div>
           </div>
         </div>
       )}
-        </main>
-      </div>
-    </div>
+
+      {/* FULL SCREEN FLOOR CAROUSEL VIEW */}
+      {isFullScreenFloorView && floors.length > 0 && (
+        <div 
+          className="fullscreen-floor-overlay"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Header */}
+          <div className="fullscreen-floor-header">
+            <div className="floor-selector-container">
+              <button 
+                type="button"
+                className="btn btn-outline btn-icon"
+                style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
+                onClick={() => setActiveFloorIndex(prev => Math.max(prev - 1, 0))}
+                disabled={activeFloorIndex === 0}
+              >
+                <ChevronLeft size={20} />
+              </button>
+              
+              <select 
+                className="form-input floor-dropdown"
+                value={floors[activeFloorIndex]}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  const idx = floors.indexOf(val);
+                  if (idx !== -1) setActiveFloorIndex(idx);
+                }}
+              >
+                {floors.map(floorNum => (
+                  <option key={floorNum} value={floorNum}>
+                    {language === 'vi' ? `Tầng ${floorNum}F` : language === 'ja' ? `${floorNum}階` : `Floor ${floorNum}F`}
+                  </option>
+                ))}
+              </select>
+
+              <button 
+                type="button"
+                className="btn btn-outline btn-icon"
+                style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
+                onClick={() => setActiveFloorIndex(prev => Math.min(prev + 1, floors.length - 1))}
+                disabled={activeFloorIndex === floors.length - 1}
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {/* Columns Selector inside full screen */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Col:</span>
+                <select 
+                  className="form-input" 
+                  style={{ width: '70px', padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                  value={gridColumns}
+                  onChange={e => setGridColumns(e.target.value)}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="4">4</option>
+                  <option value="6">6</option>
+                  <option value="8">8</option>
+                  <option value="10">10</option>
+                  <option value="12">12</option>
+                  <option value="16">16</option>
+                </select>
+              </div>
+
+              <button 
+                type="button"
+                className="btn btn-outline btn-icon"
+                style={{ padding: '0.4rem', display: 'flex', alignItems: 'center' }}
+                onClick={() => setIsFullScreenFloorView(false)}
+              >
+                <Minimize2 size={20} />
+              </button>
+            </div>
+          </div>
+
+          {/* Content Area */}
+          <div className="fullscreen-floor-body">
+            <div 
+              className={`room-grid cols-${gridColumns}`}
+              style={gridColumns !== 'auto' ? {
+                gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
+                ['--room-card-min-height' as any]: Number(gridColumns) >= 12 ? '80px' : Number(gridColumns) >= 8 ? '95px' : '120px',
+                ['--room-card-padding' as any]: Number(gridColumns) >= 12 ? '0.5rem 0.4rem 0.4rem' : Number(gridColumns) >= 8 ? '0.8rem 0.6rem 0.5rem' : '1.25rem 1rem 0.75rem',
+                ['--room-number-font-size' as any]: Number(gridColumns) >= 12 ? '1.1rem' : Number(gridColumns) >= 8 ? '1.35rem' : '1.75rem',
+                ['--room-type-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                ['--room-guest-font-size' as any]: Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 8 ? '0.6rem' : '0.7rem',
+                ['--room-assignee-font-size' as any]: Number(gridColumns) >= 12 ? '0.55rem' : Number(gridColumns) >= 8 ? '0.65rem' : '0.75rem',
+                
+                // Mobile responsive scaling variables
+                ['--room-card-min-height-mobile' as any]: Number(gridColumns) >= 16 ? '40px' : Number(gridColumns) >= 12 ? '50px' : Number(gridColumns) >= 10 ? '60px' : Number(gridColumns) >= 8 ? '70px' : Number(gridColumns) >= 6 ? '80px' : '90px',
+                ['--room-card-padding-mobile' as any]: Number(gridColumns) >= 12 ? '0.15rem 0.1rem' : Number(gridColumns) >= 8 ? '0.25rem 0.15rem' : Number(gridColumns) >= 6 ? '0.35rem 0.25rem' : '0.5rem 0.35rem',
+                ['--room-number-font-size-mobile' as any]: Number(gridColumns) >= 16 ? '0.5rem' : Number(gridColumns) >= 12 ? '0.6rem' : Number(gridColumns) >= 10 ? '0.7rem' : Number(gridColumns) >= 8 ? '0.8rem' : Number(gridColumns) >= 6 ? '0.95rem' : '1.1rem',
+                ['--room-type-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
+                ['--room-guest-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.3rem' : Number(gridColumns) >= 8 ? '0.4rem' : Number(gridColumns) >= 6 ? '0.45rem' : '0.5rem',
+                ['--room-assignee-font-size-mobile' as any]: Number(gridColumns) >= 12 ? '0.35rem' : Number(gridColumns) >= 8 ? '0.45rem' : Number(gridColumns) >= 6 ? '0.5rem' : '0.55rem',
+                ['--room-assignee-max-width-mobile' as any]: Number(gridColumns) >= 12 ? '20px' : Number(gridColumns) >= 8 ? '35px' : Number(gridColumns) >= 6 ? '45px' : '55px',
+                ['--room-note-icon-size' as any]: Number(gridColumns) >= 12 ? '0.65rem' : Number(gridColumns) >= 8 ? '0.8rem' : '1rem',
+                ['--room-note-icon-size-mobile' as any]: Number(gridColumns) >= 16 ? '0.45rem' : Number(gridColumns) >= 12 ? '0.5rem' : Number(gridColumns) >= 10 ? '0.6rem' : Number(gridColumns) >= 8 ? '0.7rem' : '0.8rem',
+              } : undefined}
+            >
+              {(roomsByFloor[floors[activeFloorIndex]] || [])
+                .sort((a, b) => {
+                  const priorityA = a.priority === 'rush' ? 0 : 1;
+                  const priorityB = b.priority === 'rush' ? 0 : 1;
+                  if (priorityA !== priorityB) {
+                    return priorityA - priorityB;
+                  }
+                  return a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true });
+                })
+                .map((room) => {
+                  const isDirty = room.status === 'dirty';
+                  
+                  const guestLabel = language === 'vi' 
+                    ? `Set: ${room.guestCount} người` 
+                    : language === 'ja' 
+                      ? `セット: ${room.guestCount}人` 
+                      : `Set: ${room.guestCount} Pax`;
+
+                  const isEco = room.status === 'eco';
+                  const isClean = room.status === 'clean';
+                  const isPending = isClean && !room.isChecked;
+                  const isApproved = isClean && !!room.isChecked;
+
+                  let statusText = room.status.toUpperCase();
+                  if (isPending) {
+                    statusText = language === 'vi' ? 'CHỜ DUYỆT 🔍' : language === 'ja' ? '要検査 🔍' : 'PENDING 🔍';
+                  } else if (isApproved) {
+                    statusText = language === 'vi' ? 'ĐÃ DUYỆT ✓' : language === 'ja' ? '合格 ✓' : 'APPROVED ✓';
+                  } else if (room.status === 'dirty') {
+                    statusText = language === 'vi' ? 'CẦN DỌN' : language === 'ja' ? '要清掃' : 'DIRTY';
+                  }
+
+                  const isClickable = !isLocked && (isDirty || isEco || room.status === 'cleaning' || room.status === 'clean' || (room.isStay && room.status === 'occupied'));
+
+                  return (
+                    <div 
+                      key={room.id} 
+                      className={`room-card ${room.status} ${room.isStay ? 'stay' : ''} ${room.isChecked ? 'checked' : ''} ${gridColumns !== 'auto' ? 'compact' : ''} ${isClickable ? 'clickable' : ''}`}
+                      onClick={() => isClickable && handleRoomCardClick(room)}
+                      style={{ 
+                        cursor: isClickable ? 'pointer' : 'default',
+                        position: 'relative'
+                      }}
+                      title={room.notes ? `Ghi chú: ${room.notes}` : undefined}
+                    >
+                      {gridColumns === 'auto' ? (
+                        <>
+                          <span className="stay-badge">{room.status === 'maintenance' ? 'Sửa' : room.status === 'vacant' ? 'Trống' : room.status === 'eco' ? 'ECO' : (room.status === 'dirty' || room.status === 'cleaning' || (room.isStay && room.status === 'occupied')) ? (room.isStay ? 'STAY' : 'OUT') : (room.status === 'dnd' || room.notes?.includes('Chỉ cần treo đồ')) ? 'DD' : room.isStay ? 'STAY' : 'OUT'}</span>
+                          <div>
+                            <div className="room-type-text">{getFormattedRoomType(room.type)}</div>
+                            <div className="room-number" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+                              {room.roomNumber}
+                              {room.priority === 'rush' && (
+                                <span className="priority-rush-badge animate-pulse" style={{
+                                  fontSize: '0.5rem',
+                                  fontWeight: 800,
+                                  color: '#ffffff',
+                                  backgroundColor: '#ef4444',
+                                  padding: '0.1rem 0.25rem',
+                                  borderRadius: '4px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.1rem',
+                                  boxShadow: '0 0 5px rgba(239, 68, 68, 0.5)'
+                                }}>
+                                  ⚡ RUSH
+                                </span>
+                              )}
+                              {(isDirty || isEco) && <Play size={14} style={isEco ? { color: 'var(--status-eco)' } : { color: 'var(--status-dirty)' }} fill={isEco ? 'var(--status-eco)' : 'var(--status-dirty)'} />}
+                              {room.notes && <AlertTriangle size={14} style={{ color: 'var(--status-maintenance)' }} className="animate-pulse" />}
+                            </div>
+                          </div>
+
+                          <div className="room-info-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '0.5rem', flexWrap: 'wrap', gap: '0.25rem' }}>
+                            <span className="room-guest-count" style={{ fontSize: '0.65rem', fontWeight: 600 }}>
+                              ※ {guestLabel}
+                            </span>
+                            <span 
+                              className="room-status-text"
+                              style={{ 
+                                fontSize: '0.65rem', 
+                                fontWeight: 700, 
+                                color: isApproved ? 'var(--status-clean)' : isPending ? 'var(--status-dirty)' : 'inherit',
+                                opacity: 0.8
+                              }}
+                            >
+                              {statusText}
+                            </span>
+                            {room.status === 'clean' && room.cleanerName && (
+                              <span className="room-assignee" title={room.cleanerName}>
+                                👤 {room.cleanerName.split(' ')[0]}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="room-card-compact-wrapper">
+                          <div className="room-card-compact-row">
+                            <span className="room-card-compact-number">{room.roomNumber}</span>
+                          </div>
+                          <div className="room-card-compact-guests">
+                            <span className="room-card-compact-guests-icon">👤</span>
+                            <span className="room-card-compact-guests-count">{room.guestCount}</span>
+                            {room.notes && <span className="room-card-compact-note-icon" title={room.notes}>📝</span>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
   );
 };
 

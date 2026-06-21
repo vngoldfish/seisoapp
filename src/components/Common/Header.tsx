@@ -3,7 +3,7 @@ import { useApp } from './AppContext';
 import { getTranslation } from '../../i18n/translations';
 import { LogOut, Sun, Moon, Hotel, User, Menu } from 'lucide-react';
 import { db } from '../../db/firebaseDB';
-import type { Hotel as HotelType } from '../../db/dbInterface';
+import type { Hotel as HotelType, FinalizedDayReport } from '../../db/dbInterface';
 
 export const Header: React.FC = () => {
   const { 
@@ -27,20 +27,102 @@ export const Header: React.FC = () => {
 
   const handleToggleLockClick = async () => {
     if (!currentUser) return;
-    const confirmMessage = isLocked
-      ? (language === 'vi' 
-          ? `Bạn có chắc chắn muốn MỞ KHÓA dữ liệu ngày ${activeDate}?` 
+
+    if (isLocked) {
+      // Unlocking: Only Admin can unlock
+      if (currentUser.role !== 'admin') {
+        const warningMsg = language === 'vi'
+          ? 'Chỉ Admin mới có quyền mở khóa dữ liệu.'
           : language === 'ja'
-            ? `日付 ${activeDate} のロックを解除しますか？`
-            : `Are you sure you want to UNLOCK date ${activeDate}?`)
-      : (language === 'vi' 
-          ? `Xác nhận CHỐT hoàn tất ngày ${activeDate}?\nSau khi chốt, toàn bộ dữ liệu dọn dẹp và phòng sẽ không thể chỉnh sửa.` 
+            ? '管理者のみがデータのロックを解除できます。'
+            : 'Only Admin has permission to unlock the data.';
+        alert(warningMsg);
+        return;
+      }
+
+      const confirmMessage = language === 'vi'
+        ? `Bạn có chắc chắn muốn MỞ KHÓA dữ liệu ngày ${activeDate}?`
+        : language === 'ja'
+          ? `日付 ${activeDate} のロックを解除しますか？`
+          : `Are you sure you want to UNLOCK date ${activeDate}?`;
+
+      if (window.confirm(confirmMessage)) {
+        try {
+          await toggleDayLock();
+          await db.deleteFinalizedDayReport(`${hotelId}_${activeDate}`);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    } else {
+      // Locking: Validate that all rooms are clean/finished (not dirty, not cleaning)
+      try {
+        const rooms = await db.getRooms();
+        const unfinished = rooms.filter(r => r.status === 'dirty');
+        if (unfinished.length > 0) {
+          const roomListStr = unfinished.map(r => r.roomNumber).join(', ');
+          const alertMsg = language === 'vi'
+            ? `Không thể chốt ngày. Các phòng sau chưa dọn xong: ${roomListStr}`
+            : language === 'ja'
+              ? `日付を締め切ることができません。以下の客室の清掃が完了していません: ${roomListStr}`
+              : `Cannot lock day. The following rooms are not completed: ${roomListStr}`;
+          alert(alertMsg);
+          return;
+        }
+
+        const confirmMessage = language === 'vi'
+          ? `Xác nhận CHỐT hoàn tất ngày ${activeDate}?\nSau khi chốt, toàn bộ dữ liệu dọn dẹp và phòng sẽ không thể chỉnh sửa.`
           : language === 'ja'
-            ? `日付 ${activeDate} の業務を締め切りますか？\n締め切り後は客室状態や清` + `掃データの変更ができなくなります。`
-            : `Confirm LOCKING/FINALIZING date ${activeDate}?\nOnce locked, all cleaning and room data will be frozen and cannot be modified.`);
-            
-    if (window.confirm(confirmMessage)) {
-      await toggleDayLock();
+            ? `日付 ${activeDate} の業務を締め切りますか？\n締め切り後は客室状態や清掃データの変更ができなくなります。`
+            : `Confirm LOCKING/FINALIZING date ${activeDate}?\nOnce locked, all cleaning and room data will be frozen and cannot be modified.`;
+
+        if (window.confirm(confirmMessage)) {
+          await toggleDayLock();
+
+          // Compute finalized day report and save it
+          const logs = await db.getLogs();
+          const getLocalDateString = (isoString: string): string => {
+            if (!isoString) return '';
+            const d = new Date(isoString);
+            if (isNaN(d.getTime())) return '';
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+          };
+          const dayLogs = logs.filter(l => l.endedAt && getLocalDateString(l.endedAt) === activeDate);
+          const cleanerMap: Record<string, { name: string; rooms: Set<string> }> = {};
+          dayLogs.forEach(log => {
+            const cid = log.cleanerId;
+            if (!cleanerMap[cid]) {
+              cleanerMap[cid] = { name: log.cleanerName, rooms: new Set() };
+            }
+            cleanerMap[cid].rooms.add(log.roomId);
+          });
+          const staffReport = Object.entries(cleanerMap).map(([cleanerId, val]) => ({
+            cleanerId,
+            cleanerName: val.name,
+            roomsCleanedCount: val.rooms.size
+          }));
+
+          const report: FinalizedDayReport = {
+            id: `${hotelId}_${activeDate}`,
+            hotelId,
+            hotelName: activeHotel?.name || hotelId,
+            date: activeDate,
+            totalRooms: rooms.length,
+            totalCleaned: rooms.filter(r => r.status === 'clean' || r.status === 'eco' || (r.status === 'dnd' && r.isStay && r.isChecked)).length,
+            staffReport,
+            finalizedAt: new Date().toISOString(),
+            finalizedBy: currentUser.name || currentUser.username
+          };
+
+          await db.saveFinalizedDayReport(report);
+        }
+      } catch (e) {
+        console.error(e);
+        alert(language === 'vi' ? 'Đã xảy ra lỗi khi chốt ngày.' : 'An error occurred while locking the day.');
+      }
     }
   };
 
@@ -86,9 +168,9 @@ export const Header: React.FC = () => {
     return () => window.removeEventListener('open-date-modal', handleOpenDateModal);
   }, [activeDate]);
 
-  if (!currentUser) return null;
-
   const roleLabel = useMemo(() => {
+    if (!currentUser) return '';
+
     switch (currentUser.role) {
       case 'admin': return getTranslation(language, 'roleAdmin');
       case 'front_desk': return getTranslation(language, 'roleFrontDesk');
@@ -97,12 +179,14 @@ export const Header: React.FC = () => {
       case 'kacho': return getTranslation(language, 'roleKacho');
       default: return currentUser.role;
     }
-  }, [currentUser.role, language]);
+  }, [currentUser, language]);
 
   const hotelName = useMemo(() => {
     if (activeHotel) return activeHotel.name;
     return hotelId === 'ks2' ? 'Fuji Hotel (富士ホテル)' : 'Sakura Hotel (さくらホテル)';
   }, [activeHotel, hotelId]);
+
+  if (!currentUser) return null;
 
   return (
     <header className="header glass-panel">

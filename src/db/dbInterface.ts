@@ -7,6 +7,8 @@ export interface User {
   language: 'ja' | 'vi' | 'en';
   hotelIds?: string[];
   status?: 'working' | 'quit';
+  employeeCode?: string; // Mã NV
+  passwordHash?: string; // Mật khẩu đã mã hoá
 }
 
 export interface Room {
@@ -25,6 +27,8 @@ export interface Room {
   checkedAt?: string;
   priority?: 'normal' | 'rush';
   photoDefect?: string;
+  checkerNotes?: string;
+  viewedCleanerNotes?: boolean;
   updatedAt: string; // ISO String
   updatedBy: string; // User Name or User ID
 }
@@ -45,12 +49,16 @@ export interface CleaningLog {
   errors?: string[];
   checkedBy?: string;
   checkedAt?: string;
+  checkerNotes?: string;
+  viewedCleanerNotes?: boolean;
 }
 
 export interface RoomTypeConfig {
   id: string;
   name: string;
   cleanMinutes: number;
+  price?: number;
+  defaultGuestCount?: number;
 }
 
 export interface Hotel {
@@ -60,6 +68,7 @@ export interface Hotel {
   roomsList?: string; // Comma-separated room numbers entered during creation
   defaultCleanMinutes?: number; // default average cleaning time per room
   roomTypes?: RoomTypeConfig[]; // custom room types with target cleaning minutes
+  active?: boolean;
 }
 
 export type RoomSubscriptionCallback = (rooms: Room[]) => void;
@@ -111,4 +120,31 @@ export interface DBInterface {
   // Locked date management
   isDateLocked(date: string): Promise<boolean>;
   setDateLocked(date: string, locked: boolean): Promise<void>;
+
+  // Finalized Day Reports
+  getFinalizedDayReports(): Promise<FinalizedDayReport[]>;
+  saveFinalizedDayReport(report: FinalizedDayReport): Promise<void>;
+  deleteFinalizedDayReport(reportId: string): Promise<void>;
+
+  // DB Maintenance
+  resetDatabase?(): Promise<void>;
+  backupDatabase?(): Promise<any>;
+  restoreDatabase?(data: any): Promise<void>;
 }
+
+export interface FinalizedDayReport {
+  id: string; // e.g. "ks1_2026-06-21"
+  hotelId: string;
+  hotelName: string;
+  date: string;
+  totalRooms: number;
+  totalCleaned: number;
+  staffReport: {
+    cleanerId: string;
+    cleanerName: string;
+    roomsCleanedCount: number;
+  }[];
+  finalizedAt: string;
+  finalizedBy: string;
+}
+

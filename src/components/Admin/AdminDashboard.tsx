@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../Common/AppContext';
 import { getTranslation } from '../../i18n/translations';
-import { db } from '../../db/firebaseDB';
+import { db, getDatabaseProvider } from '../../db/firebaseDB';
 import type { Room, User, CleaningLog, Hotel as HotelType } from '../../db/dbInterface';
-import { getLocalDB } from '../../db/localDB';
+import { readStorageJson } from '../../utils/storage';
 import {
   LayoutDashboard,
   Users,
@@ -13,7 +13,12 @@ import {
   Sun,
   Moon,
   LogOut,
-  User as UserIcon
+  User as UserIcon,
+  CalendarCheck,
+  Settings,
+  Database,
+  Download,
+  Upload
 } from 'lucide-react';
 
 import { GlobalStats } from './components/GlobalStats';
@@ -21,40 +26,21 @@ import { HotelManagementTab } from './components/HotelManagementTab';
 import { UserManagementTab } from './components/UserManagementTab';
 import { CleaningLogsTab } from './components/CleaningLogsTab';
 import { HotelDetailsView } from './components/HotelDetailsView';
+import { FinalizedReportsTab } from './components/FinalizedReportsTab';
 
 const getRoomsForHotelAndDate = (hotelId: string, date: string): Room[] => {
-  const dateKey = `${hotelId}_hotel_clean_rooms_${date}`;
-  const roomsStr = localStorage.getItem(dateKey);
-  if (roomsStr) {
-    try { return JSON.parse(roomsStr); } catch (e) {}
-  }
-  const masterKey = `${hotelId}_hotel_clean_rooms`;
-  const masterStr = localStorage.getItem(masterKey);
-  if (masterStr) {
-    try { return JSON.parse(masterStr); } catch (e) {}
-  }
-  return [];
+  const dateRooms = readStorageJson<Room[]>(`${hotelId}_hotel_clean_rooms_${date}`, []);
+  if (dateRooms.length > 0) return dateRooms;
+  return readStorageJson<Room[]>(`${hotelId}_hotel_clean_rooms`, []);
 };
 
 const getLogsForHotelAndDate = (hotelId: string, date: string): CleaningLog[] => {
-  const logsKey = `${hotelId}_hotel_clean_logs`;
-  const logsStr = localStorage.getItem(logsKey);
-  if (logsStr) {
-    try {
-      const allLogs: CleaningLog[] = JSON.parse(logsStr);
-      return allLogs.filter(log => log.endedAt.startsWith(date));
-    } catch (e) {}
-  }
-  return [];
+  const allLogs = readStorageJson<CleaningLog[]>(`${hotelId}_hotel_clean_logs`, []);
+  return allLogs.filter(log => log.endedAt.startsWith(date));
 };
 
 const getActiveStaffForHotelAndDate = (hotelId: string, date: string): string[] => {
-  const key = `${hotelId}_active_staff_${date}`;
-  const staffStr = localStorage.getItem(key);
-  if (staffStr) {
-    try { return JSON.parse(staffStr); } catch (e) {}
-  }
-  return [];
+  return readStorageJson<string[]>(`${hotelId}_active_staff_${date}`, []);
 };
 
 const getVisiblePages = (current: number, total: number) => {
@@ -89,13 +75,21 @@ export const AdminDashboard: React.FC = () => {
     activeDate, 
     hotelId, 
     selectHotel, 
-    addToast 
+    addToast,
+    currency,
+    setCurrency
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'logs' | 'hotels'>(() => {
+  const [tempCurrency, setTempCurrency] = useState<string>(currency);
+  
+  useEffect(() => {
+    setTempCurrency(currency);
+  }, [currency]);
+
+  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'logs' | 'hotels' | 'reports' | 'systemSettings'>(() => {
     const queryTab = new URLSearchParams(window.location.search).get('tab');
-    const validTabs = ['stats', 'users', 'logs', 'hotels'];
-    return (queryTab && validTabs.includes(queryTab)) ? (queryTab as 'stats' | 'users' | 'logs' | 'hotels') : 'stats';
+    const validTabs = ['stats', 'users', 'logs', 'hotels', 'reports', 'systemSettings'];
+    return (queryTab && validTabs.includes(queryTab)) ? (queryTab as 'stats' | 'users' | 'logs' | 'hotels' | 'reports' | 'systemSettings') : 'stats';
   });
   
   const [branchTab, setBranchTab] = useState<'stats' | 'grid' | 'staff' | 'rooms' | 'linkStaff' | 'users' | 'settings'>('stats');
@@ -109,6 +103,7 @@ export const AdminDashboard: React.FC = () => {
   const selectedHotelId = hotelId;
   const [cleaners, setCleaners] = useState<User[]>([]);
   const [activeStaffIds, setActiveStaffIds] = useState<string[]>([]);
+  const [allActiveStaff, setAllActiveStaff] = useState<Record<string, string[]>>({});
   
   const [usersPage, setUsersPage] = useState(() => {
     const queryPage = new URLSearchParams(window.location.search).get('page');
@@ -126,7 +121,7 @@ export const AdminDashboard: React.FC = () => {
   // Form States (Create/Edit Hotel)
   const [hotelModalOpen, setHotelModalOpen] = useState(false);
   const [editingHotel, setEditingHotel] = useState<HotelType | null>(null);
-  const [hotelForm, setHotelForm] = useState({ id: '', name: '', description: '', roomsList: '' });
+  const [hotelForm, setHotelForm] = useState({ id: '', name: '', description: '', roomsList: '', active: true });
   const [simulatedRooms, setSimulatedRooms] = useState<{ roomNumber: string; type: string }[]>([]);
 
   // Detailed branch states
@@ -161,6 +156,8 @@ export const AdminDashboard: React.FC = () => {
           if (branchTabParam && ['stats', 'grid', 'staff', 'rooms', 'linkStaff', 'users', 'settings'].includes(branchTabParam)) {
             setBranchTab(branchTabParam as any);
           }
+          hasInitializedRef.current = true;
+          return;
         }
       }
       hasInitializedRef.current = true;
@@ -215,7 +212,7 @@ export const AdminDashboard: React.FC = () => {
     const fetchStaffData = async () => {
       if (!selectedHotelId) return;
       try {
-        const targetDb = getLocalDB(selectedHotelId);
+        const targetDb = getDatabaseProvider(selectedHotelId);
         const allUsers = await targetDb.getUsers();
         const activeUsers = allUsers.filter(u => u.status !== 'quit');
         const housekeeperUsers = activeUsers.filter(u => u.role === 'housekeeping');
@@ -235,14 +232,15 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     if (!selectedHotelId || selectedHotelId === 'admin') return;
 
-    const targetDb = getLocalDB(selectedHotelId);
+    const targetDb = getDatabaseProvider(selectedHotelId);
+    targetDb.setDate(activeDate);
 
     const unsubRooms = targetDb.subscribeRooms(setRooms);
     const unsubLogs = targetDb.subscribeLogs(setLogs);
 
     const fetchUsers = async () => {
       const allGlobal = await targetDb.getAllGlobalUsers();
-      const localUsers = allGlobal.filter(u => u.hotelIds?.includes(selectedHotelId));
+      const localUsers = allGlobal.filter(u => u.hotelIds?.includes(selectedHotelId) && u.role !== 'admin');
       setGlobalUsers(allGlobal);
       setHotelUsers(localUsers);
     };
@@ -252,47 +250,64 @@ export const AdminDashboard: React.FC = () => {
       unsubRooms();
       unsubLogs();
     };
-  }, [selectedHotelId]);
+  }, [selectedHotelId, activeDate]);
 
   // 4. Aggregated stats and global data for global '/admin' dashboard
   useEffect(() => {
     if (selectedHotelId !== 'admin') return;
 
-    const allRooms: Room[] = [];
-    const allLogs: CleaningLog[] = [];
-    
-    hotels.forEach(h => {
-      const hotelRooms = getRoomsForHotelAndDate(h.id, activeDate);
-      const mappedRooms = hotelRooms.map(r => ({
-        ...r,
-        id: `${h.id}_${r.id}` // Ensure unique keys across multiple hotels
-      }));
-      allRooms.push(...mappedRooms);
-      
-      const logsKey = `${h.id}_hotel_clean_logs`;
-      const logsStr = localStorage.getItem(logsKey);
-      if (logsStr) {
+    let active = true;
+    const loadStats = async () => {
+      const allRooms: Room[] = [];
+      const allLogs: CleaningLog[] = [];
+      const activeStaffMap: Record<string, string[]> = {};
+
+      for (const h of hotels) {
         try {
-          const hotelLogs = JSON.parse(logsStr) as CleaningLog[];
-          const mappedLogs = hotelLogs.map(l => ({
+          const provider = getDatabaseProvider(h.id);
+          provider.setDate(activeDate);
+
+          const hotelRooms = await provider.getRooms();
+          allRooms.push(...hotelRooms.map(r => ({
+            ...r,
+            id: `${h.id}_${r.id}`
+          })));
+
+          const hotelLogs = await provider.getLogs();
+          const dateLogs = hotelLogs.filter(l => l.endedAt.startsWith(activeDate));
+          allLogs.push(...dateLogs.map(l => ({
             ...l,
-            id: `${h.id}_${l.id}` // Ensure unique keys across multiple hotels
-          }));
-          allLogs.push(...mappedLogs);
-        } catch (e) {}
+            id: `${h.id}_${l.id}`
+          })));
+
+          activeStaffMap[h.id] = await provider.getActiveStaff(activeDate);
+        } catch (e) {
+          console.error(`Failed to load stats for hotel ${h.id}:`, e);
+        }
       }
-    });
-    
-    setRooms(allRooms);
-    setLogs(allLogs);
+
+      if (active) {
+        setRooms(allRooms);
+        setLogs(allLogs);
+        setAllActiveStaff(activeStaffMap);
+      }
+    };
+
+    loadStats();
 
     const fetchUsers = async () => {
-      const targetDb = getLocalDB('ks1');
-      const allGlobal = await targetDb.getAllGlobalUsers();
-      setGlobalUsers(allGlobal);
-      setHotelUsers(allGlobal);
+      const provider = getDatabaseProvider('ks1');
+      const allGlobal = await provider.getAllGlobalUsers();
+      if (active) {
+        setGlobalUsers(allGlobal);
+        setHotelUsers(allGlobal);
+      }
     };
     fetchUsers();
+
+    return () => {
+      active = false;
+    };
   }, [selectedHotelId, hotels, activeDate]);
 
   // 5. Initial hotel list load and refresh on mount or active hotel change
@@ -302,20 +317,20 @@ export const AdminDashboard: React.FC = () => {
 
   const refreshUsers = async () => {
     if (!selectedHotelId) return;
-    const targetDb = getLocalDB(selectedHotelId === 'admin' ? 'ks1' : selectedHotelId);
+    const targetDb = getDatabaseProvider(selectedHotelId === 'admin' ? 'ks1' : selectedHotelId);
     const allGlobal = await targetDb.getAllGlobalUsers();
     const localUsers = selectedHotelId === 'admin' 
       ? allGlobal 
-      : allGlobal.filter(u => u.hotelIds?.includes(selectedHotelId));
+      : allGlobal.filter(u => u.hotelIds?.includes(selectedHotelId) && u.role !== 'admin');
     setGlobalUsers(allGlobal);
     setHotelUsers(localUsers);
   };
 
   const loadManagingHotelData = async (hotelId: string) => {
     try {
-      const targetDb = getLocalDB(hotelId);
+      const targetDb = getDatabaseProvider(hotelId);
       const allGlobal = await targetDb.getAllGlobalUsers();
-      const localStaff = allGlobal.filter(u => u.hotelIds?.includes(hotelId));
+      const localStaff = allGlobal.filter(u => u.hotelIds?.includes(hotelId) && u.role !== 'admin');
       setManagingHotelStaff(localStaff);
     } catch (err) {
       console.error(err);
@@ -349,18 +364,18 @@ export const AdminDashboard: React.FC = () => {
           const existing = prev.find(p => p.roomNumber === num);
           return {
             roomNumber: num,
-            type: existing ? existing.type : '1 Bed'
+            type: existing ? existing.type : 'Single'
           };
         });
       });
     }
   }, [hotelForm.roomsList, hotelModalOpen, editingHotel, activeTab]);
 
-  // CRUD actions for hotels list
   const refreshHotels = async () => {
     try {
       const list = await db.getHotels();
       setHotels(list);
+      window.dispatchEvent(new CustomEvent('hotels-updated'));
     } catch (e) {
       console.error(e);
     }
@@ -377,7 +392,7 @@ export const AdminDashboard: React.FC = () => {
   const handleAddHotelClick = () => {
     setEditingHotel(null);
     const nextHotelId = getNextHotelCode(hotels);
-    setHotelForm({ id: nextHotelId, name: '', description: '', roomsList: '' });
+    setHotelForm({ id: nextHotelId, name: '', description: '', roomsList: '', active: true });
     setSimulatedRooms([]);
     setHotelModalOpen(true);
   };
@@ -388,7 +403,8 @@ export const AdminDashboard: React.FC = () => {
       id: hotel.id,
       name: hotel.name,
       description: hotel.description || '',
-      roomsList: ''
+      roomsList: '',
+      active: hotel.active !== false
     });
     setHotelModalOpen(true);
   };
@@ -423,7 +439,8 @@ export const AdminDashboard: React.FC = () => {
         await db.updateHotel({
           id: hotelForm.id,
           name: hotelForm.name,
-          description: hotelForm.description || undefined
+          description: hotelForm.description || undefined,
+          active: hotelForm.active
         });
         addToast('Hotel branch updated successfully', 'success');
       } else {
@@ -431,11 +448,20 @@ export const AdminDashboard: React.FC = () => {
           ? simulatedRooms.map(sr => `${sr.roomNumber}:${sr.type}`).join(', ')
           : hotelForm.roomsList;
 
+        const defaultRoomTypes = [
+          { id: `${hotelForm.id}_rt1`, name: 'Twin', cleanMinutes: 35, price: currency === 'VND' ? 1200000 : currency === 'USD' ? 100 : 10000, defaultGuestCount: 2 },
+          { id: `${hotelForm.id}_rt2`, name: 'Single', cleanMinutes: 25, price: currency === 'VND' ? 800000 : currency === 'USD' ? 50 : 5000, defaultGuestCount: 1 },
+          { id: `${hotelForm.id}_rt3`, name: 'Double', cleanMinutes: 30, price: currency === 'VND' ? 1000000 : currency === 'USD' ? 80 : 8000, defaultGuestCount: 2 },
+          { id: `${hotelForm.id}_rt4`, name: 'Suite', cleanMinutes: 60, price: currency === 'VND' ? 2500000 : currency === 'USD' ? 250 : 25000, defaultGuestCount: 4 }
+        ];
+
         await db.createHotel({
           id: hotelForm.id,
           name: hotelForm.name,
           description: hotelForm.description || undefined,
-          roomsList: finalRoomsList
+          roomsList: finalRoomsList,
+          roomTypes: defaultRoomTypes,
+          active: hotelForm.active
         });
         addToast('Hotel branch registered successfully', 'success');
       }
@@ -447,15 +473,105 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleResetDatabase = () => {
+  const handleResetDatabase = async () => {
     const confirmed = window.confirm(getTranslation(language, 'resetDatabaseConfirm'));
     if (confirmed) {
-      localStorage.clear();
-      addToast(language === 'vi' ? 'Đã reset cơ sở dữ liệu!' : 'Database reset successfully!', 'success');
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      try {
+        if (db.resetDatabase) {
+          await db.resetDatabase();
+        } else {
+          localStorage.clear();
+        }
+        addToast(language === 'vi' ? 'Đã reset cơ sở dữ liệu!' : 'Database reset successfully!', 'success');
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } catch (err: any) {
+        console.error(err);
+        addToast(language === 'vi' ? 'Lỗi khi reset cơ sở dữ liệu' : 'Error resetting database', 'warning');
+      }
     }
+  };
+
+  const handleBackupDatabase = async () => {
+    try {
+      if (!db.backupDatabase) {
+        throw new Error(language === 'vi' ? 'Phương thức backup không được hỗ trợ bởi DB provider hiện tại' : 'Backup not supported by active database provider');
+      }
+      const data = await db.backupDatabase();
+      const jsonStr = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const nowStr = new Date().toISOString().split('T')[0];
+      a.href = url;
+      a.download = `hotel_clean_backup_${nowStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addToast(
+        language === 'vi' ? 'Đã tải xuống bản sao lưu cơ sở dữ liệu!' : language === 'ja' ? 'データベースのバックアップをダウンロードしました！' : 'Database backup downloaded successfully!',
+        'success'
+      );
+    } catch (err: any) {
+      console.error(err);
+      addToast(
+        language === 'vi' ? `Lỗi khi sao lưu: ${err.message}` : `Error backing up: ${err.message}`,
+        'warning'
+      );
+    }
+  };
+
+  const handleImportDatabase = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const inputElement = e.target;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const jsonContent = event.target?.result;
+        if (typeof jsonContent !== 'string') {
+          throw new Error(language === 'vi' ? 'Không thể đọc nội dung file' : 'Unable to read file content');
+        }
+        const data = JSON.parse(jsonContent);
+
+        if (!data || typeof data !== 'object') {
+          throw new Error(language === 'vi' ? 'Định dạng file backup không hợp lệ' : 'Invalid backup file format');
+        }
+
+        const confirmMsg = language === 'vi'
+          ? 'CẢNH BÁO: Thao tác này sẽ xoá toàn bộ dữ liệu hiện tại và khôi phục từ file backup. Bạn có chắc chắn muốn tiếp tục?'
+          : language === 'ja'
+            ? '警告：この操作は現在のデータをすべて削除し、バックアップファイルから復元します。続行しますか？'
+            : 'WARNING: This will erase all current data and restore from the backup file. Are you sure you want to proceed?';
+
+        if (window.confirm(confirmMsg)) {
+          if (!db.restoreDatabase) {
+            throw new Error(language === 'vi' ? 'Phương thức restore không được hỗ trợ bởi DB provider hiện tại' : 'Restore not supported by active database provider');
+          }
+          await db.restoreDatabase(data);
+          addToast(
+            language === 'vi' ? 'Khôi phục dữ liệu thành công! Đang tải lại trang...' : language === 'ja' ? 'データベースの復元に成功しました！ページを再読み込みします...' : 'Database restored successfully! Reloading page...',
+            'success'
+          );
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
+        }
+      } catch (err: any) {
+        console.error(err);
+        addToast(
+          language === 'vi' ? `Lỗi khi nhập dữ liệu: ${err.message}` : `Error restoring: ${err.message}`,
+          'warning'
+        );
+      } finally {
+        inputElement.value = '';
+      }
+    };
+    reader.readAsText(file);
   };
 
   // AGGREGATE STATISTICS ACROSS ALL HOTELS FOR statsDate
@@ -484,9 +600,23 @@ export const AdminDashboard: React.FC = () => {
     const defectsByCleaner: Record<string, { roomNumber: string; note: string; date: string; time?: string }[]> = {};
 
     hotels.forEach(hotel => {
-      const hotelRooms = getRoomsForHotelAndDate(hotel.id, activeDate);
-      const hotelLogs = getLogsForHotelAndDate(hotel.id, activeDate);
-      const activeIds = getActiveStaffForHotelAndDate(hotel.id, activeDate);
+      const hotelRooms = selectedHotelId === 'admin'
+        ? rooms.filter(r => r.id.startsWith(hotel.id + '_')).map(r => ({
+            ...r,
+            id: r.id.substring(hotel.id.length + 1)
+          }))
+        : getRoomsForHotelAndDate(hotel.id, activeDate);
+
+      const hotelLogs = selectedHotelId === 'admin'
+        ? logs.filter(l => l.id.startsWith(hotel.id + '_')).map(l => ({
+            ...l,
+            id: l.id.substring(hotel.id.length + 1)
+          }))
+        : getLogsForHotelAndDate(hotel.id, activeDate);
+
+      const activeIds = selectedHotelId === 'admin'
+        ? (allActiveStaff[hotel.id] || [])
+        : getActiveStaffForHotelAndDate(hotel.id, activeDate);
 
       let hClean = 0;
       let hDirty = 0;
@@ -606,7 +736,7 @@ export const AdminDashboard: React.FC = () => {
       allIssues,
       hotelBreakdowns
     };
-  }, [hotels, activeDate]);
+  }, [hotels, activeDate, selectedHotelId, rooms, logs, allActiveStaff]);
 
   // Reset hotel page when search, filter, sort or selected stats date changes
   useEffect(() => {
@@ -690,6 +820,21 @@ export const AdminDashboard: React.FC = () => {
           >
             <ClipboardList size={16} />
             <span>{getTranslation(language, 'cleaningSummary')}</span>
+          </button>
+          <button
+            className={`sidebar-link ${activeTab === 'reports' ? 'active' : ''}`}
+            onClick={() => setActiveTab('reports')}
+          >
+            <CalendarCheck size={16} />
+            <span>{language === 'vi' ? 'Lịch sử chốt ngày' : language === 'ja' ? '締め切り履歴' : 'Day Lock History'}</span>
+          </button>
+          
+          <button
+            className={`sidebar-link ${activeTab === 'systemSettings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('systemSettings')}
+          >
+            <Settings size={16} />
+            <span>{language === 'vi' ? 'Cài đặt hệ thống' : language === 'ja' ? 'システム設定' : 'System Settings'}</span>
           </button>
 
           <button
@@ -916,6 +1061,124 @@ export const AdminDashboard: React.FC = () => {
               getTranslation={getTranslation}
             />
           )}
+
+          {activeTab === 'reports' && (
+            <FinalizedReportsTab
+              language={language as 'vi' | 'ja' | 'en'}
+              selectedHotelId={selectedHotelId}
+              addToast={addToast}
+            />
+          )}
+
+          {activeTab === 'systemSettings' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
+              <div className="card glass-panel" style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto', width: '100%' }}>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', color: 'var(--text-color)' }}>
+                  <Settings size={22} />
+                  <span>{language === 'vi' ? 'Cài đặt hệ thống' : language === 'ja' ? 'システム設定' : 'System Settings'}</span>
+                </h2>
+
+                <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                  <label className="form-label" style={{ fontWeight: 600, marginBottom: '0.5rem', display: 'block' }}>
+                    {language === 'vi' ? 'Đơn vị tiền tệ (Currency)' : language === 'ja' ? 'システム通貨' : 'System Currency'}
+                  </label>
+                  <select
+                    className="form-input"
+                    value={tempCurrency}
+                    onChange={(e) => setTempCurrency(e.target.value)}
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.7)', color: 'var(--text-color)' }}
+                  >
+                    <option value="JPY">JPY (円 / ¥)</option>
+                    <option value="VND">VND (đ)</option>
+                    <option value="USD">USD ($)</option>
+                  </select>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-color)', opacity: 0.6, marginTop: '0.5rem' }}>
+                    {language === 'vi' 
+                      ? 'Lưu ý: Thay đổi đơn vị tiền tệ sẽ cập nhật ký hiệu hiển thị trên toàn hệ thống. Hãy điều chỉnh thủ công giá tiền của các loại phòng ở cài đặt chi nhánh cho phù hợp.' 
+                      : language === 'ja'
+                        ? '注意：通貨を変更すると、システム全体の表示記号が更新されます。必要に応じて各ホテルの部屋タイプの価格を手動で変更してください。'
+                        : 'Note: Changing the currency updates the symbol displayed system-wide. Please manually adjust room type prices in each hotel settings tab as needed.'}
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2rem' }}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                      setCurrency(tempCurrency);
+                      addToast(
+                        language === 'vi' ? 'Đã cập nhật cấu hình hệ thống!' : language === 'ja' ? 'システム設定を更新しました！' : 'System settings updated successfully!',
+                        'success'
+                      );
+                    }}
+                    style={{ padding: '0.75rem 2rem', fontWeight: 600 }}
+                  >
+                    {language === 'vi' ? 'Lưu cấu hình' : language === 'ja' ? '設定を保存' : 'Save Settings'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="card glass-panel" style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto', width: '100%' }}>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', color: 'var(--text-color)' }}>
+                  <Database size={22} />
+                  <span>{language === 'vi' ? 'Quản lý Dữ liệu' : language === 'ja' ? 'データ管理' : 'Data Management'}</span>
+                </h2>
+
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-color)', opacity: 0.8, marginBottom: '1.5rem' }}>
+                  {language === 'vi' 
+                    ? 'Bạn có thể sao lưu toàn bộ dữ liệu hiện tại của hệ thống thành một file JSON hoặc khôi phục dữ liệu từ một bản sao lưu trước đó.' 
+                    : language === 'ja'
+                      ? '現在のシステムデータをJSONファイルとしてバックアップするか、以前のバックアップから復元することができます。'
+                      : 'You can backup all current system data into a JSON file, or restore data from a previous backup.'}
+                </p>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '1.5rem' }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={handleBackupDatabase}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.5rem', 
+                      padding: '0.75rem 1.5rem', 
+                      fontWeight: 600,
+                      backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                      color: 'var(--primary-color)',
+                      border: '1px solid rgba(59, 130, 246, 0.2)'
+                    }}
+                  >
+                    <Download size={18} />
+                    <span>{language === 'vi' ? 'Backup Database' : language === 'ja' ? 'データベースのバックアップ' : 'Backup Database'}</span>
+                  </button>
+
+                  <label
+                    className="btn btn-secondary"
+                    style={{ 
+                      display: 'inline-flex', 
+                      alignItems: 'center', 
+                      gap: '0.5rem', 
+                      padding: '0.75rem 1.5rem', 
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      margin: 0,
+                      backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                      color: 'var(--status-clean)',
+                      border: '1px solid rgba(16, 185, 129, 0.2)'
+                    }}
+                  >
+                    <Upload size={18} />
+                    <span>{language === 'vi' ? 'Import Database' : language === 'ja' ? 'データベースの復元' : 'Import Database'}</span>
+                    <input 
+                      type="file" 
+                      accept=".json" 
+                      onChange={handleImportDatabase} 
+                      style={{ display: 'none' }} 
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
@@ -965,6 +1228,19 @@ export const AdminDashboard: React.FC = () => {
               />
             </div>
 
+            <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '1rem 0' }}>
+              <input
+                type="checkbox"
+                id="hotel-active-checkbox"
+                checked={hotelForm.active}
+                onChange={e => setHotelForm({ ...hotelForm, active: e.target.checked })}
+                style={{ width: '18px', height: '18px', cursor: 'pointer', margin: 0 }}
+              />
+              <label htmlFor="hotel-active-checkbox" style={{ fontWeight: 600, cursor: 'pointer', margin: 0, userSelect: 'none', fontSize: '0.9rem' }}>
+                {language === 'vi' ? 'Hoạt động (Active)' : language === 'ja' ? '有効 (アクティブ)' : 'Active Status'}
+              </label>
+            </div>
+
             {!editingHotel && (
               <div className="form-group">
                 <label className="form-label" style={{ fontWeight: 700 }}>
@@ -989,7 +1265,7 @@ export const AdminDashboard: React.FC = () => {
                       }
                       setSimulatedRooms([]);
                       const roomsStr = hotelForm.roomsList.split(',').map(r => r.trim()).filter(r => r.length > 0);
-                      setSimulatedRooms(roomsStr.map(r => ({ roomNumber: r, type: '1 Bed' })));
+                      setSimulatedRooms(roomsStr.map(r => ({ roomNumber: r, type: 'Single' })));
                     }}
                   >
                     🔍 {language === 'vi' ? 'Cấu hình chi tiết' : 'Setup Details'}
@@ -1005,18 +1281,13 @@ export const AdminDashboard: React.FC = () => {
                           <select
                             value={sr.type}
                             onChange={e => {
-                              const next = [...simulatedRooms];
-                              next[idx].type = e.target.value;
-                              setSimulatedRooms(next);
+                               const next = [...simulatedRooms];
+                               next[idx].type = e.target.value;
+                               setSimulatedRooms(next);
                             }}
                             className="form-input"
                             style={{ width: '120px', padding: '0.2rem', fontSize: '0.75rem', height: 'auto' }}
                           >
-                            <option value="1 Bed">1 Bed</option>
-                            <option value="2 Beds">2 Beds</option>
-                            <option value="3 Beds">3 Beds</option>
-                            <option value="4 Beds">4 Beds</option>
-                            <option value="Minpaku">Minpaku</option>
                             <option value="Single">Single</option>
                             <option value="Double">Double</option>
                             <option value="Twin">Twin</option>

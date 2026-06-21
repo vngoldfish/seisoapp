@@ -11,6 +11,34 @@ interface CleaningLogsTabProps {
   getTranslation: any;
 }
 
+const translateDefect = (defect: string, lang: string): string => {
+  if (!defect) return '';
+  if (lang === 'vi') return defect;
+  
+  if (defect.startsWith('Lỗi khác:')) {
+    const text = defect.substring(9).trim();
+    if (lang === 'ja') return `その他指摘: ${text}`;
+    return `Other defect: ${text}`;
+  }
+  
+  switch (defect) {
+    case 'Chưa lau sàn / hút bụi':
+      return lang === 'ja' ? '床掃除・掃除機未実施' : 'Floor dusty/dirty';
+    case 'Thiếu khăn / đồ tiêu hao':
+      return lang === 'ja' ? 'アメニティ・タオル不足' : 'Missing towels/amenities';
+    case 'Bẩn nhà vệ sinh / bồn tắm':
+      return lang === 'ja' ? '水回り・浴室汚れ' : 'Dirty bathroom';
+    case 'Ga giường nhăn / bẩn':
+      return lang === 'ja' ? 'シーツしわ・汚れ' : 'Wrinkled/dirty sheet';
+    case 'Chưa đổ rác':
+      return lang === 'ja' ? 'ゴミ未回収' : 'Trash not emptied';
+    case 'Còn bụi bẩn trên bàn / tủ':
+      return lang === 'ja' ? '家具ほこり残り' : 'Dust on furniture';
+    default:
+      return defect;
+  }
+};
+
 export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
   language,
   logs,
@@ -331,29 +359,46 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
                         <span style={{ fontWeight: 500 }}>
                           {log.checkedBy}
                           <span style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>
-                            {new Date(log.checkedAt!).toLocaleTimeString()}
+                            {new Date(log.checkedAt!).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
                           </span>
                         </span>
                       ) : (
                         <span style={{ opacity: 0.4 }}>—</span>
                       )}
                     </td>
-                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.startedAt).toLocaleTimeString()}</td>
-                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>{new Date(log.endedAt).toLocaleTimeString()}</td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
+                      {new Date(log.startedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
+                    </td>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
+                      {new Date(log.endedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
+                    </td>
                     <td style={{ padding: '0.75rem 0.5rem' }}>
                       <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
                     </td>
-                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.notes}>
-                      {log.notes}
-                      {log.errors && log.errors.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginTop: '0.2rem' }}>
+                    <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>
+                      {log.notes && (
+                        <div style={{ marginBottom: '0.25rem' }}>
+                          <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>🧹 {language === 'vi' ? 'Ghi chú NV:' : language === 'ja' ? '清掃員メモ:' : 'Cleaner Notes:'}</span> {log.notes}
+                        </div>
+                      )}
+                      {log.checkerNotes && (
+                        <div style={{ marginBottom: '0.25rem' }}>
+                          <span style={{ fontSize: '0.75rem', opacity: 0.6, color: 'var(--status-maintenance)' }}>🔍 {language === 'vi' ? 'Người check:' : language === 'ja' ? '指摘メモ:' : 'Checker Notes:'}</span> {log.checkerNotes}
+                        </div>
+                      )}
+                      {log.errors && log.errors.length > 0 ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.15rem', marginTop: '0.25rem' }}>
                           {log.errors.map((e, idx) => (
-                            <span key={idx} className="badge badge-dirty" style={{ fontSize: '0.6rem', padding: '0.05rem 0.25rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)' }}>
-                              {e}
+                            <span key={idx} style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '3px' }}>
+                              {translateDefect(e, language)}
                             </span>
                           ))}
                         </div>
-                      )}
+                      ) : log.checkedBy ? (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--status-clean)', fontWeight: 500, marginTop: '0.25rem' }}>
+                          ✓ {language === 'vi' ? 'Đạt 100%' : language === 'ja' ? '100%合格' : 'Passed 100%'}
+                        </div>
+                      ) : null}
                     </td>
                     <td style={{ padding: '0.75rem 0.5rem' }}>
                       {log.photoAfter ? (
@@ -383,25 +428,34 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
                 </div>
                 {log.checkedBy && (
                   <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                    <strong>{language === 'vi' ? 'Người duyệt:' : language === 'ja' ? '検査者:' : 'Checked By:'}</strong> {log.checkedBy} <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>({new Date(log.checkedAt!).toLocaleTimeString()})</span>
+                    <strong>{language === 'vi' ? 'Người duyệt:' : language === 'ja' ? '検査者:' : 'Checked By:'}</strong> {log.checkedBy} <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>({new Date(log.checkedAt!).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })})</span>
                   </div>
                 )}
                 <div style={{ fontSize: '0.8rem', opacity: 0.8, display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
-                  <span>🕒 {language === 'vi' ? 'Bắt đầu' : language === 'ja' ? '開始' : 'Start'}: {new Date(log.startedAt).toLocaleTimeString()}</span>
-                  <span>⌛ {language === 'vi' ? 'Kết thúc' : language === 'ja' ? '完了' : 'Finish'}: {new Date(log.endedAt).toLocaleTimeString()}</span>
+                  <span>🕒 {language === 'vi' ? 'Bắt đầu' : language === 'ja' ? '開始' : 'Start'}: {new Date(log.startedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                  <span>⌛ {language === 'vi' ? 'Kết thúc' : language === 'ja' ? '完了' : 'Finish'}: {new Date(log.endedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}</span>
                 </div>
-                {log.notes && (
-                  <div style={{ fontSize: '0.8rem', backgroundColor: 'rgba(0,0,0,0.02)', padding: '0.35rem 0.5rem', borderRadius: '4px', marginBottom: '0.5rem', borderLeft: '2px solid #eab308' }}>
-                    <strong>{getTranslation(language, 'notes')}:</strong> {log.notes}
-                  </div>
-                )}
-                {log.errors && log.errors.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.5rem' }}>
-                    {log.errors.map((e, idx) => (
-                      <span key={idx} className="badge badge-dirty" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)' }}>
-                        ⚠️ {e}
-                      </span>
-                    ))}
+                {(log.notes || log.checkerNotes || (log.errors && log.errors.length > 0)) && (
+                  <div style={{ fontSize: '0.8rem', backgroundColor: 'rgba(0,0,0,0.02)', padding: '0.5rem', borderRadius: '6px', marginBottom: '0.5rem', borderLeft: '3px solid var(--primary-color)' }}>
+                    {log.notes && (
+                      <div style={{ marginBottom: '0.25rem' }}>
+                        <strong>🧹 {language === 'vi' ? 'Ghi chú NV:' : language === 'ja' ? '清掃員メモ:' : 'Cleaner Notes:'}</strong> {log.notes}
+                      </div>
+                    )}
+                    {log.checkerNotes && (
+                      <div style={{ marginBottom: '0.25rem' }}>
+                        <strong>🔍 {language === 'vi' ? 'Ghi chú kiểm phòng:' : language === 'ja' ? '検査指摘メモ:' : 'Checker Notes:'}</strong> {log.checkerNotes}
+                      </div>
+                    )}
+                    {log.errors && log.errors.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginTop: '0.35rem' }}>
+                        {log.errors.map((e, idx) => (
+                          <span key={idx} style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '3px' }}>
+                            ❌ {translateDefect(e, language)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div style={{ marginTop: '0.5rem' }}>

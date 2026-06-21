@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { db, getActiveHotelId } from '../../db/firebaseDB';
+import { db, getActiveHotelId, getDatabaseProvider } from '../../db/firebaseDB';
 import type { User, Hotel as HotelType } from '../../db/dbInterface';
 import type { Language } from '../../i18n/translations';
-import { getTodayDateString, getLocalDB } from '../../db/localDB';
+import { getTodayDateString } from '../../db/localDB';
+import { readStorageJson, readStorageString, removeStorageKey, writeStorageJson, writeStorageString } from '../../utils/storage';
+import { hashPassword } from '../../utils/crypto';
 
 export interface ToastMessage {
   id: string;
@@ -20,7 +22,7 @@ interface AppContextType {
   activeHotel: HotelType | null;
   activeDate: string;
   changeActiveDate: (date: string) => void;
-  login: (credentials: { username?: string; password?: string }) => Promise<boolean>;
+  login: (credentials: { username?: string; password?: string }) => Promise<{ success: boolean; errorType?: 'credentials' | 'schedule' | 'no_hotel' }>;
   logout: () => void;
   setLanguage: (lang: Language) => void;
   toggleDarkMode: () => void;
@@ -30,6 +32,9 @@ interface AppContextType {
   selectHotel: (id: string) => void;
   isLocked: boolean;
   toggleDayLock: () => Promise<void>;
+  currency: string;
+  setCurrency: (c: string) => void;
+  getCurrencySymbol: () => string;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -41,6 +46,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [darkMode, setDarkMode] = useState<boolean>(false);
   const [hotelId, setHotelId] = useState<string>(getActiveHotelId());
   const [activeHotel, setActiveHotel] = useState<HotelType | null>(null);
+  
+  const [currency, setCurrencyState] = useState<string>(() => {
+    return localStorage.getItem('system_currency') || 'JPY';
+  });
+
+  const setCurrency = (c: string) => {
+    setCurrencyState(c);
+    localStorage.setItem('system_currency', c);
+  };
+
+  const getCurrencySymbol = () => {
+    if (currency === 'VND') return 'đ';
+    if (currency === 'USD') return '$';
+    return '円';
+  };
   const [activeDate, setActiveDate] = useState<string>(() => {
     const params = new URLSearchParams(window.location.search);
     const urlDate = params.get('date');
@@ -113,15 +133,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setActiveDate(urlDate);
       }
       
-      const savedUser = localStorage.getItem('hotel_clean_curr_user');
-      if (savedUser) {
-        const parsed = JSON.parse(savedUser);
+      const parsed = readStorageJson<User | null>('hotel_clean_curr_user', null);
+      if (parsed) {
         const hasAccess = parsed.role === 'admin' || (parsed.hotelIds && parsed.hotelIds.includes(activeId)) || activeId === 'portal' || activeId === 'admin';
         if (hasAccess) {
           setCurrentUser(parsed);
         } else {
           setCurrentUser(null);
-          localStorage.removeItem('hotel_clean_curr_user');
+          removeStorageKey('hotel_clean_curr_user');
         }
       } else {
         setCurrentUser(null);
@@ -144,10 +163,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Load user session and language preferences from localStorage on boot
   useEffect(() => {
     const activeId = getActiveHotelId();
-    const savedUserStr = localStorage.getItem('hotel_clean_curr_user');
-    let userObj: User | null = null;
-    if (savedUserStr) {
-      userObj = JSON.parse(savedUserStr) as User;
+    let userObj = readStorageJson<User | null>('hotel_clean_curr_user', null);
+    if (userObj) {
       const hasAccess = userObj.role === 'admin' || (userObj.hotelIds && userObj.hotelIds.includes(activeId)) || activeId === 'portal' || activeId === 'admin';
       const finalUser = userObj;
       if (hasAccess && finalUser) {
@@ -159,11 +176,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         });
       } else {
         setCurrentUser(null);
-        localStorage.removeItem('hotel_clean_curr_user');
+        removeStorageKey('hotel_clean_curr_user');
         userObj = null;
       }
     } else {
       setCurrentUser(null);
+      removeStorageKey('hotel_clean_curr_user');
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -193,11 +211,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     fetchActiveHotel();
 
-    const savedLang = localStorage.getItem('hotel_clean_lang');
-    const savedTheme = localStorage.getItem('hotel_clean_theme');
-    
-    if (savedLang) {
-      setLanguageState(savedLang as Language);
+    const savedLang = readStorageString('hotel_clean_lang') as Language | '';
+    const savedTheme = readStorageString('hotel_clean_theme');
+
+    if (savedLang && ['ja', 'vi', 'en'].includes(savedLang)) {
+      setLanguageState(savedLang);
     } else {
       setLanguageState('ja');
     }
@@ -209,7 +227,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem('hotel_clean_lang', lang);
+    writeStorageString('hotel_clean_lang', lang);
   };
 
   const toggleDarkMode = () => {
@@ -217,10 +235,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const newVal = !prev;
       if (newVal) {
         document.body.classList.add('dark-mode');
-        localStorage.setItem('hotel_clean_theme', 'dark');
+        writeStorageString('hotel_clean_theme', 'dark');
       } else {
         document.body.classList.remove('dark-mode');
-        localStorage.setItem('hotel_clean_theme', 'light');
+        writeStorageString('hotel_clean_theme', 'light');
       }
       return newVal;
     });
@@ -294,85 +312,100 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const hasAccess = activeUser.role === 'admin' || (activeUser.hotelIds && activeUser.hotelIds.includes(id)) || id === 'portal';
     if (!hasAccess) {
       setCurrentUser(null);
-      localStorage.removeItem('hotel_clean_curr_user');
+      removeStorageKey('hotel_clean_curr_user');
     } else {
-      localStorage.setItem('hotel_clean_curr_user', JSON.stringify(activeUser));
+      writeStorageJson('hotel_clean_curr_user', activeUser);
     }
   };
 
   const login = async (
     credentials: { username?: string; password?: string }
-  ): Promise<boolean> => {
+  ): Promise<{ success: boolean; errorType?: 'credentials' | 'schedule' | 'no_hotel' }> => {
     try {
       // Query users globally to support logging in from anywhere
       const users = await db.getAllGlobalUsers();
       
       const searchUsername = credentials.username?.trim().toLowerCase();
       if (!searchUsername) {
-        console.warn('[AUTH DEBUG] Empty username submitted');
-        return false;
+        return { success: false, errorType: 'credentials' };
       }
 
       // Find user by username (trimmed, case-insensitive)
       const foundUser = users.find(u => u.username?.trim().toLowerCase() === searchUsername);
-      console.log('[AUTH DEBUG] User lookup:', {
-        submitted: credentials.username,
-        searched: searchUsername,
-        found: foundUser ? { id: foundUser.id, username: foundUser.username, role: foundUser.role } : 'Not Found'
-      });
 
       if (!foundUser || foundUser.status === 'quit') {
-        return false;
+        return { success: false, errorType: 'credentials' };
       }
 
       // Support custom passwords per user (front1 -> front123 or front1123, front2 -> front2123, admin -> admin123, otherwise username + '123')
       let isPasswordMatch = false;
-      const inputPassword = credentials.password;
+      const inputPassword = credentials.password || '';
       
-      if (foundUser.username?.trim().toLowerCase() === 'front1') {
-        isPasswordMatch = (inputPassword === 'front123' || inputPassword === 'front1123');
-      } else if (foundUser.username?.trim().toLowerCase() === 'front2') {
-        isPasswordMatch = (inputPassword === 'front2123');
+      if (foundUser.passwordHash) {
+        const hashedInput = await hashPassword(inputPassword);
+        isPasswordMatch = (hashedInput === foundUser.passwordHash);
       } else {
-        isPasswordMatch = (inputPassword === foundUser.username + '123');
+        if (foundUser.username?.trim().toLowerCase() === 'front1') {
+          isPasswordMatch = (inputPassword === 'front123' || inputPassword === 'front1123');
+        } else if (foundUser.username?.trim().toLowerCase() === 'front2') {
+          isPasswordMatch = (inputPassword === 'front2123');
+        } else {
+          isPasswordMatch = (inputPassword === foundUser.username + '123');
+        }
+
+        // Auto-upgrade security: save passwordHash
+        if (isPasswordMatch) {
+          try {
+            const hashed = await hashPassword(inputPassword);
+            foundUser.passwordHash = hashed;
+            const targetDb = getDatabaseProvider(foundUser.hotelIds?.[0] || 'ks1');
+            await targetDb.updateUser(foundUser);
+          } catch (e) {
+            console.error('Failed to auto-upgrade password hash:', e);
+          }
+        }
       }
 
-      console.log('[AUTH DEBUG] Password check:', {
-        entered: inputPassword,
-        matches: isPasswordMatch
-      });
-
       if (!isPasswordMatch) {
-        return false;
+        return { success: false, errorType: 'credentials' };
       }
 
       // Housekeeper date restriction checks (validating correct hotel branch context dynamically)
       if (foundUser.role === 'housekeeping') {
         const today = getTodayDateString();
         const userHotels = foundUser.hotelIds || [];
-        const activeBranchId = userHotels.includes(hotelId) ? hotelId : (userHotels[0] || '');
         
-        if (activeBranchId) {
-          const targetDb = getLocalDB(activeBranchId);
-          const activeStaff = await targetDb.getActiveStaff(today);
-          if (!activeStaff.includes(foundUser.id)) {
-            addToast(
-              language === 'vi'
-                ? 'Hôm nay bạn không có lịch dọn phòng. Vui lòng liên hệ Lễ tân/Admin.'
-                : language === 'ja'
-                  ? '本日、清掃の割り当てがありません。フロントまたは管理者に連絡してください。'
-                  : 'You are not assigned to clean today. Please contact Front Desk/Admin.',
-              'warning'
-            );
-            return false;
+        let hasActiveSchedule = false;
+        for (const hId of userHotels) {
+          if (hId === 'portal' || hId === 'admin') continue;
+          try {
+            const targetDb = getDatabaseProvider(hId);
+            const activeStaff = await targetDb.getActiveStaff(today);
+            if (activeStaff.includes(foundUser.id)) {
+              hasActiveSchedule = true;
+              break;
+            }
+          } catch (e) {
+            console.error(`Failed to check active staff for hotel ${hId}:`, e);
           }
+        }
+        
+        if (!hasActiveSchedule) {
+          addToast(
+            language === 'vi'
+              ? 'Lưu ý: Hôm nay bạn chưa có lịch phân công dọn phòng.'
+              : language === 'ja'
+                ? '注意：本日の清掃割り当てはまだありません。'
+                : 'Notice: You do not have a cleaning assignment for today yet.',
+            'info'
+          );
         }
         db.setDate(today);
         setActiveDate(today);
       }
 
       setCurrentUser(foundUser);
-      localStorage.setItem('hotel_clean_curr_user', JSON.stringify(foundUser));
+      writeStorageJson('hotel_clean_curr_user', foundUser);
 
       // Determine correct hotel to route to upon login
       if (foundUser.role !== 'admin') {
@@ -385,8 +418,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             'warning'
           );
           setCurrentUser(null);
-          localStorage.removeItem('hotel_clean_curr_user');
-          return false;
+          removeStorageKey('hotel_clean_curr_user');
+          return { success: false, errorType: 'no_hotel' };
         }
 
         // Always route non-admin users to the portal so they can select a hotel
@@ -402,18 +435,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       
       // Simply load the language from localStorage (or defaults to 'ja' if not found)
-      const savedLang = localStorage.getItem('hotel_clean_lang') as Language;
-      if (savedLang) {
+      const savedLang = readStorageString('hotel_clean_lang') as Language | '';
+      if (savedLang && ['ja', 'vi', 'en'].includes(savedLang)) {
         setLanguageState(savedLang);
       } else {
         setLanguageState('ja');
       }
       
       addToast(`Logged in as ${foundUser.name}`, 'success');
-      return true;
+      return { success: true };
     } catch (error) {
       console.error('Login error:', error);
-      return false;
+      return { success: false, errorType: 'credentials' };
     }
   };
 
@@ -431,7 +464,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const logout = () => {
-    localStorage.removeItem('hotel_clean_curr_user');
+    removeStorageKey('hotel_clean_curr_user');
     setCurrentUser(null);
     selectHotel('portal', null);
     addToast('Logged out', 'info');
@@ -456,7 +489,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       triggerSoundAlert,
       selectHotel,
       isLocked,
-      toggleDayLock
+      toggleDayLock,
+      currency,
+      setCurrency,
+      getCurrencySymbol
     }}>
       {children}
     </AppContext.Provider>

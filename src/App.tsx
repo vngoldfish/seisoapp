@@ -4,8 +4,9 @@ import ErrorBoundary from './components/Common/ErrorBoundary';
 import Header from './components/Common/Header';
 import ToastList from './components/Common/ToastList';
 import Login from './components/Common/Login';
-import { ArrowRight, Sun, Moon, Building, Loader2 } from 'lucide-react';
-import { db } from './db/firebaseDB';
+import { ArrowRight, Sun, Moon, Building, Loader2, LogOut } from 'lucide-react';
+import { db, getDatabaseProvider } from './db/firebaseDB';
+import { getTodayDateString } from './db/localDB';
 import type { Hotel as HotelType } from './db/dbInterface';
 
 // Lazy load dashboards for code splitting - only the needed dashboard is loaded per role
@@ -16,12 +17,13 @@ const CheckerDashboard = lazy(() => import('./components/Checker/CheckerDashboar
 
 // Hotel Selection Portal View
 const HotelSelectionPortal: React.FC = () => {
-  const { selectHotel, language, setLanguage, darkMode, toggleDarkMode, currentUser } = useApp();
+  const { selectHotel, language, setLanguage, darkMode, toggleDarkMode, currentUser, logout, addToast } = useApp();
   const [hotels, setHotels] = useState<HotelType[]>([]);
   const [cols, setCols] = useState<number | 'list'>(5);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedHotelIds, setSelectedHotelIds] = useState<string[]>([]);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [scheduledHotelIds, setScheduledHotelIds] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchHotels = async () => {
@@ -34,6 +36,25 @@ const HotelSelectionPortal: React.FC = () => {
           }
           setHotels(userHotels);
           setSelectedHotelIds(userHotels.map(h => h.id));
+
+          if (currentUser.role === 'housekeeping') {
+            const today = getTodayDateString();
+            const scheduled: string[] = [];
+            await Promise.all(
+              userHotels.map(async (h) => {
+                try {
+                  const targetDb = getDatabaseProvider(h.id);
+                  const activeStaff = await targetDb.getActiveStaff(today);
+                  if (activeStaff.includes(currentUser.id)) {
+                    scheduled.push(h.id);
+                  }
+                } catch (err) {
+                  console.error(`Failed to check schedule for hotel ${h.id}:`, err);
+                }
+              })
+            );
+            setScheduledHotelIds(scheduled);
+          }
         } else {
           setHotels([]);
         }
@@ -80,9 +101,15 @@ const HotelSelectionPortal: React.FC = () => {
           <button className={`lang-btn ${language === 'vi' ? 'active' : ''}`} onClick={() => setLanguage('vi')}>VN</button>
           <button className={`lang-btn ${language === 'en' ? 'active' : ''}`} onClick={() => setLanguage('en')}>EN</button>
         </div>
-        <button onClick={toggleDarkMode} className="btn btn-secondary btn-sm rounded-full p-1.5">
-          {darkMode ? <Sun size={16} /> : <Moon size={16} />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={toggleDarkMode} className="btn btn-secondary btn-sm rounded-full p-1.5" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+          <button onClick={logout} className="btn btn-danger btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.4rem 0.75rem' }}>
+            <LogOut size={14} />
+            <span>{language === 'vi' ? 'Đăng xuất' : language === 'ja' ? 'ログアウト' : 'Logout'}</span>
+          </button>
+        </div>
       </div>
 
       <div className="text-center max-w-[600px] px-4">
@@ -240,30 +267,80 @@ const HotelSelectionPortal: React.FC = () => {
           const color = isSakura ? '#ec4899' : isFuji ? '#0ea5e9' : 'var(--primary-color)';
           const badgeText = isSakura ? 'Sakura Branch' : isFuji ? 'Fuji Branch' : `${hotel.name} Branch`;
 
+          const isHotelActive = hotel.active !== false;
+          const isHousekeeper = currentUser?.role === 'housekeeping';
+          const isScheduled = !isHousekeeper || scheduledHotelIds.includes(hotel.id);
+          const isAccessAllowed = currentUser?.role === 'admin' || (isHotelActive && isScheduled);
+
+          const handleCardClick = () => {
+            if (currentUser?.role === 'admin') {
+              selectHotel(hotel.id);
+              return;
+            }
+            if (!isHotelActive) {
+              addToast(
+                language === 'vi' 
+                  ? 'Khách sạn này tạm thời không hoạt động.' 
+                  : language === 'ja'
+                    ? 'このホテルは現在非アクティブです。'
+                    : 'This hotel is currently inactive.',
+                'warning'
+              );
+              return;
+            }
+            if (!isScheduled) {
+              addToast(
+                language === 'vi'
+                  ? 'Hôm nay bạn chưa có lịch phân công dọn phòng ở khách sạn này.'
+                  : language === 'ja'
+                    ? '本日、このホテルでの清掃シフトがまだ割り当てられていません。'
+                    : 'You do not have a cleaning assignment here today.',
+                'warning'
+              );
+              return;
+            }
+            selectHotel(hotel.id);
+          };
+
           return (
             <div 
               key={hotel.id}
               className="glass-panel portal-hotel-card" 
-              onClick={() => selectHotel(hotel.id)}
+              onClick={handleCardClick}
               style={{ 
                 padding: '1.5rem', 
-                cursor: 'pointer',
+                cursor: isAccessAllowed ? 'pointer' : 'not-allowed',
                 minHeight: cols === 'list' ? '140px' : '220px',
-                border: `2px solid ${color}26`, // 15% opacity
+                border: `2px solid ${isAccessAllowed ? color : '#e5e7eb'}26`, 
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
-                alignItems: 'stretch'
+                alignItems: 'stretch',
+                opacity: isAccessAllowed ? 1 : 0.55,
+                filter: isAccessAllowed ? 'none' : 'grayscale(0.65)',
+                transition: 'all 0.3s ease'
               }}
             >
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', backgroundColor: color }} />
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', backgroundColor: isAccessAllowed ? color : '#9ca3af' }} />
               
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.35rem' }}>
                   <span style={{ fontSize: '1.75rem' }}>{emoji}</span>
-                  <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: `${color}1a`, color: color, borderColor: `${color}33` }}>
-                    {badgeText}
-                  </span>
+                  <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                    <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: `${color}1a`, color: color, borderColor: `${color}33` }}>
+                      {badgeText}
+                    </span>
+                    {!isHotelActive && (
+                      <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+                        {language === 'vi' ? 'Không hoạt động' : language === 'ja' ? '非アクティブ' : 'No Active'}
+                      </span>
+                    )}
+                    {isHotelActive && isHousekeeper && !isScheduled && (
+                      <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(249, 115, 22, 0.1)', color: '#f97316', borderColor: 'rgba(249, 115, 22, 0.2)' }}>
+                        {language === 'vi' ? 'Chưa phân lịch' : language === 'ja' ? 'シフト未割当' : 'No Schedule'}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>{hotel.name}</h2>
                 <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{hotel.id}</p>
@@ -272,9 +349,15 @@ const HotelSelectionPortal: React.FC = () => {
                 </p>
               </div>
               
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', fontWeight: 600, color: color, fontSize: '0.85rem' }}>
-                <span>{language === 'ja' ? '選択する' : language === 'vi' ? 'Truy cập' : 'Access'}</span>
-                <ArrowRight size={16} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', fontWeight: 600, color: isAccessAllowed ? color : '#6b7280', fontSize: '0.85rem' }}>
+                <span>
+                  {!isHotelActive 
+                    ? (language === 'vi' ? 'Không hoạt động' : language === 'ja' ? '非アクティブ' : 'Inactive') 
+                    : (isHousekeeper && !isScheduled) 
+                      ? (language === 'vi' ? 'Chưa có lịch' : language === 'ja' ? 'シフトなし' : 'No Schedule') 
+                      : (language === 'ja' ? '選択する' : language === 'vi' ? 'Truy cập' : 'Access')}
+                </span>
+                {isAccessAllowed && <ArrowRight size={16} />}
               </div>
             </div>
           );
@@ -290,7 +373,7 @@ const HotelSelectionPortal: React.FC = () => {
 
 // Main Router orchestrator
 const MainApp: React.FC = () => {
-  const { currentUser, hotelId, selectHotel } = useApp();
+  const { currentUser, hotelId, selectHotel, language, addToast } = useApp();
 
   const [hotels, setHotels] = useState<HotelType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -307,6 +390,14 @@ const MainApp: React.FC = () => {
       }
     };
     fetchHotels();
+
+    const handleHotelsUpdate = () => {
+      fetchHotels();
+    };
+    window.addEventListener('hotels-updated', handleHotelsUpdate);
+    return () => {
+      window.removeEventListener('hotels-updated', handleHotelsUpdate);
+    };
   }, []);
 
   // Helper to check if current URL path points to the selector portal
@@ -315,7 +406,7 @@ const MainApp: React.FC = () => {
 
   // Auto-redirect user to assigned hotel dashboard if they are on the portal
   useEffect(() => {
-    if (!currentUser || hotels.length === 0) return;
+    if (loading || !currentUser) return;
     
     const isUserAdmin = currentUser.role === 'admin';
     const isCurrentPathAdmin = hotelId === 'admin';
@@ -325,27 +416,47 @@ const MainApp: React.FC = () => {
         selectHotel('admin');
       }
     } else {
+      if (hotels.length === 0) return;
       if (isPortal || isCurrentPathAdmin) {
         if (currentUser.hotelIds && currentUser.hotelIds.length === 1) {
-          selectHotel(currentUser.hotelIds[0]);
+          const targetHotelId = currentUser.hotelIds[0];
+          const matchedH = hotels.find(h => h.id === targetHotelId);
+          if (matchedH && matchedH.active !== false) {
+            selectHotel(targetHotelId);
+          } else {
+            selectHotel('portal');
+          }
         } else if (!currentUser.hotelIds || currentUser.hotelIds.length === 0) {
           selectHotel('portal');
         }
       }
     }
-  }, [currentUser, isPortal, hotelId, hotels, selectHotel]);
+  }, [loading, currentUser, isPortal, hotelId, hotels, selectHotel]);
 
   // Synchronize browser history and path on first boot
   useEffect(() => {
     if (loading) return;
     const path = window.location.pathname.replace(/^\/|\/$/g, '');
-    const isValid = hotels.some(h => h.id === path);
-    if (!isValid && path !== '' && path !== 'portal' && path !== 'admin') {
+    const matchedHotel = hotels.find(h => h.id === path);
+    if (matchedHotel) {
+      if (currentUser && currentUser.role !== 'admin' && matchedHotel.active === false) {
+        addToast(
+          language === 'vi' 
+            ? 'Khách sạn này tạm thời không hoạt động.' 
+            : language === 'ja'
+              ? 'このホテルは現在非アクティブです。'
+              : 'This hotel is currently inactive.',
+          'warning'
+        );
+        window.history.replaceState({}, '', '/');
+        selectHotel('portal');
+      }
+    } else if (path !== '' && path !== 'portal' && path !== 'admin') {
       // Clean invalid paths back to portal
       window.history.replaceState({}, '', '/');
       selectHotel('portal');
     }
-  }, [loading, hotels, selectHotel]);
+  }, [loading, hotels, selectHotel, currentUser, language]);
 
   if (loading) {
     return (

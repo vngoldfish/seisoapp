@@ -1,4 +1,5 @@
-import type { DBInterface, User, Room, CleaningLog, RoomSubscriptionCallback, LogSubscriptionCallback, Hotel } from './dbInterface';
+import type { DBInterface, User, Room, CleaningLog, RoomSubscriptionCallback, LogSubscriptionCallback, Hotel, FinalizedDayReport } from './dbInterface';
+import { PostgresDB } from './postgresDB';
 import { 
   getLocalDB, 
   getTodayDateString, 
@@ -114,7 +115,7 @@ class FirebaseDB implements DBInterface {
   async getUsers(): Promise<User[]> {
     const globalUsers = await this.getAllGlobalUsers();
     // Filter users belonging to this hotel
-    return globalUsers.filter(u => u.hotelIds?.includes(this.hotelId) && u.status !== 'quit');
+    return globalUsers.filter(u => u.hotelIds?.includes(this.hotelId) && u.status !== 'quit' && u.role !== 'admin');
   }
 
   async getAllGlobalUsers(): Promise<User[]> {
@@ -169,11 +170,7 @@ class FirebaseDB implements DBInterface {
         throw new Error('Cannot delete or dissociate the main admin user.');
       }
       user.hotelIds = user.hotelIds?.filter(hId => hId !== this.hotelId) || [];
-      if (user.hotelIds.length === 0) {
-        await deleteDoc(doc(firestore, 'users', userId));
-      } else {
-        await setDoc(doc(firestore, 'users', userId), user);
-      }
+      await setDoc(doc(firestore, 'users', userId), user);
     }
   }
 
@@ -415,7 +412,33 @@ class FirebaseDB implements DBInterface {
     const docPath = `hotels/${this.hotelId}/dates/${date}/status/lock`;
     await setDoc(doc(firestore, docPath), { locked });
   }
+
+  async getFinalizedDayReports(): Promise<FinalizedDayReport[]> {
+    if (!firestore) return [];
+    try {
+      const reportsPath = `hotels/${this.hotelId}/finalizedDayReports`;
+      const snap = await getDocs(collection(firestore, reportsPath));
+      return snap.docs.map(doc => doc.data() as FinalizedDayReport);
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  }
+
+  async saveFinalizedDayReport(report: FinalizedDayReport): Promise<void> {
+    if (!firestore) throw new Error('Firebase not configured');
+    const reportsPath = `hotels/${this.hotelId}/finalizedDayReports`;
+    await setDoc(doc(firestore, reportsPath, report.id), report);
+  }
+
+  async deleteFinalizedDayReport(reportId: string): Promise<void> {
+    if (!firestore) throw new Error('Firebase not configured');
+    const reportsPath = `hotels/${this.hotelId}/finalizedDayReports`;
+    await deleteDoc(doc(firestore, reportsPath, reportId));
+  }
 }
+
+let selectedDate = getTodayDateString();
 
 const firebaseDBs: Record<string, FirebaseDB> = {};
 
@@ -426,25 +449,52 @@ function getFirebaseDB(hotelId: string): FirebaseDB {
   return firebaseDBs[hotelId];
 }
 
+const postgresDBs: Record<string, PostgresDB> = {};
+
+function getPostgresDB(hotelId: string): PostgresDB {
+  if (!postgresDBs[hotelId]) {
+    postgresDBs[hotelId] = new PostgresDB(hotelId);
+  }
+  return postgresDBs[hotelId];
+}
+
+function applySelectedDate<T extends DBInterface>(provider: T): T {
+  provider.setDate(selectedDate);
+  return provider;
+}
+
+function syncKnownProviderDates(date: string): void {
+  Object.values(firebaseDBs).forEach(provider => provider.setDate(date));
+  Object.values(postgresDBs).forEach(provider => provider.setDate(date));
+}
+
+export function getDatabaseProvider(hotelId: string): DBInterface {
+  if (import.meta.env.VITE_USE_POSTGRES === 'true') {
+    return applySelectedDate(getPostgresDB(hotelId));
+  }
+  if (isFirebaseConfigured) {
+    return applySelectedDate(getFirebaseDB(hotelId));
+  }
+  return applySelectedDate(getLocalDB(hotelId));
+}
+
 // Proxy database provider that routes all queries to the correct hotel partition automatically
 class DatabaseProxy implements DBInterface {
-  
+
   // Date management
   setDate(date: string): void {
+    selectedDate = date;
+    syncKnownProviderDates(date);
     this.activeDB.setDate(date);
   }
 
   getDate(): string {
-    return this.activeDB.getDate();
+    return selectedDate;
   }
-  
+
   // Resolve current active DB instance
   private get activeDB(): DBInterface {
-    const hotelId = getActiveHotelId();
-    if (isFirebaseConfigured) {
-      return getFirebaseDB(hotelId);
-    }
-    return getLocalDB(hotelId);
+    return getDatabaseProvider(getActiveHotelId());
   }
 
   // Hotels CRUD
@@ -566,6 +616,39 @@ class DatabaseProxy implements DBInterface {
 
   async setDateLocked(date: string, locked: boolean): Promise<void> {
     return this.activeDB.setDateLocked(date, locked);
+  }
+
+  async getFinalizedDayReports(): Promise<FinalizedDayReport[]> {
+    return this.activeDB.getFinalizedDayReports();
+  }
+
+  async saveFinalizedDayReport(report: FinalizedDayReport): Promise<void> {
+    return this.activeDB.saveFinalizedDayReport(report);
+  }
+
+  async deleteFinalizedDayReport(reportId: string): Promise<void> {
+    return this.activeDB.deleteFinalizedDayReport(reportId);
+  }
+
+  async resetDatabase(): Promise<void> {
+    if (this.activeDB.resetDatabase) {
+      return this.activeDB.resetDatabase();
+    }
+    localStorage.clear();
+  }
+
+  async backupDatabase(): Promise<any> {
+    if (this.activeDB.backupDatabase) {
+      return this.activeDB.backupDatabase();
+    }
+    throw new Error('Backup not supported by this database provider');
+  }
+
+  async restoreDatabase(data: any): Promise<void> {
+    if (this.activeDB.restoreDatabase) {
+      return this.activeDB.restoreDatabase(data);
+    }
+    throw new Error('Restore not supported by this database provider');
   }
 }
 

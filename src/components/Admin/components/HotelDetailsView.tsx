@@ -13,9 +13,20 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import type { Room, User, CleaningLog, Hotel as HotelType } from '../../../db/dbInterface';
-import { getLocalDB } from '../../../db/localDB';
+import { getDatabaseProvider } from '../../../db/firebaseDB';
+import { hashPassword } from '../../../utils/crypto';
 import { UserManagementTab } from './UserManagementTab';
 import { useApp } from '../../Common/AppContext';
+
+export const getLocalDateString = (isoString: string): string => {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 interface HotelDetailsViewProps {
   language: any;
@@ -82,7 +93,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   getTranslation,
   getVisiblePages
 }) => {
-  const { isLocked } = useApp();
+  const { isLocked, getCurrencySymbol } = useApp();
   // Local states for sub-management
   const [staffSearchTerm, setStaffSearchTerm] = useState<string>('');
 
@@ -104,6 +115,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   const [genFromFloor, setGenFromFloor] = useState<number>(1);
   const [genToFloor, setGenToFloor] = useState<number>(1);
   const [genRoomsPerFloor, setGenRoomsPerFloor] = useState<number>(1);
+  const [genRoomType, setGenRoomType] = useState<string>('');
 
   // Main Room CRUD Modals
   const [roomModalOpen, setRoomModalOpen] = useState(false);
@@ -114,8 +126,8 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
 
   const [defaultMinutesInput, setDefaultMinutesInput] = useState<number>(managingHotel.defaultCleanMinutes || 35);
   const [rtModalOpen, setRtModalOpen] = useState(false);
-  const [editingRt, setEditingRt] = useState<{ id: string; name: string; cleanMinutes: number } | null>(null);
-  const [rtForm, setRtForm] = useState({ name: '', cleanMinutes: 30 });
+  const [editingRt, setEditingRt] = useState<{ id: string; name: string; cleanMinutes: number; price?: number; defaultGuestCount?: number } | null>(null);
+  const [rtForm, setRtForm] = useState({ name: '', cleanMinutes: 30, price: 0, defaultGuestCount: 1 });
 
   useEffect(() => {
     setDefaultMinutesInput(managingHotel.defaultCleanMinutes || 35);
@@ -123,7 +135,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   const [roomForm, setRoomForm] = useState({ 
     roomNumber: '', 
     floor: 1, 
-    type: 'Single', 
+    type: managingHotel.roomTypes && managingHotel.roomTypes.length > 0 ? managingHotel.roomTypes[0].name : '', 
     status: 'vacant' as Room['status'],
     isStay: false,
     guestCount: 0,
@@ -190,7 +202,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
     const activeDateObj = new Date(activeDate);
     const rangeLogs = logs.filter(log => {
       if (!log.endedAt || log.durationMinutes <= 0) return false;
-      const logDateStr = log.endedAt.split('T')[0];
+      const logDateStr = getLocalDateString(log.endedAt);
       
       if (statsTimeRange === 'today') {
         return logDateStr === activeDate;
@@ -324,13 +336,13 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
       for (let i = daysCount - 1; i >= 0; i--) {
         const d = new Date(activeDateObj);
         d.setDate(d.getDate() - i);
-        const dStr = d.toISOString().split('T')[0];
+        const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         daysList.push(dStr);
         dailyBins[dStr] = { out: 0, stay: 0, dnd: 0 };
       }
 
       rangeLogs.forEach(log => {
-        const logDateStr = log.endedAt.split('T')[0];
+        const logDateStr = getLocalDateString(log.endedAt);
         if (dailyBins[logDateStr]) {
           const room = rooms.find(r => r.id === log.roomId);
           let category: 'out' | 'stay' | 'dnd' = 'out';
@@ -370,7 +382,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
 
       rangeLogs.forEach(log => {
         try {
-          const logDateStr = log.endedAt.split('T')[0];
+          const logDateStr = getLocalDateString(log.endedAt);
           const key = logDateStr.substring(0, 7);
           if (monthlyBins[key]) {
             const room = rooms.find(r => r.id === log.roomId);
@@ -615,7 +627,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   const handleLinkStaffById = async (userId: string) => {
     if (!managingHotel || !userId) return;
     try {
-      const targetDb = getLocalDB(managingHotel.id);
+      const targetDb = getDatabaseProvider(managingHotel.id);
       const user = globalUsers.find(u => u.id === userId);
       if (!user) return;
 
@@ -644,7 +656,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   const handleUnlinkStaff = async (userId: string) => {
     if (!managingHotel) return;
     try {
-      const targetDb = getLocalDB(managingHotel.id);
+      const targetDb = getDatabaseProvider(managingHotel.id);
       const user = globalUsers.find(u => u.id === userId);
       if (!user) return;
 
@@ -683,7 +695,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
     e.preventDefault();
     if (!managingHotel) return;
     try {
-      const targetDb = getLocalDB(managingHotel.id);
+      const targetDb = getDatabaseProvider(managingHotel.id);
       
       const exists = globalUsers.some(u => u.username.trim().toLowerCase() === subNewStaffForm.username.trim().toLowerCase());
       if (exists) {
@@ -694,13 +706,18 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
         return;
       }
 
+      const defaultPassword = subNewStaffForm.username.trim() + '123';
+      const defaultPasswordHash = await hashPassword(defaultPassword);
+
       await targetDb.createUser({
-        username: subNewStaffForm.username,
-        name: subNewStaffForm.name,
+        username: subNewStaffForm.username.trim(),
+        name: subNewStaffForm.name.trim(),
         role: subNewStaffForm.role,
         language: 'ja',
         hotelIds: [managingHotel.id],
-        status: 'working'
+        status: 'working',
+        employeeCode: subNewStaffForm.username.trim().toUpperCase(),
+        passwordHash: defaultPasswordHash
       });
 
       addToast(
@@ -726,8 +743,20 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   const handleBulkRoomsUpdate = async () => {
     if (!managingHotel) return;
     try {
-      const targetDb = getLocalDB(managingHotel.id);
+      const existingTypes = managingHotel.roomTypes || [];
+      if (existingTypes.length === 0) {
+        throw new Error(
+          language === 'vi'
+            ? 'Vui lòng cấu hình ít nhất một loại phòng trong mục Cài đặt trước khi khởi tạo sơ đồ phòng.'
+            : language === 'ja'
+              ? '部屋レイアウトを作成する前に、設定で少なくとも1つの部屋タイプを登録してください。'
+              : 'Please configure at least one room type in Settings before initializing room layouts.'
+        );
+      }
+      const defaultTypeName = existingTypes[0].name;
+      const targetDb = getDatabaseProvider(managingHotel.id);
       
+      const invalidTypes: string[] = [];
       const parsedRooms = bulkRoomsText
         .split(',')
         .map(r => r.trim())
@@ -735,9 +764,28 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
         .map(r => {
           const parts = r.split(':');
           const roomNumber = parts[0].trim();
-          const type = parts[1] ? parts[1].trim() : '1 Bed';
+          let type = parts[1] ? parts[1].trim() : defaultTypeName;
+          
+          // Find case-insensitive match in existingTypes
+          const matchedType = existingTypes.find(t => t.name.toLowerCase() === type.toLowerCase());
+          if (matchedType) {
+            type = matchedType.name;
+          } else {
+            invalidTypes.push(type);
+          }
           return { roomNumber, type };
         });
+
+      if (invalidTypes.length > 0) {
+        const uniqueInvalids = Array.from(new Set(invalidTypes));
+        throw new Error(
+          language === 'vi'
+            ? `Loại phòng không hợp lệ: ${uniqueInvalids.join(', ')}. Vui lòng cấu hình loại phòng này trong Cài đặt trước.`
+            : language === 'ja'
+              ? `無効な部屋タイプ: ${uniqueInvalids.join(', ')}。設定タブで先に作成してください。`
+              : `Invalid room types: ${uniqueInvalids.join(', ')}. Please configure them in Settings first.`
+        );
+      }
 
       const newRoomNumbers = parsedRooms.map(pr => pr.roomNumber);
       const currentRoomNumbers = rooms.map(r => r.roomNumber);
@@ -763,6 +811,8 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
       };
 
       for (const pr of toCreate) {
+        const matchedRt = existingTypes.find(t => t.name.toLowerCase() === pr.type.toLowerCase());
+        const defaultGuests = matchedRt?.defaultGuestCount !== undefined ? matchedRt.defaultGuestCount : 1;
         await targetDb.createRoom({
           id: pr.roomNumber,
           roomNumber: pr.roomNumber,
@@ -770,16 +820,19 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
           type: pr.type,
           status: 'vacant',
           isStay: false,
-          guestCount: 0
+          guestCount: defaultGuests
         });
       }
 
       for (const pr of toUpdate) {
         const existingRoom = rooms.find(r => r.roomNumber === pr.roomNumber);
         if (existingRoom && existingRoom.type !== pr.type) {
+          const matchedRt = existingTypes.find(t => t.name.toLowerCase() === pr.type.toLowerCase());
+          const defaultGuests = matchedRt?.defaultGuestCount !== undefined ? matchedRt.defaultGuestCount : 1;
           await targetDb.updateRoom({
             ...existingRoom,
             type: pr.type,
+            guestCount: defaultGuests,
             updatedAt: new Date().toISOString(),
             updatedBy: 'Admin'
           });
@@ -802,7 +855,12 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   // ROOM CRUD BUTTON TRIGGERS
   const handleAddRoomClick = () => {
     setEditingRoom(null);
-    setRoomForm({ roomNumber: '', floor: 1, type: '1 Bed', status: 'vacant', isStay: false, guestCount: 0, notes: '', priority: 'normal' });
+    const defaultType = managingHotel.roomTypes && managingHotel.roomTypes.length > 0
+      ? managingHotel.roomTypes[0].name
+      : '';
+    const matchedRt = managingHotel.roomTypes?.find(t => t.name === defaultType);
+    const defaultGuests = matchedRt?.defaultGuestCount !== undefined ? matchedRt.defaultGuestCount : 1;
+    setRoomForm({ roomNumber: '', floor: 1, type: defaultType, status: 'vacant', isStay: false, guestCount: defaultGuests, notes: '', priority: 'normal' });
     setRoomModalOpen(true);
   };
 
@@ -841,7 +899,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
         : `Are you sure you want to delete room ${roomNumber || id}?`;
         
     if (window.confirm(confirmMsg)) {
-      await getLocalDB(managingHotel.id).deleteRoom(id);
+      await getDatabaseProvider(managingHotel.id).deleteRoom(id);
       addToast(
         language === 'vi' 
           ? `Đã xóa phòng ${roomNumber || id}` 
@@ -868,7 +926,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
       return;
     }
     try {
-      const targetDb = getLocalDB(managingHotel.id);
+      const targetDb = getDatabaseProvider(managingHotel.id);
       if (editingRoom) {
         await targetDb.updateRoom({
           ...editingRoom,
@@ -2148,7 +2206,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                 style={{ minHeight: '120px', fontSize: '0.85rem', fontFamily: 'monospace', marginBottom: '0.75rem' }}
                 value={bulkRoomsText}
                 onChange={e => setBulkRoomsText(e.target.value)}
-                placeholder="e.g. 101:1 Bed, 102:2 Beds, 201:Single"
+                placeholder="e.g. 101:Single, 102:Double, 201:Single"
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.7rem', opacity: 0.6, maxWidth: '60%' }}>
@@ -2199,6 +2257,27 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                   />
                 </div>
               </div>
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem', opacity: 0.8 }}>
+                  {language === 'vi' ? 'Loại phòng áp dụng' : language === 'ja' ? '適用する部屋タイプ' : 'Room Type to Apply'}
+                </label>
+                <select
+                  className="form-input"
+                  style={{ padding: '0.35rem 0.5rem', fontSize: '0.8rem', width: '100%' }}
+                  value={genRoomType || (managingHotel.roomTypes && managingHotel.roomTypes.length > 0 ? managingHotel.roomTypes[0].name : '')}
+                  onChange={e => setGenRoomType(e.target.value)}
+                >
+                  {managingHotel.roomTypes && managingHotel.roomTypes.length > 0 ? (
+                    managingHotel.roomTypes.map(rt => (
+                      <option key={rt.id} value={rt.name}>
+                        {rt.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="Single">Single</option>
+                  )}
+                </select>
+              </div>
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
@@ -2212,11 +2291,12 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                     addToast('Start floor must be less than or equal to End floor', 'warning');
                     return;
                   }
+                  const selectedType = genRoomType || (managingHotel.roomTypes && managingHotel.roomTypes.length > 0 ? managingHotel.roomTypes[0].name : 'Single');
                   const generated: string[] = [];
                   for (let floor = genFromFloor; floor <= genToFloor; floor++) {
                     for (let r = 1; r <= genRoomsPerFloor; r++) {
                       const roomNum = `${floor}${r.toString().padStart(2, '0')}`;
-                      generated.push(`${roomNum}:1 Bed`);
+                      generated.push(`${roomNum}:${selectedType}`);
                     }
                   }
                   setBulkRoomsText(prev => {
@@ -2326,8 +2406,14 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                           <span style={{ opacity: 0.4 }}>☰</span>
                           <div>
                             <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{u.name}</div>
-                            <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
                               <span>ID: {u.username}</span>
+                              {u.employeeCode && (
+                                <>
+                                  <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.3)' }}></span>
+                                  <span>{language === 'vi' ? 'Mã NV' : 'Code'}: {u.employeeCode}</span>
+                                </>
+                              )}
                               <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.3)' }}></span>
                               <span style={{ color: roleColor, fontWeight: 700 }}>{u.role.toUpperCase()}</span>
                             </div>
@@ -2485,8 +2571,14 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                           <span style={{ opacity: 0.4 }}>☰</span>
                           <div>
                             <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{u.name}</div>
-                            <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
                               <span>ID: {u.username}</span>
+                              {u.employeeCode && (
+                                <>
+                                  <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.3)' }}></span>
+                                  <span>{language === 'vi' ? 'Mã NV' : 'Code'}: {u.employeeCode}</span>
+                                </>
+                              )}
                               <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.3)' }}></span>
                               <span style={{ color: roleColor, fontWeight: 700 }}>{u.role.toUpperCase()}</span>
                             </div>
@@ -2587,7 +2679,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                 className="btn btn-primary"
                 onClick={async () => {
                   try {
-                    const targetDb = getLocalDB(managingHotel.id);
+                    const targetDb = getDatabaseProvider(managingHotel.id);
                     const updated: HotelType = {
                       ...managingHotel,
                       defaultCleanMinutes: defaultMinutesInput
@@ -2623,7 +2715,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                 className="btn btn-primary btn-sm"
                 onClick={() => {
                   setEditingRt(null);
-                  setRtForm({ name: '', cleanMinutes: 30 });
+                  setRtForm({ name: '', cleanMinutes: 30, price: 0, defaultGuestCount: 1 });
                   setRtModalOpen(true);
                 }}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}
@@ -2638,14 +2730,16 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                 <thead>
                   <tr style={{ textAlign: 'left', borderBottom: '2px solid rgba(0,0,0,0.1)' }}>
                     <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Tên Loại Phòng' : language === 'ja' ? '部屋タイプ名' : 'Room Type Name'}</th>
-                    <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Thời gian dọn dẹp (phút)' : language === 'ja' ? '目標清掃時間 (分)' : 'Clean Duration (minutes)'}</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Thời gian dọn dẹp' : language === 'ja' ? '目標清掃時間' : 'Clean Duration'}</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Giá tiền / phòng' : language === 'ja' ? '室料 / 部屋' : 'Price / Room'}</th>
+                    <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Số khách mặc định' : language === 'ja' ? 'デフォルト人数' : 'Default Guests'}</th>
                     <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>{language === 'vi' ? 'Thao tác' : language === 'ja' ? 'アクション' : 'Actions'}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {!managingHotel.roomTypes || managingHotel.roomTypes.length === 0 ? (
                     <tr>
-                      <td colSpan={3} style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>
+                      <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>
                         {language === 'vi' ? 'Chưa cấu hình loại phòng tự chọn.' : language === 'ja' ? 'カスタム部屋タイプが設定されていません。' : 'No custom room types configured.'}
                       </td>
                     </tr>
@@ -2658,6 +2752,12 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                             {rt.cleanMinutes} {language === 'vi' ? 'phút' : language === 'ja' ? '分' : 'mins'}
                           </span>
                         </td>
+                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500, color: 'var(--accent-primary, #4f46e5)' }}>
+                          {(rt.price !== undefined ? rt.price : 0).toLocaleString()} {getCurrencySymbol()}
+                        </td>
+                        <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>
+                          {rt.defaultGuestCount !== undefined ? rt.defaultGuestCount : 1} {language === 'vi' ? 'người' : language === 'ja' ? '人' : 'Pax'}
+                        </td>
                         <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                             <button
@@ -2665,7 +2765,12 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                               className="btn btn-secondary btn-sm"
                               onClick={() => {
                                 setEditingRt(rt);
-                                setRtForm({ name: rt.name, cleanMinutes: rt.cleanMinutes });
+                                setRtForm({ 
+                                  name: rt.name, 
+                                  cleanMinutes: rt.cleanMinutes, 
+                                  price: rt.price || 0,
+                                  defaultGuestCount: rt.defaultGuestCount !== undefined ? rt.defaultGuestCount : 1
+                                });
                                 setRtModalOpen(true);
                               }}
                               style={{ padding: '0.25rem 0.5rem' }}
@@ -2678,7 +2783,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                               onClick={async () => {
                                 if (window.confirm(language === 'vi' ? `Bạn có chắc chắn muốn xóa loại phòng "${rt.name}"?` : language === 'ja' ? `部屋タイプ "${rt.name}" を削除しますか？` : `Are you sure you want to delete room type "${rt.name}"?`)) {
                                   try {
-                                    const targetDb = getLocalDB(managingHotel.id);
+                                    const targetDb = getDatabaseProvider(managingHotel.id);
                                     const updatedTypes = (managingHotel.roomTypes || []).filter(item => item.id !== rt.id);
                                     const updated: HotelType = {
                                       ...managingHotel,
@@ -2719,7 +2824,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                 onSubmit={async (e) => {
                   e.preventDefault();
                   try {
-                    const targetDb = getLocalDB(managingHotel.id);
+                    const targetDb = getDatabaseProvider(managingHotel.id);
                     const existingTypes = managingHotel.roomTypes || [];
                     let updatedTypes = [...existingTypes];
                     
@@ -2727,7 +2832,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                       // Update existing
                       updatedTypes = updatedTypes.map(item =>
                         item.id === editingRt.id
-                          ? { ...item, name: rtForm.name, cleanMinutes: rtForm.cleanMinutes }
+                          ? { ...item, name: rtForm.name, cleanMinutes: rtForm.cleanMinutes, price: rtForm.price, defaultGuestCount: rtForm.defaultGuestCount }
                           : item
                       );
                     } else {
@@ -2736,7 +2841,9 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                       updatedTypes.push({
                         id: newId,
                         name: rtForm.name,
-                        cleanMinutes: rtForm.cleanMinutes
+                        cleanMinutes: rtForm.cleanMinutes,
+                        price: rtForm.price,
+                        defaultGuestCount: rtForm.defaultGuestCount
                       });
                     }
 
@@ -2792,6 +2899,39 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                   />
                 </div>
 
+                <div className="form-group">
+                  <label className="form-label">
+                    {language === 'vi' 
+                      ? `Giá tiền phòng / Đêm (${getCurrencySymbol()})` 
+                      : language === 'ja' 
+                        ? `室料 / 1泊 (${getCurrencySymbol()})` 
+                        : `Room Price / Night (${getCurrencySymbol()})`}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="form-input"
+                    required
+                    value={rtForm.price}
+                    onChange={(e) => setRtForm({ ...rtForm, price: Number(e.target.value) })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">
+                    {language === 'vi' ? 'Số khách mặc định' : language === 'ja' ? 'デフォルト清掃設定人数' : 'Default Guest Count'}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    className="form-input"
+                    required
+                    value={rtForm.defaultGuestCount}
+                    onChange={(e) => setRtForm({ ...rtForm, defaultGuestCount: Number(e.target.value) })}
+                  />
+                </div>
+
                 <div className="modal-actions" style={{ marginTop: '1.5rem' }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setRtModalOpen(false)}>
                     {getTranslation(language, 'cancel')}
@@ -2815,7 +2955,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
             </h3>
             
             <div className="form-group">
-              <label className="form-label">{getTranslation(language, 'cleanerName')}</label>
+              <label className="form-label">{language === 'vi' ? 'Họ tên' : language === 'ja' ? '氏名' : 'Full Name'}</label>
               <input
                 type="text"
                 className="form-input"
@@ -2827,7 +2967,9 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
             </div>
 
             <div className="form-group">
-              <label className="form-label">Role</label>
+              <label className="form-label">
+                {language === 'vi' ? 'Vai trò / Phân quyền' : language === 'ja' ? '権限 / 役割' : 'Role'}
+              </label>
               <select
                 className="form-input"
                 value={subNewStaffForm.role}
@@ -2837,11 +2979,11 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                   setSubNewStaffForm({ ...subNewStaffForm, role: newRole, username: nextUsername });
                 }}
               >
-                <option value="housekeeping">Housekeeping (Cleaner)</option>
-                <option value="front_desk">Front Desk (Receptionist)</option>
-                <option value="checka">Room Checker (Checker)</option>
-                <option value="kacho">{language === 'vi' ? 'Trưởng bộ phận (Kacho)' : language === 'ja' ? '課長 (Kacho)' : 'Section Manager (Kacho)'}</option>
-                <option value="admin">Administrator (Admin)</option>
+                <option value="housekeeping">{getTranslation(language, 'roleHousekeeping')}</option>
+                <option value="front_desk">{getTranslation(language, 'roleFrontDesk')}</option>
+                <option value="checka">{getTranslation(language, 'roleChecker')}</option>
+                <option value="kacho">{getTranslation(language, 'roleKacho')}</option>
+                <option value="admin">{getTranslation(language, 'roleAdmin')}</option>
               </select>
             </div>
 
@@ -2906,26 +3048,33 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
               <select
                 className="form-input"
                 value={roomForm.type}
-                onChange={e => setRoomForm({ ...roomForm, type: e.target.value })}
+                onChange={e => {
+                  const newType = e.target.value;
+                  const matchedRt = managingHotel.roomTypes?.find(t => t.name === newType);
+                  const defaultGuests = matchedRt?.defaultGuestCount !== undefined ? matchedRt.defaultGuestCount : 1;
+                  setRoomForm({ ...roomForm, type: newType, guestCount: defaultGuests });
+                }}
+                required
               >
                 {managingHotel.roomTypes && managingHotel.roomTypes.length > 0 ? (
-                  managingHotel.roomTypes.map(rt => (
-                    <option key={rt.id} value={rt.name}>
-                      {rt.name} ({rt.cleanMinutes} {language === 'vi' ? 'phút' : language === 'ja' ? '分' : 'mins'})
-                    </option>
-                  ))
-                ) : (
                   <>
-                    <option value="1 Bed">{language === 'vi' ? '1 Giường' : language === 'ja' ? '1ベッド' : '1 Bed'}</option>
-                    <option value="2 Beds">{language === 'vi' ? '2 Giường' : language === 'ja' ? '2ベッド' : '2 Beds'}</option>
-                    <option value="3 Beds">{language === 'vi' ? '3 Giường' : language === 'ja' ? '3ベッド' : '3 Beds'}</option>
-                    <option value="4 Beds">{language === 'vi' ? '4 Giường' : language === 'ja' ? '4ベッド' : '4 Beds'}</option>
-                    <option value="Minpaku">{language === 'vi' ? 'Minpaku / Homestay' : language === 'ja' ? '民泊 / Homestay' : 'Minpaku / Homestay'}</option>
-                    <option value="Single">Single</option>
-                    <option value="Double">Double</option>
-                    <option value="Twin">Twin</option>
-                    <option value="Suite">Suite</option>
+                    <option value="" disabled hidden>
+                      {language === 'vi' ? '-- Chọn loại phòng --' : language === 'ja' ? '-- 部屋タイプを選択 --' : '-- Select Room Type --'}
+                    </option>
+                    {managingHotel.roomTypes.map(rt => (
+                      <option key={rt.id} value={rt.name}>
+                        {rt.name} ({rt.cleanMinutes} {language === 'vi' ? 'phút' : language === 'ja' ? '分' : 'mins'})
+                      </option>
+                    ))}
                   </>
+                ) : (
+                  <option value="" disabled>
+                    {language === 'vi' 
+                      ? '⚠️ Vui lòng cấu hình loại phòng trong mục Cài đặt trước' 
+                      : language === 'ja' 
+                        ? '⚠️ 設定タブで部屋タイプを先に作成してください' 
+                        : '⚠️ Please configure room types in Settings first'}
+                  </option>
                 )}
               </select>
             </div>

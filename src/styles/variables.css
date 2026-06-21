@@ -44,9 +44,9 @@
   --status-maintenance-light: #fee2e2;
   --status-maintenance-border: #fecaca;
 
-  --status-eco: #8b5cf6;          /* Violet/Purple */
-  --status-eco-light: #f3e8ff;
-  --status-eco-border: #e9d5ff;
+  --status-eco: #22c55e;          /* Green */
+  --status-eco-light: #d1fae5;
+  --status-eco-border: #a7f3d0;
 
   --status-dnd: #475569;          /* Slate/Gray */
   --status-dnd-light: #f1f5f9;
@@ -71,4 +71,5 @@
   /* Transition */
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-medium: 0.35s ease;
 }

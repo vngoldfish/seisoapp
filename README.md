@@ -1,107 +1,153 @@
-# 🏨 Hệ Thống Quản Lý Dọn Phòng Khách Sạn (Hotel Housekeeping Management)
+# 🏨 OUTINKS / SeisoApp — Hotel Housekeeping Management
 
-Hệ thống quản lý dọn phòng khách sạn chuyên nghiệp, tối ưu hóa giao diện đa thiết bị (Desktop, Tablet, Mobile) với thiết kế **Glassmorphic** hiện đại. Hỗ trợ đa chi nhánh khách sạn, đa ngôn ngữ và phân quyền vai trò chi tiết giúp nâng cao hiệu suất làm việc của bộ phận Buồng phòng, Kiểm phòng và Quản lý.
+Ứng dụng quản lý dọn phòng khách sạn đa chi nhánh, hỗ trợ Admin, Lễ tân, Kacho, Checker và Housekeeping. Giao diện responsive/PWA, đa ngôn ngữ Việt/Nhật/Anh, có thể chạy ở 3 chế độ dữ liệu: Local Storage, Firebase Firestore hoặc Express + PostgreSQL.
 
----
+> Lưu ý product: cơ chế đăng nhập hiện tại vẫn là demo/client-side để vận hành nội bộ hoặc thử nghiệm. Nếu triển khai Internet/public production, cần bổ sung authentication thật sự ở backend/Firebase Auth và database security rules.
 
-## 🌟 Tính Năng Nổi Bật
+## Tính năng chính
 
-### 1. Phân Quyền Vai Trò Chi Tiết (Role-Based Access)
-- **Quản lý phân khu (Kacho):** Giám sát tiến độ dọn dẹp, phân công nhân sự trực hằng ngày, xem báo cáo thống kê lỗi và năng suất.
-- **Giám sát / Kiểm phòng (Checker):** Kiểm tra phòng sau khi nhân viên dọn xong, ghi nhận danh sách lỗi (Defect Checklist), phê duyệt phòng sạch (Approve) hoặc yêu cầu dọn lại (Reclean).
-- **Lễ tân (Front Desk):** Theo dõi sơ đồ phòng thời gian thực, thực hiện check-out nhanh, xem danh sách và trạng thái tải công việc của nhân viên dọn dẹp trong ngày.
-- **Nhân viên dọn dẹp (Housekeeper):** Giao diện mobile-first tối giản. Nhận phòng cần dọn, bắt đầu dọn phòng, hoàn thành dọn phòng kèm ghi chú và ảnh chụp nghiệm thu thực tế (được nén tối ưu dung lượng).
-- **Quản trị viên (Admin):** Toàn quyền cấu hình khách sạn, phòng, nhân sự và xem thống kê tổng hợp toàn hệ thống.
+- Quản lý nhiều chi nhánh khách sạn.
+- Phân quyền vai trò: Admin, Front Desk, Kacho, Checker, Housekeeping.
+- Sơ đồ phòng realtime theo ngày làm việc.
+- Phân công nhân sự dọn phòng theo ngày.
+- Luồng housekeeping/checker/front desk cho phòng dirty/clean/checked/reclean/DND/ECO/maintenance.
+- Khóa/chốt ngày làm việc để đóng băng dữ liệu sau khi hoàn tất.
+- Báo cáo thống kê và lịch sử chốt ngày.
+- PWA/service worker cho production build.
 
-### 2. Quản Lý Đa Chi Nhánh (Multi-Tenancy)
-- Phân tách dữ liệu cô lập hoàn toàn giữa các chi nhánh khách sạn (ví dụ: `ks1` - Sakura Hotel, `ks2` - Fuji Hotel) thông qua cơ chế prefix thông minh trong `localStorage` hoặc phân vùng database Firestore.
-- Cổng chọn khách sạn (Portal) động và tự động điều hướng người dùng dựa trên danh sách chi nhánh được cấp phép.
-- Trình chọn chi nhánh tiện lợi tích hợp trên Header dành cho Admin và các tài khoản được liên kết nhiều khách sạn.
+## Công nghệ
 
-### 3. Tối Ưu Hóa Trải Nghiệm Mobile & PWA
-- Thiết kế Responsive mượt mà chuyển đổi sidebar trên Desktop thành các ngăn kéo (collapsible drawers) và menu ngang tiện lợi trên Mobile.
-- Các cửa sổ Popup chuyển đổi thành dạng **Bottom-Sheet** vuốt lên từ dưới màn hình trên thiết bị di động, cải thiện tối đa khoảng chạm tay của người dùng.
-- Hỗ trợ cài đặt ứng dụng trực tiếp trên Android/iOS dưới dạng **PWA** nhờ cấu hình Service Worker lưu bộ nhớ đệm ngoại tuyến.
+- React 19 + TypeScript + Vite.
+- Tailwind CSS 4 plugin + CSS custom variables.
+- Lucide React icons, Canvas Confetti.
+- Data providers:
+  - Local Storage/BroadcastChannel mặc định.
+  - Firebase Firestore khi cấu hình Firebase env vars.
+  - Express + PostgreSQL khi `VITE_USE_POSTGRES=true`.
+- Backend: Express, Socket.IO, pg/PostgreSQL.
+- Docker/Nginx cho triển khai frontend + backend + database.
 
-### 4. Báo Cáo & Phân Tích Trực Quan
-- Biểu đồ thống kê hiệu suất dọn dẹp trung bình (phút) của nhân sự dưới dạng biểu đồ thanh SVG.
-- Biểu đồ tròn SVG thể hiện phân bố trạng thái phòng (Sạch, Bẩn, Đang dọn, Bảo trì,...).
-- Xuất báo cáo lịch sử dọn dẹp hằng ngày ra tệp **CSV mã hóa UTF-8 BOM** (hỗ trợ hiển thị ký tự tiếng Việt và tiếng Nhật chính xác trên Microsoft Excel).
+## Cài đặt frontend
 
----
-
-## 🛠️ Công Nghệ Sử Dụng
-
-- **Core:** React 18, TypeScript, Vite.
-- **Styling:** CSS Custom Variables & Utilities (Sạch sẽ, không phụ thuộc TailwindCSS).
-- **Icons:** Lucide-React.
-- **Hiệu ứng:** Canvas-Confetti.
-- **Database:** Hỗ trợ song song 2 chế độ:
-  - **Local Mode (Mặc định):** Đồng bộ thời gian thực giữa các tab thông qua `BroadcastChannel` và lưu dữ liệu trong `localStorage`.
-  - **Firebase Mode:** Kết nối trực tiếp cơ sở dữ liệu đám mây Firestore (khi cấu hình các khóa Firebase trong tệp `.env`).
-
----
-
-## 🚀 Hướng Dẫn Cài Đặt & Chạy Dự Án
-
-### 1. Cài đặt các gói phụ thuộc:
 ```bash
 npm install
-```
-
-### 2. Chạy môi trường phát triển (Development Mode):
-```bash
 npm run dev
 ```
-Truy cập ứng dụng tại đường dẫn mặc định: `http://localhost:5173/`
 
-### 3. Biên dịch phiên bản sản phẩm (Build for Production):
+Mặc định app chạy ở `http://localhost:5173/`.
+
+Build production:
+
 ```bash
 npm run build
+npm run preview
 ```
-Mã nguồn sau khi tối ưu và đóng gói sẽ nằm trong thư mục `/dist`.
 
----
+Kiểm tra chất lượng:
 
-## 🔑 Danh Sách Tài Khoản Demo Mặc Định
+```bash
+npm run lint
+npm run build
+```
 
-Hệ thống được cấu hình sẵn dữ liệu mẫu cho hai chi nhánh khách sạn để kiểm thử nhanh chóng:
+Nếu test tooling được cài trong môi trường của bạn:
 
-### 🌸 Khách Sạn Sakura Hotel (Mã chi nhánh: `ks1`)
-- **Admin Hệ Thống:** Tài khoản: `admin` / Mật khẩu: `admin123`
-- **Quản lý Phân Khu (Kacho):** Tài khoản: `kacho1` / Mật khẩu: `kacho1123`
-- **Giám sát / Kiểm phòng:** Tài khoản: `check1` / Mật khẩu: `check1123`
-- **Lễ tân:** Tài khoản: `front1` / Mật khẩu: `front123`
-- **Nhân viên dọn phòng:**
-  - Nguyễn Văn A: Tài khoản: `cleaner1` / Mật khẩu: `cleaner1123`
-  - Trần Thị B: Tài khoản: `cleaner2` / Mật khẩu: `cleaner2123`
+```bash
+npm run test:run
+```
 
-### 🗻 Khách Sạn Fuji Hotel (Mã chi nhánh: `ks2`)
-- **Admin Hệ Thống:** Tài khoản: `admin` / Mật khẩu: `admin123`
-- **Quản lý Phân Khu (Kacho):** Tài khoản: `kacho2` / Mật khẩu: `kacho2123`
-- **Giám sát / Kiểm phòng:** Tài khoản: `check2` / Mật khẩu: `check2123`
-- **Lễ tân:** Tài khoản: `front2` / Mật khẩu: `front2123`
-- **Nhân viên dọn phòng:**
-  - Saito Tanaka: Tài khoản: `cleaner3` / Mật khẩu: `cleaner3123`
-  - Nguyễn Thị C: Tài khoản: `cleaner4` / Mật khẩu: `cleaner4123`
+## Cấu hình môi trường
 
----
+Copy `.env.example` thành `.env` và chỉnh theo mode chạy.
 
-## ⚙️ Cấu Hình Firebase (Tùy chọn)
+### Local Storage mode
 
-Nếu bạn muốn chuyển ứng dụng từ chạy Offline (`localStorage`) sang chạy Online đồng bộ hóa qua đám mây Firebase:
+Không cần Firebase/Postgres. Để trống Firebase vars và không bật Postgres:
 
-1. Tạo một project trên **Firebase Console**.
-2. Kích hoạt dịch vụ **Cloud Firestore**.
-3. Nhân bản tệp `.env.example` thành tệp `.env` tại thư mục gốc.
-4. Điền các tham số cấu hình Firebase của bạn vào tệp `.env`:
 ```env
-VITE_USE_FIREBASE=true
-VITE_FIREBASE_API_KEY=your_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_auth_domain
-VITE_FIREBASE_PROJECT_ID=your_project_id
-VITE_FIREBASE_STORAGE_BUCKET=your_storage_bucket
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-VITE_FIREBASE_APP_ID=your_app_id
+VITE_USE_POSTGRES=false
 ```
-5. Hệ thống sẽ tự động chuyển đổi driver kết nối dữ liệu sang Firebase khi chạy lại dự án.
+
+### Firebase mode
+
+Điền đầy đủ các biến Firebase trong `.env`:
+
+```env
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+```
+
+Khi Firebase vars hợp lệ, app tự dùng Firestore provider.
+
+### PostgreSQL/backend mode
+
+```env
+VITE_USE_POSTGRES=true
+VITE_BACKEND_URL=http://localhost:4000
+DATABASE_URL=postgres://postgres:change_me_before_deploy@localhost:5432/seisoapp
+PORT=4000
+CORS_ORIGIN=http://localhost:5173
+```
+
+Chạy backend thủ công:
+
+```bash
+cd server
+npm install
+npm start
+```
+
+Healthcheck backend:
+
+```text
+GET http://localhost:4000/health
+```
+
+## Docker Compose
+
+Tạo `.env` từ `.env.example`, bắt buộc đổi mật khẩu database:
+
+```env
+POSTGRES_PASSWORD=your_real_secure_password
+CORS_ORIGIN=http://localhost:8085
+```
+
+Sau đó chạy:
+
+```bash
+docker compose up -d --build
+```
+
+Frontend sẽ được phục vụ qua Nginx ở port `8085`, backend ở `4000`.
+
+## Tài khoản demo mặc định
+
+Local demo seed có Admin:
+
+- `admin` / `admin123`
+
+Các tài khoản branch demo phụ thuộc data seed hiện tại trong `src/db/localDB.ts` hoặc dữ liệu đã tạo trong database. Mật khẩu demo theo pattern trong client hiện tại: username + `123`, với một số ngoại lệ cũ như `front1/front123`.
+
+## Verification smoke test
+
+Sau khi sửa hoặc deploy, nên kiểm tra:
+
+1. Clear/corrupt localStorage rồi reload: app không trắng màn hình.
+2. Login admin/front desk/checker/kacho/housekeeping.
+3. Chuyển hotel và active date; rooms/logs/stats phải theo đúng ngày.
+4. Housekeeping finish/revert room; dữ liệu không lẫn giữa hotel/date/user.
+5. Admin lock date rồi thử mutate từ housekeeping/front desk/checker: không được đổi dữ liệu và hiển thị cảnh báo rõ.
+6. Firebase/Postgres mode: admin stats và housekeeping active-staff login không đọc nhầm localStorage.
+7. Production preview/PWA: chỉ `/sw.js` là service worker chính, cache cũ được cleanup.
+
+## Ghi chú bảo mật production
+
+- Không commit `.env` thật.
+- Không dùng password mặc định trong Docker Compose.
+- Không public app nếu chưa có auth/server-side authorization thực sự.
+- Cấu hình `CORS_ORIGIN` theo domain frontend thật, không dùng `*` cho production public.
+- Production sourcemap mặc định tắt; chỉ bật `VITE_ENABLE_SOURCEMAP=true` khi thật sự cần debug deploy.

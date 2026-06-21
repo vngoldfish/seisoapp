@@ -1,4 +1,4 @@
-import type { DBInterface, User, Room, CleaningLog, RoomSubscriptionCallback, LogSubscriptionCallback, Hotel } from './dbInterface';
+import type { DBInterface, User, Room, CleaningLog, RoomSubscriptionCallback, LogSubscriptionCallback, Hotel, FinalizedDayReport } from './dbInterface';
 
 export function generateUUID(prefix: string): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -14,11 +14,12 @@ export const DEFAULT_HOTELS: Hotel[] = [
     description: 'さくらホテル (ks1) - Standard Branch',
     defaultCleanMinutes: 35,
     roomTypes: [
-      { id: 'ks1_rt1', name: 'Twin', cleanMinutes: 35 },
-      { id: 'ks1_rt2', name: 'Single', cleanMinutes: 25 },
-      { id: 'ks1_rt3', name: 'Double', cleanMinutes: 30 },
-      { id: 'ks1_rt4', name: 'Suite', cleanMinutes: 60 }
-    ]
+      { id: 'ks1_rt1', name: 'Twin', cleanMinutes: 35, price: 10000, defaultGuestCount: 2 },
+      { id: 'ks1_rt2', name: 'Single', cleanMinutes: 25, price: 5000, defaultGuestCount: 1 },
+      { id: 'ks1_rt3', name: 'Double', cleanMinutes: 30, price: 8000, defaultGuestCount: 2 },
+      { id: 'ks1_rt4', name: 'Suite', cleanMinutes: 60, price: 25000, defaultGuestCount: 4 }
+    ],
+    active: true
   },
   {
     id: 'ks2',
@@ -26,24 +27,92 @@ export const DEFAULT_HOTELS: Hotel[] = [
     description: '富士ホテル (ks2) - Luxury Suite Branch',
     defaultCleanMinutes: 35,
     roomTypes: [
-      { id: 'ks2_rt1', name: 'Twin', cleanMinutes: 40 },
-      { id: 'ks2_rt2', name: 'Single', cleanMinutes: 30 },
-      { id: 'ks2_rt3', name: 'Double', cleanMinutes: 35 },
-      { id: 'ks2_rt4', name: 'Suite', cleanMinutes: 70 }
+      { id: 'ks2_rt1', name: 'Twin', cleanMinutes: 40, price: 12000, defaultGuestCount: 2 },
+      { id: 'ks2_rt2', name: 'Single', cleanMinutes: 30, price: 6000, defaultGuestCount: 1 },
+      { id: 'ks2_rt3', name: 'Double', cleanMinutes: 35, price: 10000, defaultGuestCount: 2 },
+      { id: 'ks2_rt4', name: 'Suite', cleanMinutes: 70, price: 30000, defaultGuestCount: 4 }
+    ],
+    active: true
+  },
+  {
+    id: 'ks3',
+    name: 'Tokyo Inn',
+    description: '東京イン (ks3) - Central Business Branch',
+    defaultCleanMinutes: 35,
+    roomTypes: [
+      { id: 'ks3_rt1', name: 'Twin', cleanMinutes: 35, price: 10000, defaultGuestCount: 2 },
+      { id: 'ks3_rt2', name: 'Single', cleanMinutes: 25, price: 5000, defaultGuestCount: 1 },
+      { id: 'ks3_rt3', name: 'Double', cleanMinutes: 30, price: 8000, defaultGuestCount: 2 },
+      { id: 'ks3_rt4', name: 'Suite', cleanMinutes: 60, price: 25000, defaultGuestCount: 4 }
+    ],
+    active: true
+  },
+  {
+    id: 'ks4',
+    name: 'Kyoto Resort',
+    description: '京都リゾート (ks4) - Traditional Spa & Onsen',
+    defaultCleanMinutes: 35,
+    roomTypes: [
+      { id: 'ks4_rt1', name: 'Twin', cleanMinutes: 35, price: 10000, defaultGuestCount: 2 },
+      { id: 'ks4_rt2', name: 'Single', cleanMinutes: 25, price: 5000, defaultGuestCount: 1 },
+      { id: 'ks4_rt3', name: 'Double', cleanMinutes: 30, price: 8000, defaultGuestCount: 2 },
+      { id: 'ks4_rt4', name: 'Suite', cleanMinutes: 60, price: 25000, defaultGuestCount: 4 }
     ]
   },
-  { id: 'ks3', name: 'Tokyo Inn', description: '東京イン (ks3) - Central Business Branch', defaultCleanMinutes: 35, roomTypes: [] },
-  { id: 'ks4', name: 'Kyoto Resort', description: '京都リゾート (ks4) - Traditional Spa & Onsen', defaultCleanMinutes: 35, roomTypes: [] },
-  { id: 'ks5', name: 'Osaka Plaza', description: '大阪プラザ (ks5) - Downtown Commercial', defaultCleanMinutes: 35, roomTypes: [] },
-  { id: 'ks6', name: 'Sapporo Lodge', description: '札幌ロッジ (ks6) - Northern Ski Resort', defaultCleanMinutes: 35, roomTypes: [] },
-  { id: 'ks7', name: 'Okinawa Beach', description: '沖縄ビーチ (ks7) - Southern Coast Resort', defaultCleanMinutes: 35, roomTypes: [] },
-  { id: 'ks8', name: 'Nara Gardens', description: '奈良ガーデン (ks8) - Historic Sanctuary', defaultCleanMinutes: 35, roomTypes: [] }
+  {
+    id: 'ks5',
+    name: 'Osaka Plaza',
+    description: '大阪プラザ (ks5) - Downtown Commercial',
+    defaultCleanMinutes: 35,
+    roomTypes: [
+      { id: 'ks5_rt1', name: 'Twin', cleanMinutes: 35, price: 10000 },
+      { id: 'ks5_rt2', name: 'Single', cleanMinutes: 25, price: 5000 },
+      { id: 'ks5_rt3', name: 'Double', cleanMinutes: 30, price: 8000 },
+      { id: 'ks5_rt4', name: 'Suite', cleanMinutes: 60, price: 25000 }
+    ]
+  },
+  {
+    id: 'ks6',
+    name: 'Sapporo Lodge',
+    description: '札幌ロッジ (ks6) - Northern Ski Resort',
+    defaultCleanMinutes: 35,
+    roomTypes: [
+      { id: 'ks6_rt1', name: 'Twin', cleanMinutes: 35, price: 10000 },
+      { id: 'ks6_rt2', name: 'Single', cleanMinutes: 25, price: 5000 },
+      { id: 'ks6_rt3', name: 'Double', cleanMinutes: 30, price: 8000 },
+      { id: 'ks6_rt4', name: 'Suite', cleanMinutes: 60, price: 25000 }
+    ]
+  },
+  {
+    id: 'ks7',
+    name: 'Okinawa Beach',
+    description: '沖縄ビーチ (ks7) - Southern Coast Resort',
+    defaultCleanMinutes: 35,
+    roomTypes: [
+      { id: 'ks7_rt1', name: 'Twin', cleanMinutes: 35, price: 10000 },
+      { id: 'ks7_rt2', name: 'Single', cleanMinutes: 25, price: 5000 },
+      { id: 'ks7_rt3', name: 'Double', cleanMinutes: 30, price: 8000 },
+      { id: 'ks7_rt4', name: 'Suite', cleanMinutes: 60, price: 25000 }
+    ]
+  },
+  {
+    id: 'ks8',
+    name: 'Nara Gardens',
+    description: '奈良ガーデン (ks8) - Historic Sanctuary',
+    defaultCleanMinutes: 35,
+    roomTypes: [
+      { id: 'ks8_rt1', name: 'Twin', cleanMinutes: 35, price: 10000 },
+      { id: 'ks8_rt2', name: 'Single', cleanMinutes: 25, price: 5000 },
+      { id: 'ks8_rt3', name: 'Double', cleanMinutes: 30, price: 8000 },
+      { id: 'ks8_rt4', name: 'Suite', cleanMinutes: 60, price: 25000 }
+    ]
+  }
 ];
 
 
 // --- MOCK SEED DATA FOR USERS & LOGS ---
 export const USERS_KS1: User[] = [
-  { id: 'u1', username: 'admin', role: 'admin', name: 'NKTN Manager', language: 'ja' },
+  { id: 'u1', username: 'admin', role: 'admin', name: 'NKTN Manager', language: 'ja', passwordHash: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9' },
   { id: 'u2', username: 'front1', role: 'front_desk', name: 'Front Sato', language: 'ja' },
   { id: 'u3', username: 'cleaner1', role: 'housekeeping', pin: '1111', name: 'Nguyen Van A (Anh A)', language: 'vi' },
   { id: 'u4', username: 'cleaner2', role: 'housekeeping', pin: '2222', name: 'Tran Thi B (Chi B)', language: 'vi' },
@@ -51,23 +120,10 @@ export const USERS_KS1: User[] = [
   { id: 'u_kacho1', username: 'kacho1', role: 'kacho', name: 'Kacho Nguyen', language: 'vi' },
 ];
 
-export const LOGS_KS1: CleaningLog[] = [
-  {
-    id: 'log1',
-    roomId: '303',
-    roomNumber: '303',
-    floor: 3,
-    cleanerId: 'u3',
-    cleanerName: 'Nguyen Van A (Anh A)',
-    startedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    endedAt: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-    durationMinutes: 30,
-    notes: 'Cleaned, replaced sheets',
-  }
-];
+export const LOGS_KS1: CleaningLog[] = [];
 
 export const USERS_KS2: User[] = [
-  { id: 'u201', username: 'admin', role: 'admin', name: 'Fuji Manager', language: 'ja' },
+  { id: 'u201', username: 'admin', role: 'admin', name: 'Fuji Manager', language: 'ja', passwordHash: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9' },
   { id: 'u202', username: 'front2', role: 'front_desk', name: 'Front Suzuki', language: 'en' },
   { id: 'u203', username: 'cleaner3', role: 'housekeeping', pin: '3333', name: 'Saito Tanaka', language: 'ja' },
   { id: 'u204', username: 'cleaner4', role: 'housekeeping', pin: '4444', name: 'Nguyen Thi C (Chi C)', language: 'vi' },
@@ -75,26 +131,13 @@ export const USERS_KS2: User[] = [
   { id: 'u_kacho2', username: 'kacho2', role: 'kacho', name: 'Kacho Saito', language: 'ja' },
 ];
 
-export const LOGS_KS2: CleaningLog[] = [
-  {
-    id: 'log201',
-    roomId: '503',
-    roomNumber: '503',
-    floor: 5,
-    cleanerId: 'u203',
-    cleanerName: 'Saito Tanaka',
-    startedAt: new Date(Date.now() - 3600000 * 3).toISOString(),
-    endedAt: new Date(Date.now() - 3600000 * 2.3).toISOString(),
-    durationMinutes: 42,
-    notes: 'Everything is in order',
-  }
-];
+export const LOGS_KS2: CleaningLog[] = [];
 
 // --- AUTO GENERATOR FOR ROOMS ---
 export const generateRoomsKS1 = (): Room[] => {
   const rooms: Room[] = [];
   const floors = [3, 4, 5, 6, 7, 8, 9];
-  const types = ['1 Bed', '2 Beds', '3 Beds', '4 Beds', 'Minpaku', 'Single', 'Double', 'Twin', 'Suite'];
+  const types = ['Twin', 'Single', 'Double', 'Suite'];
   
   floors.forEach(floor => {
     const startRoom = floor === 9 ? 2 : 1;
@@ -106,68 +149,15 @@ export const generateRoomsKS1 = (): Room[] => {
       const roomNum = `${floor}${r.toString().padStart(2, '0')}`;
       const type = types[Math.floor(Math.random() * types.length)];
       
-      // Determine status simulation to match NKTN photo style
-      let status: Room['status'] = 'vacant';
-      let isStay = false;
-      let guestCount = 0;
-      let notes = '';
-
-      const seedRand = Math.random();
-      
-      if (seedRand < 0.35) {
-        // Red room (Stay/Occupied)
-        status = 'occupied';
-        isStay = Math.random() > 0.3; // most occupied rooms in image have guests staying over
-        guestCount = Math.floor(Math.random() * 2) + 1; // 1 or 2 guests
-      } else if (seedRand < 0.65) {
-        // Yellow room (Dirty/Need clean)
-        status = 'dirty';
-        isStay = Math.random() > 0.7; // some stay rooms need cleaning
-        guestCount = Math.floor(Math.random() * 2) + 1;
-      } else if (seedRand < 0.8) {
-        // Clean room (Vacant with vạt chéo green)
-        status = 'clean';
-        isStay = Math.random() > 0.5;
-        guestCount = Math.floor(Math.random() * 2) + 1;
-      } else if (seedRand < 0.85) {
-        // Grey room (Maintenance)
-        status = 'maintenance';
-        notes = 'Bathroom leak / TV issues';
-      } else {
-        // White room (Vacant ready)
-        status = 'vacant';
-      }
-
-      // Special hardcoding for specific room styles seen in image to make it ultra-realistic
-      if (roomNum === '304' || roomNum === '317' || roomNum === '403') {
-        status = 'dirty';
-        isStay = true;
-        guestCount = 1;
-      } else if (roomNum === '303' || roomNum === '307') {
-        status = 'occupied';
-        isStay = false;
-        guestCount = 1;
-      } else if (roomNum === '308' || roomNum === '404' || roomNum === '504') {
-        status = 'clean';
-        isStay = true;
-        guestCount = 1;
-      } else if (roomNum === '309' || roomNum === '702') {
-        status = 'clean';
-        isStay = false;
-        guestCount = 1;
-      } else if (roomNum === '915' || roomNum === '501') {
-        status = 'maintenance';
-      }
-
       rooms.push({
         id: roomNum,
         roomNumber: roomNum,
         floor,
         type,
-        status,
-        isStay,
-        guestCount,
-        notes: notes || undefined,
+        status: 'vacant',
+        isStay: false,
+        guestCount: 0,
+        notes: '',
         updatedAt: new Date().toISOString(),
         updatedBy: 'system'
       });
@@ -179,40 +169,22 @@ export const generateRoomsKS1 = (): Room[] => {
 export const generateRoomsKS2 = (): Room[] => {
   const rooms: Room[] = [];
   const floors = [5, 6];
-  const types = ['1 Bed', '2 Beds', '3 Beds', '4 Beds', 'Minpaku', 'Single', 'Double', 'Twin', 'Suite'];
+  const types = ['Twin', 'Single', 'Double', 'Suite'];
   
   floors.forEach(floor => {
     for (let r = 1; r <= 12; r++) {
       const roomNum = `${floor}${r.toString().padStart(2, '0')}`;
       const type = types[Math.floor(Math.random() * types.length)];
       
-      let status: Room['status'] = 'vacant';
-      let isStay = false;
-      let guestCount = 0;
-
-      const seedRand = Math.random();
-      if (seedRand < 0.3) {
-        status = 'occupied';
-        isStay = true;
-        guestCount = 2;
-      } else if (seedRand < 0.6) {
-        status = 'dirty';
-        guestCount = 1;
-      } else if (seedRand < 0.8) {
-        status = 'clean';
-        guestCount = 2;
-      } else {
-        status = 'vacant';
-      }
-
       rooms.push({
         id: roomNum,
         roomNumber: roomNum,
         floor,
         type,
-        status,
-        isStay,
-        guestCount,
+        status: 'vacant',
+        isStay: false,
+        guestCount: 0,
+        notes: '',
         updatedAt: new Date().toISOString(),
         updatedBy: 'system'
       });
@@ -238,8 +210,7 @@ export function seedMockDataForDate(hotelId: string, date: string): void {
   const hasRooms = !!localStorage.getItem(roomsKey);
   const hasActiveStaff = !!localStorage.getItem(activeStaffKey);
 
-  const todayStr = getTodayDateString();
-  const isFutureOrToday = date >= todayStr; // Prevent mock seeding on today or future dates
+  const isFutureOrToday = true; // Prevent mock seeding entirely for clean testing state
 
   // 1. Get or seed master rooms
   let masterRooms: Room[] = [];
@@ -250,8 +221,42 @@ export function seedMockDataForDate(hotelId: string, date: string): void {
     } catch (e) {}
   }
   if (masterRooms.length === 0) {
-    masterRooms = hotelId === 'ks2' ? generateRoomsKS2() : generateRoomsKS1();
-    localStorage.setItem(masterRoomsKey, JSON.stringify(masterRooms));
+    if (hotelId === 'ks1' || hotelId === 'ks2') {
+      masterRooms = hotelId === 'ks2' ? generateRoomsKS2() : generateRoomsKS1();
+      localStorage.setItem(masterRoomsKey, JSON.stringify(masterRooms));
+    } else {
+      const hotelsStr = localStorage.getItem('global_hotels');
+      if (hotelsStr) {
+        try {
+          const hotelsList: Hotel[] = JSON.parse(hotelsStr);
+          const hotel = hotelsList.find(h => h.id === hotelId);
+          if (hotel && hotel.roomsList) {
+            const parts = hotel.roomsList.split(',').map(p => p.trim()).filter(Boolean);
+            const parsedRooms: Room[] = [];
+            for (let part of parts) {
+              const [rNum, rType] = part.split(':').map(x => x.trim());
+              if (rNum) {
+                const floor = parseInt(rNum.substring(0, rNum.length - 2) || '1', 10);
+                parsedRooms.push({
+                  id: rNum,
+                  roomNumber: rNum,
+                  floor: isNaN(floor) ? 1 : floor,
+                  type: rType || 'Single',
+                  status: 'vacant',
+                  isStay: false,
+                  guestCount: 0,
+                  notes: '',
+                  updatedAt: new Date().toISOString(),
+                  updatedBy: 'system'
+                });
+              }
+            }
+            masterRooms = parsedRooms;
+            localStorage.setItem(masterRoomsKey, JSON.stringify(masterRooms));
+          }
+        } catch (e) {}
+      }
+    }
   }
 
   // 2. Setup active staff if not existing
@@ -382,7 +387,7 @@ export function seedMockDataForDate(hotelId: string, date: string): void {
             isChecked = false;
           }
         } else if (rand < 0.90) {
-          status = 'cleaning';
+          status = 'dirty';
           isStay = Math.random() > 0.5;
           guestCount = Math.floor(Math.random() * 3) + 1;
           if (activeStaffIds.length > 0) {
@@ -568,30 +573,43 @@ export class LocalDB implements DBInterface {
             h.defaultCleanMinutes = 35;
             updated = true;
           }
-          if (!h.roomTypes) {
+          if (!h.roomTypes || h.roomTypes.length === 0) {
             if (h.id === 'ks1') {
               h.roomTypes = [
-                { id: 'ks1_rt1', name: 'Twin', cleanMinutes: 35 },
-                { id: 'ks1_rt2', name: 'Single', cleanMinutes: 25 },
-                { id: 'ks1_rt3', name: 'Double', cleanMinutes: 30 },
-                { id: 'ks1_rt4', name: 'Suite', cleanMinutes: 60 }
+                { id: 'ks1_rt1', name: 'Twin', cleanMinutes: 35, price: 10000 },
+                { id: 'ks1_rt2', name: 'Single', cleanMinutes: 25, price: 5000 },
+                { id: 'ks1_rt3', name: 'Double', cleanMinutes: 30, price: 8000 },
+                { id: 'ks1_rt4', name: 'Suite', cleanMinutes: 60, price: 25000 }
               ];
             } else if (h.id === 'ks2') {
               h.roomTypes = [
-                { id: 'ks2_rt1', name: 'Twin', cleanMinutes: 40 },
-                { id: 'ks2_rt2', name: 'Single', cleanMinutes: 30 },
-                { id: 'ks2_rt3', name: 'Double', cleanMinutes: 35 },
-                { id: 'ks2_rt4', name: 'Suite', cleanMinutes: 70 }
+                { id: 'ks2_rt1', name: 'Twin', cleanMinutes: 40, price: 12000 },
+                { id: 'ks2_rt2', name: 'Single', cleanMinutes: 30, price: 6000 },
+                { id: 'ks2_rt3', name: 'Double', cleanMinutes: 35, price: 10000 },
+                { id: 'ks2_rt4', name: 'Suite', cleanMinutes: 70, price: 30000 }
               ];
             } else {
               h.roomTypes = [
-                { id: `${h.id}_rt1`, name: 'Twin', cleanMinutes: 35 },
-                { id: `${h.id}_rt2`, name: 'Single', cleanMinutes: 25 },
-                { id: `${h.id}_rt3`, name: 'Double', cleanMinutes: 30 },
-                { id: `${h.id}_rt4`, name: 'Suite', cleanMinutes: 60 }
+                { id: `${h.id}_rt1`, name: 'Twin', cleanMinutes: 35, price: 10000 },
+                { id: `${h.id}_rt2`, name: 'Single', cleanMinutes: 25, price: 5000 },
+                { id: `${h.id}_rt3`, name: 'Double', cleanMinutes: 30, price: 8000 },
+                { id: `${h.id}_rt4`, name: 'Suite', cleanMinutes: 60, price: 25000 }
               ];
             }
             updated = true;
+          } else {
+            // Ensure all roomTypes have a price field (converting VND legacy to JPY if they are very large)
+            h.roomTypes.forEach(rt => {
+              if (rt.price === undefined || rt.price > 100000) {
+                const nameLower = rt.name.toLowerCase();
+                if (nameLower.includes('suite')) rt.price = h.id === 'ks2' ? 30000 : 25000;
+                else if (nameLower.includes('twin')) rt.price = h.id === 'ks2' ? 12000 : 10000;
+                else if (nameLower.includes('double')) rt.price = h.id === 'ks2' ? 10000 : 8000;
+                else if (nameLower.includes('single')) rt.price = h.id === 'ks2' ? 6000 : 5000;
+                else rt.price = 5000;
+                updated = true;
+              }
+            });
           }
         });
         if (updated) {
@@ -958,6 +976,8 @@ export class LocalDB implements DBInterface {
     const globalUsers: User[] = globalUsersStr ? JSON.parse(globalUsersStr) : [];
     let mainAdmin = globalUsers.find(u => u.username?.trim().toLowerCase() === 'admin');
 
+    const isSha256 = (str?: string) => str ? /^[a-f0-9]{64}$/i.test(str) : false;
+
     if (!mainAdmin) {
       mainAdmin = {
         id: 'u1',
@@ -966,13 +986,21 @@ export class LocalDB implements DBInterface {
         name: 'NKTN Manager',
         language: 'ja',
         hotelIds: allHotelIds,
-        status: 'working'
+        status: 'working',
+        passwordHash: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', // Hashed 'admin123'
+        employeeCode: 'ADMIN001'
       };
       globalUsers.push(mainAdmin);
     } else {
       mainAdmin.hotelIds = allHotelIds;
       mainAdmin.role = 'admin';
       mainAdmin.status = 'working';
+      if (!mainAdmin.employeeCode) {
+        mainAdmin.employeeCode = 'ADMIN001';
+      }
+      if (!mainAdmin.passwordHash || !isSha256(mainAdmin.passwordHash)) {
+        mainAdmin.passwordHash = '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9';
+      }
     }
     localStorage.setItem('global_hotel_clean_users', JSON.stringify(globalUsers));
 
@@ -1077,12 +1105,12 @@ export class LocalDB implements DBInterface {
     if (hotelToSave.defaultCleanMinutes === undefined) {
       hotelToSave.defaultCleanMinutes = 35;
     }
-    if (!hotelToSave.roomTypes) {
+    if (!hotelToSave.roomTypes || hotelToSave.roomTypes.length === 0) {
       hotelToSave.roomTypes = [
-        { id: `${hotelToSave.id}_rt1`, name: 'Twin', cleanMinutes: 35 },
-        { id: `${hotelToSave.id}_rt2`, name: 'Single', cleanMinutes: 25 },
-        { id: `${hotelToSave.id}_rt3`, name: 'Double', cleanMinutes: 30 },
-        { id: `${hotelToSave.id}_rt4`, name: 'Suite', cleanMinutes: 60 }
+        { id: `${hotelToSave.id}_rt1`, name: 'Twin', cleanMinutes: 35, price: 10000, defaultGuestCount: 2 },
+        { id: `${hotelToSave.id}_rt2`, name: 'Single', cleanMinutes: 25, price: 5000, defaultGuestCount: 1 },
+        { id: `${hotelToSave.id}_rt3`, name: 'Double', cleanMinutes: 30, price: 8000, defaultGuestCount: 2 },
+        { id: `${hotelToSave.id}_rt4`, name: 'Suite', cleanMinutes: 60, price: 25000, defaultGuestCount: 4 }
       ];
     }
     hotels.push(hotelToSave);
@@ -1119,7 +1147,7 @@ export class LocalDB implements DBInterface {
       roomEntries.forEach(entry => {
         const parts = entry.split(':');
         const roomNum = parts[0].trim();
-        const roomType = parts[1] ? parts[1].trim() : '1 Bed';
+        const roomType = parts[1] ? parts[1].trim() : 'Single';
 
         // Parse floor from room number
         let floor = 1;
@@ -1131,6 +1159,9 @@ export class LocalDB implements DBInterface {
           }
         }
         
+        const matchedRt = hotelToSave.roomTypes?.find(t => t.name === roomType);
+        const defaultGuests = matchedRt?.defaultGuestCount !== undefined ? matchedRt.defaultGuestCount : 1;
+
         customRooms.push({
           id: roomNum,
           roomNumber: roomNum,
@@ -1138,7 +1169,7 @@ export class LocalDB implements DBInterface {
           type: roomType,
           status: 'vacant', // default vacant
           isStay: false,
-          guestCount: 1,
+          guestCount: defaultGuests,
           updatedAt: new Date().toISOString(),
           updatedBy: 'system'
         });
@@ -1240,12 +1271,28 @@ export class LocalDB implements DBInterface {
   }
 
   async getAllGlobalUsers(): Promise<User[]> {
-    return JSON.parse(localStorage.getItem('global_hotel_clean_users') || '[]');
+    const list = JSON.parse(localStorage.getItem('global_hotel_clean_users') || '[]');
+    let modified = false;
+    const isSha256 = (str?: string) => str ? /^[a-f0-9]{64}$/i.test(str) : false;
+    const updated = list.map((u: User) => {
+      if (u.username?.trim().toLowerCase() === 'admin') {
+        if (!u.passwordHash || !isSha256(u.passwordHash)) {
+          u.passwordHash = '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9'; // Hashed 'admin123'
+          modified = true;
+        }
+      }
+      return u;
+    });
+    if (modified) {
+      localStorage.setItem('global_hotel_clean_users', JSON.stringify(updated));
+      return updated;
+    }
+    return list;
   }
 
   async getUsers(): Promise<User[]> {
     const allUsers = await this.getAllGlobalUsers();
-    return allUsers.filter(u => u.hotelIds?.includes(this.hotelId));
+    return allUsers.filter(u => u.hotelIds?.includes(this.hotelId) && u.role !== 'admin');
   }
 
   async createUser(user: Omit<User, 'id'>): Promise<User> {
@@ -1318,13 +1365,7 @@ export class LocalDB implements DBInterface {
       // Remove this hotelId from user's hotel associations
       user.hotelIds = user.hotelIds?.filter(hId => hId !== this.hotelId) || [];
       
-      // If they belong to no hotels anymore, delete them entirely
-      if (user.hotelIds.length === 0) {
-        const remainingUsers = allUsers.filter(u => u.id !== userId);
-        localStorage.setItem('global_hotel_clean_users', JSON.stringify(remainingUsers));
-      } else {
-        localStorage.setItem('global_hotel_clean_users', JSON.stringify(allUsers));
-      }
+      localStorage.setItem('global_hotel_clean_users', JSON.stringify(allUsers));
     }
   }
 
@@ -1534,6 +1575,93 @@ export class LocalDB implements DBInterface {
       localStorage.removeItem(key);
     }
     this.broadcast('rooms_updated');
+  }
+
+  async getFinalizedDayReports(): Promise<FinalizedDayReport[]> {
+    const key = `global_finalized_day_reports`;
+    const stored = localStorage.getItem(key);
+    if (!stored) return [];
+    try {
+      const allReports = JSON.parse(stored) as FinalizedDayReport[];
+      return allReports.filter(r => r.hotelId === this.hotelId);
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  }
+
+  async saveFinalizedDayReport(report: FinalizedDayReport): Promise<void> {
+    const key = `global_finalized_day_reports`;
+    const stored = localStorage.getItem(key);
+    let reports: FinalizedDayReport[] = [];
+    if (stored) {
+      try {
+        reports = JSON.parse(stored);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    reports = reports.filter(r => r.id !== report.id);
+    reports.push(report);
+    localStorage.setItem(key, JSON.stringify(reports));
+  }
+
+  async deleteFinalizedDayReport(reportId: string): Promise<void> {
+    const key = `global_finalized_day_reports`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        let reports = JSON.parse(stored) as FinalizedDayReport[];
+        reports = reports.filter(r => r.id !== reportId);
+        localStorage.setItem(key, JSON.stringify(reports));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }
+
+  async backupDatabase(): Promise<any> {
+    const backup: Record<string, string | null> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (
+        key.startsWith('global_') || 
+        key.startsWith('daily_rooms_') || 
+        key.startsWith('cleaning_logs_') || 
+        key.startsWith('active_staff_') || 
+        key.startsWith('day_locks_') || 
+        key.startsWith('finalized_day_reports_')
+      )) {
+        backup[key] = localStorage.getItem(key);
+      }
+    }
+    return backup;
+  }
+
+  async restoreDatabase(data: any): Promise<void> {
+    // Clear existing local storage keys of our app
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (
+        key.startsWith('global_') || 
+        key.startsWith('daily_rooms_') || 
+        key.startsWith('cleaning_logs_') || 
+        key.startsWith('active_staff_') || 
+        key.startsWith('day_locks_') || 
+        key.startsWith('finalized_day_reports_')
+      )) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+
+    // Restore from backup
+    Object.entries(data).forEach(([key, val]) => {
+      if (val && typeof val === 'string') {
+        localStorage.setItem(key, val);
+      }
+    });
   }
 }
 

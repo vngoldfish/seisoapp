@@ -1,100 +1,59 @@
-const CACHE_NAME = 'hotel-clean-v1';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/favicon.svg',
-  '/manifest.json'
-];
+const CACHE_NAME = 'hotel-clean-v2';
+const APP_SHELL = ['/', '/index.html', '/manifest.json', '/favicon.svg'];
 
-// Install event - Cache core static assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell');
-      return cache.addAll(ASSETS_TO_CACHE).catch(err => {
-        console.warn('Cache addAll failed, caching individually:', err);
-        // Gracefully cache what we can
-        for (const asset of ASSETS_TO_CACHE) {
-          cache.add(asset).catch(e => console.log('Could not cache asset:', asset, e));
-        }
-      });
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => undefined)
   );
   self.skipWaiting();
 });
 
-// Activate event - Cleanup old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keyList) => {
-      return Promise.all(
-        keyList.map((key) => {
-          if (key !== CACHE_NAME) {
-            console.log('[Service Worker] Removing old cache', key);
-            return caches.delete(key);
-          }
-        })
-      );
-    })
+    caches.keys().then((cacheNames) => Promise.all(
+      cacheNames
+        .filter((name) => name !== CACHE_NAME)
+        .map((name) => caches.delete(name))
+    ))
   );
   self.clients.claim();
 });
 
-// Fetch event - Network-first with cache fallback
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests and local origin requests
-  if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
+  const { request } = event;
+
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname === '/sw.js' || url.pathname === '/service-worker.js') return;
+
+  if (request.mode === 'navigate' || request.destination === 'document') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', responseClone));
+          return response;
+        })
+        .catch(() => caches.match('/index.html').then((cached) => cached || caches.match('/')))
+    );
     return;
   }
 
-  // Handle service worker scripts, dev server websocket, and hot updates - do not cache
-  if (
-    event.request.url.includes('sw.js') || 
-    event.request.url.includes('@vite') || 
-    event.request.url.includes('hmr') ||
-    event.request.url.includes('node_modules')
-  ) {
-    return;
-  }
+  if (['script', 'style', 'image', 'font', 'manifest'].includes(request.destination)) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
 
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Cache the newly retrieved response if it is valid
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return response;
-      })
-      .catch(() => {
-        // Fallback to cache when offline
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
+        return fetch(request).then((response) => {
+          if (response && response.status === 200 && response.type === 'basic') {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
           }
-          // SPA fallback for HTML navigation
-          if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/index.html').then((htmlResponse) => {
-              if (htmlResponse) return htmlResponse;
-              return caches.match('/').then((rootResponse) => {
-                if (rootResponse) return rootResponse;
-                return new Response('Network error. Offline fallback not found.', {
-                  status: 503,
-                  statusText: 'Service Unavailable',
-                  headers: { 'Content-Type': 'text/plain' }
-                });
-              });
-            });
-          }
-          return new Response('Network error', {
-            status: 503,
-            statusText: 'Service Unavailable',
-            headers: { 'Content-Type': 'text/plain' }
-          });
+          return response;
         });
       })
-  );
+    );
+  }
 });

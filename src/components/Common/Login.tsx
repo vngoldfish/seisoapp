@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useApp } from './AppContext';
 import { getTranslation } from '../../i18n/translations';
 import { Hotel, User as UserIcon, KeyRound, Loader2 } from 'lucide-react';
-import { db } from '../../db/firebaseDB';
 
 export const Login: React.FC = () => {
   const { login, language, setLanguage, addToast } = useApp();
@@ -13,22 +12,6 @@ export const Login: React.FC = () => {
   
   const [loading, setLoading] = useState(false);
 
-  // Log active hotel users to console for diagnostic purposes
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const users = await db.getUsers();
-        console.log('[AUTH DEBUG] Available users for this hotel:', users.map(u => ({
-          username: u.username,
-          role: u.role,
-          name: u.name
-        })));
-      } catch (e) {
-        console.error('[AUTH DEBUG] Failed to fetch users:', e);
-      }
-    };
-    fetchUsers();
-  }, []);
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,11 +21,13 @@ export const Login: React.FC = () => {
     }
 
     setLoading(true);
-    const success = await login({ username, password });
+    const result = await login({ username, password });
     setLoading(false);
 
-    if (!success) {
-      addToast(getTranslation(language, 'invalidLogin'), 'warning');
+    if (!result.success) {
+      if (result.errorType === 'credentials') {
+        addToast(getTranslation(language, 'invalidLogin'), 'warning');
+      }
     }
   };
 
