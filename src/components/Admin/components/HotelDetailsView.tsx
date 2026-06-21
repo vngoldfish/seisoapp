@@ -9,7 +9,8 @@ import {
   Plus,
   Edit2,
   Trash2,
-  User as UserIcon
+  User as UserIcon,
+  AlertTriangle
 } from 'lucide-react';
 import type { Room, User, CleaningLog, Hotel as HotelType } from '../../../db/dbInterface';
 import { getLocalDB } from '../../../db/localDB';
@@ -152,8 +153,9 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
   const [leaderboardSortOrder, setLeaderboardSortOrder] = useState<'asc' | 'desc'>('desc');
   const [defectsPage, setDefectsPage] = useState(1);
   const [defectsPerPage, setDefectsPerPage] = useState(5);
-  const [defectsSortField, setDefectsSortField] = useState<'name' | 'count'>('count');
+   const [defectsSortField, setDefectsSortField] = useState<'name' | 'count'>('count');
   const [defectsSortOrder, setDefectsSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [statsTimeRange, setStatsTimeRange] = useState<'today' | 'week' | 'month' | 'year'>('today');
 
   // Load rooms and populate bulk text on init / update
   useEffect(() => {
@@ -182,17 +184,42 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
     const stayRooms = rooms.filter(r => r.isStay).length;
     const checkoutRooms = rooms.filter(r => !r.isStay).length;
 
-    const activeWorkers = activeStaffIds.length;
+    // Filter logs based on statsTimeRange
+    const activeDateObj = new Date(activeDate);
+    const rangeLogs = logs.filter(log => {
+      if (!log.endedAt || log.durationMinutes <= 0) return false;
+      const logDateStr = log.endedAt.split('T')[0];
+      
+      if (statsTimeRange === 'today') {
+        return logDateStr === activeDate;
+      }
+      
+      const logDateObj = new Date(logDateStr);
+      if (isNaN(logDateObj.getTime())) return false;
+      
+      const diffTime = activeDateObj.getTime() - logDateObj.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (statsTimeRange === 'week') {
+        return diffDays >= 0 && diffDays < 7;
+      } else if (statsTimeRange === 'month') {
+        return diffDays >= 0 && diffDays < 30;
+      } else { // statsTimeRange === 'year'
+        return diffDays >= 0 && diffDays < 365;
+      }
+    });
 
-    // Filter logs for today
-    const todayLogs = logs.filter(log => log.endedAt.startsWith(activeDate) && log.durationMinutes > 0);
-    const totalDuration = todayLogs.reduce((acc, log) => acc + log.durationMinutes, 0);
-    const finishedCount = todayLogs.length;
+    const activeWorkers = statsTimeRange === 'today'
+      ? activeStaffIds.length
+      : new Set(rangeLogs.map(l => l.cleanerId)).size;
+
+    const totalDuration = rangeLogs.reduce((acc, log) => acc + log.durationMinutes, 0);
+    const finishedCount = rangeLogs.length;
     const avgCleaningTime = finishedCount > 0 ? Math.round(totalDuration / finishedCount) : 0;
 
     // Cleaner productivity leaderboard
     const cleanerMap: Record<string, { name: string; count: number; totalDuration: number }> = {};
-    todayLogs.forEach(log => {
+    rangeLogs.forEach(log => {
       const key = log.cleanerName || log.cleanerId || 'Unknown';
       if (!cleanerMap[key]) {
         cleanerMap[key] = { name: key, count: 0, totalDuration: 0 };
@@ -220,7 +247,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
     const errorTypeMap: Record<string, number> = {};
     const cleanerErrorMap: Record<string, { name: string; count: number; errorList: string[] }> = {};
 
-    todayLogs.forEach(log => {
+    rangeLogs.forEach(log => {
       if (log.errors && log.errors.length > 0) {
         totalErrors += log.errors.length;
         log.errors.forEach(err => {
@@ -237,7 +264,7 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
     });
 
     const defectRate = finishedCount > 0
-      ? Math.round((todayLogs.filter(l => l.errors && l.errors.length > 0).length / finishedCount) * 100)
+      ? Math.round((rangeLogs.filter(l => l.errors && l.errors.length > 0).length / finishedCount) * 100)
       : 0;
 
     const errorBreakdown = Object.entries(errorTypeMap)
@@ -247,28 +274,127 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
     const cleanerErrorLeaderboard = Object.values(cleanerErrorMap)
       .sort((a, b) => b.count - a.count);
 
-    // Hourly room completion trend (8am to 6pm+)
-    const hourlyBins: Record<number, number> = {};
-    for (let h = 8; h <= 18; h++) {
-      hourlyBins[h] = 0;
-    }
-    todayLogs.forEach(log => {
-      try {
-        const dateObj = new Date(log.endedAt);
-        if (!isNaN(dateObj.getTime())) {
-          let hour = dateObj.getHours();
-          if (hour < 8) hour = 8;
-          if (hour > 18) hour = 18;
-          hourlyBins[hour] = (hourlyBins[hour] || 0) + 1;
-        }
-      } catch (e) {}
-    });
+    // Grouping trend data based on statsTimeRange
+    let hourlyTrend: { label: string; out: number; stay: number; dnd: number; total: number }[] = [];
 
-    const hourlyTrend = Object.keys(hourlyBins).map(hStr => {
-      const h = Number(hStr);
-      const label = h === 18 ? '18:00+' : `${h.toString().padStart(2, '0')}:00`;
-      return { hour: h, label, count: hourlyBins[h] };
-    });
+    if (statsTimeRange === 'today') {
+      const hourlyBins: Record<number, { out: number; stay: number; dnd: number }> = {};
+      for (let h = 8; h <= 18; h++) {
+        hourlyBins[h] = { out: 0, stay: 0, dnd: 0 };
+      }
+      rangeLogs.forEach(log => {
+        try {
+          const dateObj = new Date(log.endedAt);
+          if (!isNaN(dateObj.getTime())) {
+            let hour = dateObj.getHours();
+            if (hour < 8) hour = 8;
+            if (hour > 18) hour = 18;
+            
+            const room = rooms.find(r => r.id === log.roomId);
+            let category: 'out' | 'stay' | 'dnd' = 'out';
+            if (room) {
+              if (room.status === 'dnd') category = 'dnd';
+              else if (room.isStay) category = 'stay';
+            }
+            hourlyBins[hour][category]++;
+          }
+        } catch (e) {}
+      });
+
+      hourlyTrend = Object.keys(hourlyBins).map(hStr => {
+        const h = Number(hStr);
+        const label = h === 18 ? '18:00+' : `${h.toString().padStart(2, '0')}:00`;
+        const bin = hourlyBins[h];
+        return {
+          label,
+          out: bin.out,
+          stay: bin.stay,
+          dnd: bin.dnd,
+          total: bin.out + bin.stay + bin.dnd
+        };
+      });
+
+    } else if (statsTimeRange === 'week' || statsTimeRange === 'month') {
+      const daysCount = statsTimeRange === 'week' ? 7 : 30;
+      const dailyBins: Record<string, { out: number; stay: number; dnd: number }> = {};
+      
+      const daysList: string[] = [];
+      for (let i = daysCount - 1; i >= 0; i--) {
+        const d = new Date(activeDateObj);
+        d.setDate(d.getDate() - i);
+        const dStr = d.toISOString().split('T')[0];
+        daysList.push(dStr);
+        dailyBins[dStr] = { out: 0, stay: 0, dnd: 0 };
+      }
+
+      rangeLogs.forEach(log => {
+        const logDateStr = log.endedAt.split('T')[0];
+        if (dailyBins[logDateStr]) {
+          const room = rooms.find(r => r.id === log.roomId);
+          let category: 'out' | 'stay' | 'dnd' = 'out';
+          if (room) {
+            if (room.status === 'dnd') category = 'dnd';
+            else if (room.isStay) category = 'stay';
+          }
+          dailyBins[logDateStr][category]++;
+        }
+      });
+
+      hourlyTrend = daysList.map(dStr => {
+        const bin = dailyBins[dStr];
+        const dateParts = dStr.split('-');
+        const label = `${dateParts[2]}/${dateParts[1]}`; // DD/MM
+        return {
+          label,
+          out: bin.out,
+          stay: bin.stay,
+          dnd: bin.dnd,
+          total: bin.out + bin.stay + bin.dnd
+        };
+      });
+
+    } else { // statsTimeRange === 'year'
+      const monthlyBins: Record<string, { out: number; stay: number; dnd: number }> = {};
+      const monthsList: string[] = [];
+      
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(activeDateObj.getFullYear(), activeDateObj.getMonth() - i, 1);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const key = `${yyyy}-${mm}`;
+        monthsList.push(key);
+        monthlyBins[key] = { out: 0, stay: 0, dnd: 0 };
+      }
+
+      rangeLogs.forEach(log => {
+        try {
+          const logDateStr = log.endedAt.split('T')[0];
+          const key = logDateStr.substring(0, 7);
+          if (monthlyBins[key]) {
+            const room = rooms.find(r => r.id === log.roomId);
+            let category: 'out' | 'stay' | 'dnd' = 'out';
+            if (room) {
+              if (room.status === 'dnd') category = 'dnd';
+              else if (room.isStay) category = 'stay';
+            }
+            monthlyBins[key][category]++;
+          }
+        } catch (e) {}
+      });
+
+      hourlyTrend = monthsList.map(key => {
+        const bin = monthlyBins[key];
+        const parts = key.split('-');
+        const label = `${parts[1]}/${parts[0].substring(2)}`; // MM/YY
+        return {
+          label,
+          out: bin.out,
+          stay: bin.stay,
+          dnd: bin.dnd,
+          total: bin.out + bin.stay + bin.dnd
+        };
+      });
+    }
 
     const percentClean = total > 0 ? Math.round((clean / total) * 100) : 0;
 
@@ -292,9 +418,10 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
       totalErrors,
       defectRate,
       errorBreakdown,
-      cleanerErrorLeaderboard
+      cleanerErrorLeaderboard,
+      finishedCount
     };
-  }, [rooms, logs, activeStaffIds, activeDate]);
+  }, [rooms, logs, activeStaffIds, activeDate, statsTimeRange]);
 
   // Computed helper memos for rooms, staff, and rankings list components
   const roomsUniqueFloors = useMemo(() => {
@@ -885,21 +1012,74 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
       {/* Sub-tab Contents */}
       {branchTab === 'stats' && branchStats && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* Stats Time Range Switcher */}
+          <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '0.5rem' }}>
+            <div className="capsule-switcher" style={{ display: 'inline-flex' }}>
+              <button 
+                type="button"
+                onClick={() => setStatsTimeRange('today')}
+                className={`capsule-button ${statsTimeRange === 'today' ? 'active' : ''}`}
+              >
+                <span>📅</span>
+                <span>{language === 'vi' ? 'Hôm nay' : language === 'ja' ? '本日' : 'Today'}</span>
+              </button>
+              <button 
+                type="button"
+                onClick={() => setStatsTimeRange('week')}
+                className={`capsule-button ${statsTimeRange === 'week' ? 'active' : ''}`}
+              >
+                <span>📊</span>
+                <span>{language === 'vi' ? 'Tuần này' : language === 'ja' ? '今週' : 'This Week'}</span>
+              </button>
+              <button 
+                type="button"
+                onClick={() => setStatsTimeRange('month')}
+                className={`capsule-button ${statsTimeRange === 'month' ? 'active' : ''}`}
+              >
+                <span>📈</span>
+                <span>{language === 'vi' ? 'Tháng này' : language === 'ja' ? '今月' : 'This Month'}</span>
+              </button>
+              <button 
+                type="button"
+                onClick={() => setStatsTimeRange('year')}
+                className={`capsule-button ${statsTimeRange === 'year' ? 'active' : ''}`}
+              >
+                <span>📅</span>
+                <span>{language === 'vi' ? 'Năm nay' : language === 'ja' ? '今年' : 'This Year'}</span>
+              </button>
+            </div>
+          </div>
+
           {/* Metrics Row */}
           <div className="metrics-grid">
+            {/* Progress Card / Total Cleaned Card */}
             <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-clean)' }}>
               <div className="metric-icon" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-clean)' }}>
                 <CheckCircle2 size={20} />
               </div>
               <div style={{ flex: 1 }}>
-                <div className="metric-value">{branchStats.percentClean}%</div>
-                <div className="metric-label">{language === 'vi' ? 'Tiến độ dọn phòng' : language === 'ja' ? '清傷進捗率' : 'Cleaning Progress'}</div>
-                <div style={{ width: '100%', height: '6px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '99px', overflow: 'hidden', marginTop: '0.4rem' }}>
-                  <div style={{ width: `${branchStats.percentClean}%`, height: '100%', backgroundColor: 'var(--status-clean)' }} />
-                </div>
+                {statsTimeRange === 'today' ? (
+                  <>
+                    <div className="metric-value">{branchStats.percentClean}%</div>
+                    <div className="metric-label">{language === 'vi' ? 'Tiến độ dọn phòng' : language === 'ja' ? '清縮進捗率' : 'Cleaning Progress'}</div>
+                    <div style={{ width: '100%', height: '6px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '99px', overflow: 'hidden', marginTop: '0.4rem' }}>
+                      <div style={{ width: `${branchStats.percentClean}%`, height: '100%', backgroundColor: 'var(--status-clean)' }} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="metric-value">{branchStats.finishedCount} <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{language === 'vi' ? 'phòng' : language === 'ja' ? '室' : 'rooms'}</span></div>
+                    <div className="metric-label">
+                      {statsTimeRange === 'week' 
+                        ? (language === 'vi' ? 'Tổng phòng dọn tuần qua' : language === 'ja' ? '週間清掃完了合計' : 'Weekly Total Cleaned')
+                        : (language === 'vi' ? 'Tổng phòng dọn tháng qua' : language === 'ja' ? '月間清掃完了合計' : 'Monthly Total Cleaned')}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
+            {/* Avg Time Card */}
             <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-cleaning)' }}>
               <div className="metric-icon" style={{ backgroundColor: 'rgba(249, 115, 22, 0.1)', color: 'var(--status-cleaning)' }}>
                 <Clock size={20} />
@@ -908,34 +1088,61 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                 <div className="metric-value">{branchStats.avgCleaningTime} <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{language === 'vi' ? 'phút' : language === 'ja' ? '分' : 'm'}</span></div>
                 <div className="metric-label">{language === 'vi' ? 'T.gian dọn TB' : language === 'ja' ? '平均清掃時間' : 'Avg Cleaning Time'}</div>
                 <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>
-                  {language === 'vi' ? `Tính từ ${branchStats.leaderboard.reduce((acc, c) => acc + c.count, 0)} lượt hoàn thành` : language === 'ja' ? `完了${branchStats.leaderboard.reduce((acc, c) => acc + c.count, 0)}件に基づく` : `Based on ${branchStats.leaderboard.reduce((acc, c) => acc + c.count, 0)} completions`}
+                  {language === 'vi' ? `Tính từ ${branchStats.finishedCount} lượt hoàn thành` : language === 'ja' ? `完了${branchStats.finishedCount}件に基づく` : `Based on ${branchStats.finishedCount} completions`}
                 </div>
               </div>
             </div>
 
+            {/* Workers Card */}
             <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--primary-color)' }}>
               <div className="metric-icon" style={{ backgroundColor: 'rgba(37, 99, 235, 0.1)', color: 'var(--primary-color)' }}>
                 <Users size={20} />
               </div>
               <div>
                 <div className="metric-value">{branchStats.activeWorkers}</div>
-                <div className="metric-label">{language === 'vi' ? 'Nhân sự làm việc hôm nay' : language === 'ja' ? '本日の出勤スタッフ数' : 'Active Staff Today'}</div>
+                <div className="metric-label">
+                  {statsTimeRange === 'today'
+                    ? (language === 'vi' ? 'Nhân sự làm việc hôm nay' : language === 'ja' ? '本日の出勤スタッフ数' : 'Active Staff Today')
+                    : (language === 'vi' ? 'Nhân sự hoạt động trong kì' : language === 'ja' ? '出動スタッフ数' : 'Active Staff in Period')}
+                </div>
                 <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>
-                  {language === 'vi' ? `Trên tổng số ${cleaners.length} nhân viên` : language === 'ja' ? `登録スタッフ数: ${cleaners.length}名` : `Out of ${cleaners.length} cleaners`}
+                  {statsTimeRange === 'today' ? (
+                    language === 'vi' ? `Trên tổng số ${cleaners.length} nhân viên` : language === 'ja' ? `登録スタッフ数: ${cleaners.length}名` : `Out of ${cleaners.length} cleaners`
+                  ) : (
+                    language === 'vi' ? `Tổng số nhân viên đã thực hiện dọn dẹp` : language === 'ja' ? `実際に稼働した清掃スタッフの合計` : `Total active housekeepers`
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="metric-card glass-panel" style={{ borderLeft: '4px solid var(--status-dirty)' }}>
-              <div className="metric-icon" style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', color: 'var(--status-dirty)' }}>
-                <Building size={20} />
+            {/* Setup / Defects Card */}
+            <div className="metric-card glass-panel" style={{ borderLeft: statsTimeRange === 'today' ? '4px solid var(--status-dirty)' : '4px solid var(--status-maintenance)' }}>
+              <div className="metric-icon" style={{ 
+                backgroundColor: statsTimeRange === 'today' ? 'rgba(234, 179, 8, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+                color: statsTimeRange === 'today' ? 'var(--status-dirty)' : 'var(--status-maintenance)' 
+              }}>
+                {statsTimeRange === 'today' ? <Building size={20} /> : <AlertTriangle size={20} />}
               </div>
               <div>
-                <div className="metric-value">{branchStats.total} <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{language === 'vi' ? 'phòng' : language === 'ja' ? '室' : 'rooms'}</span></div>
-                <div className="metric-label">{language === 'vi' ? 'Tỉ lệ Stay / Checkout' : language === 'ja' ? '滞在 / アウト比率' : 'Stay / Checkout Ratio'}</div>
-                <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>
-                  🏠 {branchStats.stayRooms} {language === 'vi' ? 'Stay' : language === 'ja' ? '滞在' : 'Stay'} | 🚪 {branchStats.checkoutRooms} Checkout
-                </div>
+                {statsTimeRange === 'today' ? (
+                  <>
+                    <div className="metric-value">{branchStats.total} <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{language === 'vi' ? 'phòng' : language === 'ja' ? '室' : 'rooms'}</span></div>
+                    <div className="metric-label">{language === 'vi' ? 'Tỉ lệ Stay / Checkout' : language === 'ja' ? '滞在 / アウト比率' : 'Stay / Checkout Ratio'}</div>
+                    <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>
+                      🏠 {branchStats.stayRooms} {language === 'vi' ? 'Stay' : language === 'ja' ? '滞在' : 'Stay'} | 🚪 {branchStats.checkoutRooms} Checkout
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="metric-value" style={{ color: 'var(--status-maintenance)' }}>
+                      {branchStats.totalErrors} <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-color)' }}>{language === 'vi' ? 'lỗi' : language === 'ja' ? '不備' : 'defects'}</span>
+                    </div>
+                    <div className="metric-label">{language === 'vi' ? 'Thống kê lỗi trong kì' : language === 'ja' ? '期間中の不備指摘数' : 'Defects in Period'}</div>
+                    <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>
+                      ⚠️ {language === 'vi' ? `Tỉ lệ lỗi phòng: ${branchStats.defectRate}%` : language === 'ja' ? `部屋指摘率: ${branchStats.defectRate}%` : `Defect rate: ${branchStats.defectRate}%`}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1037,12 +1244,17 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
             {/* Hourly Completion Trend */}
             <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
               <h4 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                {language === 'vi' ? 'Lượng Hoàn Thành Theo Giờ' : language === 'ja' ? '時間帯別清掃完了数' : 'Hourly Completion Trend'}
+                {statsTimeRange === 'today'
+                  ? (language === 'vi' ? 'Lượng Hoàn Thành Theo Giờ' : language === 'ja' ? '時間帯別清掃完了数' : 'Hourly Completion Trend')
+                  : statsTimeRange === 'week' || statsTimeRange === 'month'
+                    ? (language === 'vi' ? 'Lượng Hoàn Thành Theo Ngày' : language === 'ja' ? '日別清掃完了数' : 'Daily Completion Trend')
+                    : (language === 'vi' ? 'Lượng Hoàn Thành Theo Tháng' : language === 'ja' ? '月別清掃完了数' : 'Monthly Completion Trend')
+                }
               </h4>
               
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {(() => {
-                  const maxCount = Math.max(...branchStats.hourlyTrend.map(t => t.count), 4);
+                  const maxCount = Math.max(...branchStats.hourlyTrend.map(t => t.total), 4);
                   const width = 380;
                   const height = 180;
                   const paddingLeft = 25;
@@ -1054,61 +1266,114 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                   const usableHeight = height - paddingTop - paddingBottom;
                   
                   const colWidth = usableWidth / branchStats.hourlyTrend.length;
-                  const barWidth = Math.max(14, colWidth - 8);
+                  const barWidth = Math.max(4, colWidth - 6);
 
                   return (
-                    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
-                      {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
-                        const val = Math.round(maxCount * ratio);
-                        const y = height - paddingBottom - (ratio * usableHeight);
-                        return (
-                          <g key={idx} opacity={0.15}>
-                            <line x1={paddingLeft} y1={y} x2={width - paddingRight} y2={y} stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
-                            <text x={paddingLeft - 5} y={y + 3} textAnchor="end" fill="currentColor" style={{ fontSize: '0.6rem', fontWeight: 600 }}>{val}</text>
-                          </g>
-                        );
-                      })}
+                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+                      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+                        {/* Y-axis helper lines */}
+                        {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                          const val = Math.round(maxCount * ratio);
+                          const y = height - paddingBottom - (ratio * usableHeight);
+                          return (
+                            <g key={idx} opacity={0.15}>
+                              <line x1={paddingLeft} y1={y} x2={width - paddingRight} y2={y} stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
+                              <text x={paddingLeft - 5} y={y + 3} textAnchor="end" fill="currentColor" style={{ fontSize: '0.6rem', fontWeight: 600 }}>{val}</text>
+                            </g>
+                          );
+                        })}
+                        
+                        {/* Bars and labels */}
+                        {branchStats.hourlyTrend.map((t, i) => {
+                          const outHeight = (t.out / maxCount) * usableHeight;
+                          const stayHeight = (t.stay / maxCount) * usableHeight;
+                          const dndHeight = (t.dnd / maxCount) * usableHeight;
+                          
+                          const x = paddingLeft + i * colWidth + (colWidth - barWidth) / 2;
+                          
+                          const outY = height - paddingBottom - outHeight;
+                          const stayY = outY - stayHeight;
+                          const dndY = stayY - dndHeight;
+
+                          const showLabelText = branchStats.hourlyTrend.length <= 12 || i % 5 === 0 || i === branchStats.hourlyTrend.length - 1;
+
+                          return (
+                            <g key={i}>
+                              {/* Out bar (Red) */}
+                              {t.out > 0 && (
+                                <rect
+                                  x={x}
+                                  y={outY}
+                                  width={barWidth}
+                                  height={outHeight}
+                                  rx="1"
+                                  fill="#ef4444"
+                                  opacity={0.85}
+                                  style={{ transition: 'all 0.5s ease' }}
+                                />
+                              )}
+                              
+                              {/* Stay bar (Purple) */}
+                              {t.stay > 0 && (
+                                <rect
+                                  x={x}
+                                  y={stayY}
+                                  width={barWidth}
+                                  height={stayHeight}
+                                  rx="1"
+                                  fill="#8b5cf6"
+                                  opacity={0.85}
+                                  style={{ transition: 'all 0.5s ease' }}
+                                />
+                              )}
+                              
+                              {/* DND bar (Slate/DND) */}
+                              {t.dnd > 0 && (
+                                <rect
+                                  x={x}
+                                  y={dndY}
+                                  width={barWidth}
+                                  height={dndHeight}
+                                  rx="1"
+                                  fill="#475569"
+                                  opacity={0.85}
+                                  style={{ transition: 'all 0.5s ease' }}
+                                />
+                              )}
+                              
+                              {/* Label text */}
+                              {showLabelText && (
+                                <text
+                                  x={x + barWidth / 2}
+                                  y={height - 8}
+                                  textAnchor="middle"
+                                  fill="currentColor"
+                                  style={{ fontSize: '0.55rem', opacity: 0.7, fontWeight: 600 }}
+                                >
+                                  {statsTimeRange === 'today' ? t.label.split(':')[0] : t.label}
+                                </text>
+                              )}
+                            </g>
+                          );
+                        })}
+                      </svg>
                       
-                      {branchStats.hourlyTrend.map((t, i) => {
-                        const barHeight = (t.count / maxCount) * usableHeight;
-                        const x = paddingLeft + i * colWidth + (colWidth - barWidth) / 2;
-                        const y = height - paddingBottom - barHeight;
-                        return (
-                          <g key={i}>
-                            <rect
-                              x={x}
-                              y={y}
-                              width={barWidth}
-                              height={barHeight}
-                              rx="3"
-                              fill="var(--primary-color)"
-                              opacity={t.count > 0 ? 0.85 : 0.15}
-                              style={{ transition: 'all 0.5s ease' }}
-                            />
-                            <text
-                              x={x + barWidth / 2}
-                              y={height - 8}
-                              textAnchor="middle"
-                              fill="currentColor"
-                              style={{ fontSize: '0.6rem', opacity: 0.7 }}
-                            >
-                              {t.label.split(':')[0]}
-                            </text>
-                            {t.count > 0 && (
-                              <text
-                                x={x + barWidth / 2}
-                                y={y - 5}
-                                textAnchor="middle"
-                                fill="currentColor"
-                                style={{ fontSize: '0.65rem', fontWeight: 700 }}
-                              >
-                                {t.count}
-                              </text>
-                            )}
-                          </g>
-                        );
-                      })}
-                    </svg>
+                      {/* Legend */}
+                      <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '0.75rem', fontSize: '0.7rem', fontWeight: 700, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444', display: 'inline-block' }} />
+                          <span>{language === 'vi' ? 'Phòng Out' : language === 'ja' ? 'チェックアウト' : 'Out Rooms'}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#8b5cf6', display: 'inline-block' }} />
+                          <span>{language === 'vi' ? 'Phòng Stay' : language === 'ja' ? '滞在清掃' : 'Stay Rooms'}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#475569', display: 'inline-block' }} />
+                          <span>{language === 'vi' ? 'Phòng DND' : language === 'ja' ? '起こさないで' : 'DND Rooms'}</span>
+                        </div>
+                      </div>
+                    </div>
                   );
                 })()}
               </div>
@@ -1117,12 +1382,24 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
             {/* Productivity Leaderboard */}
             <div className="glass-panel grid-span-2" style={{ padding: '1.5rem' }}>
               <h4 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                {language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Hôm nay)' : language === 'ja' ? 'スタッフ清掃実績ランキング (本日)' : 'Housekeeper Leaderboard (Today)'}
+                {statsTimeRange === 'today' 
+                  ? (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Hôm nay)' : language === 'ja' ? 'スタッフ清掃実績ランキング (本日)' : 'Housekeeper Leaderboard (Today)')
+                  : statsTimeRange === 'week'
+                    ? (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Tuần này)' : language === 'ja' ? 'スタッフ清掃実績ランキング (今週)' : 'Housekeeper Leaderboard (This Week)')
+                    : statsTimeRange === 'month'
+                      ? (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Tháng này)' : language === 'ja' ? 'スタッフ清掃実績ランキング (今月)' : 'Housekeeper Leaderboard (This Month)')
+                      : (language === 'vi' ? 'Bảng Thành Tích Dọn Dẹp (Năm nay)' : language === 'ja' ? 'スタッフ清掃実績ランキング (今年)' : 'Housekeeper Leaderboard (This Year)')}
               </h4>
               
               {branchStats.leaderboard.length === 0 ? (
                 <div style={{ padding: '3rem', textAlign: 'center', opacity: 0.6, fontSize: '0.9rem' }}>
-                  🧹 {language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong ngày hôm nay' : language === 'ja' ? '本日のこの店舗 của 清掃実績はまだありません' : 'No cleaning logs recorded for this branch today'}
+                  🧹 {statsTimeRange === 'today'
+                    ? (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong ngày hôm nay' : language === 'ja' ? '本日のこの店舗の清掃実績はまだありません' : 'No cleaning logs recorded for this branch today')
+                    : statsTimeRange === 'week'
+                      ? (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong tuần này' : language === 'ja' ? '今週のこの店舗の清掃実績はまだありません' : 'No cleaning logs recorded for this branch this week')
+                      : statsTimeRange === 'month'
+                        ? (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong tháng này' : language === 'ja' ? '今月のこの店舗の清掃実績はまだありません' : 'No cleaning logs recorded for this branch this month')
+                        : (language === 'vi' ? 'Chưa có dữ liệu dọn dẹp cho chi nhánh này trong năm nay' : language === 'ja' ? '今年のこの店舗の清掃実績はまだありません' : 'No cleaning logs recorded for this branch this year')}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

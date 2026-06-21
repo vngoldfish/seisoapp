@@ -779,28 +779,127 @@ export const CheckerDashboard: React.FC = () => {
     const cleanerErrorLeaderboard = Object.values(cleanerErrorMap)
       .sort((a, b) => b.count - a.count);
 
-    // Hourly room completion trend (8am to 6pm+)
-    const hourlyBins: Record<number, number> = {};
-    for (let h = 8; h <= 18; h++) {
-      hourlyBins[h] = 0;
-    }
-    rangeLogs.forEach(log => {
-      try {
-        const dateObj = new Date(log.endedAt);
-        if (!isNaN(dateObj.getTime())) {
-          let hour = dateObj.getHours();
-          if (hour < 8) hour = 8;
-          if (hour > 18) hour = 18;
-          hourlyBins[hour] = (hourlyBins[hour] || 0) + 1;
-        }
-      } catch (e) {}
-    });
+    // Grouping trend data based on statsTimeRange
+    let hourlyTrend: { label: string; out: number; stay: number; dnd: number; total: number }[] = [];
 
-    const hourlyTrend = Object.keys(hourlyBins).map(hStr => {
-      const h = Number(hStr);
-      const label = h === 18 ? '18:00+' : `${h.toString().padStart(2, '0')}:00`;
-      return { hour: h, label, count: hourlyBins[h] };
-    });
+    if (statsTimeRange === 'today') {
+      const hourlyBins: Record<number, { out: number; stay: number; dnd: number }> = {};
+      for (let h = 8; h <= 18; h++) {
+        hourlyBins[h] = { out: 0, stay: 0, dnd: 0 };
+      }
+      rangeLogs.forEach(log => {
+        try {
+          const dateObj = new Date(log.endedAt);
+          if (!isNaN(dateObj.getTime())) {
+            let hour = dateObj.getHours();
+            if (hour < 8) hour = 8;
+            if (hour > 18) hour = 18;
+            
+            const room = rooms.find(r => r.id === log.roomId);
+            let category: 'out' | 'stay' | 'dnd' = 'out';
+            if (room) {
+              if (room.status === 'dnd') category = 'dnd';
+              else if (room.isStay) category = 'stay';
+            }
+            hourlyBins[hour][category]++;
+          }
+        } catch (e) {}
+      });
+
+      hourlyTrend = Object.keys(hourlyBins).map(hStr => {
+        const h = Number(hStr);
+        const label = h === 18 ? '18:00+' : `${h.toString().padStart(2, '0')}:00`;
+        const bin = hourlyBins[h];
+        return {
+          label,
+          out: bin.out,
+          stay: bin.stay,
+          dnd: bin.dnd,
+          total: bin.out + bin.stay + bin.dnd
+        };
+      });
+
+    } else if (statsTimeRange === 'week' || statsTimeRange === 'month') {
+      const daysCount = statsTimeRange === 'week' ? 7 : 30;
+      const dailyBins: Record<string, { out: number; stay: number; dnd: number }> = {};
+      
+      const daysList: string[] = [];
+      for (let i = daysCount - 1; i >= 0; i--) {
+        const d = new Date(activeDateObj);
+        d.setDate(d.getDate() - i);
+        const dStr = d.toISOString().split('T')[0];
+        daysList.push(dStr);
+        dailyBins[dStr] = { out: 0, stay: 0, dnd: 0 };
+      }
+
+      rangeLogs.forEach(log => {
+        const logDateStr = log.endedAt.split('T')[0];
+        if (dailyBins[logDateStr]) {
+          const room = rooms.find(r => r.id === log.roomId);
+          let category: 'out' | 'stay' | 'dnd' = 'out';
+          if (room) {
+            if (room.status === 'dnd') category = 'dnd';
+            else if (room.isStay) category = 'stay';
+          }
+          dailyBins[logDateStr][category]++;
+        }
+      });
+
+      hourlyTrend = daysList.map(dStr => {
+        const bin = dailyBins[dStr];
+        const dateParts = dStr.split('-');
+        const label = `${dateParts[2]}/${dateParts[1]}`; // DD/MM
+        return {
+          label,
+          out: bin.out,
+          stay: bin.stay,
+          dnd: bin.dnd,
+          total: bin.out + bin.stay + bin.dnd
+        };
+      });
+
+    } else { // statsTimeRange === 'year'
+      const monthlyBins: Record<string, { out: number; stay: number; dnd: number }> = {};
+      const monthsList: string[] = [];
+      
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(activeDateObj.getFullYear(), activeDateObj.getMonth() - i, 1);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const key = `${yyyy}-${mm}`;
+        monthsList.push(key);
+        monthlyBins[key] = { out: 0, stay: 0, dnd: 0 };
+      }
+
+      rangeLogs.forEach(log => {
+        try {
+          const logDateStr = log.endedAt.split('T')[0];
+          const key = logDateStr.substring(0, 7);
+          if (monthlyBins[key]) {
+            const room = rooms.find(r => r.id === log.roomId);
+            let category: 'out' | 'stay' | 'dnd' = 'out';
+            if (room) {
+              if (room.status === 'dnd') category = 'dnd';
+              else if (room.isStay) category = 'stay';
+            }
+            monthlyBins[key][category]++;
+          }
+        } catch (e) {}
+      });
+
+      hourlyTrend = monthsList.map(key => {
+        const bin = monthlyBins[key];
+        const parts = key.split('-');
+        const label = `${parts[1]}/${parts[0].substring(2)}`; // MM/YY
+        return {
+          label,
+          out: bin.out,
+          stay: bin.stay,
+          dnd: bin.dnd,
+          total: bin.out + bin.stay + bin.dnd
+        };
+      });
+    }
 
     const percentClean = total > 0 ? Math.round((clean / total) * 100) : 0;
 
@@ -1362,12 +1461,17 @@ export const CheckerDashboard: React.FC = () => {
                 {/* Hourly Trend Bar Chart */}
                 <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
                   <h4 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                    {language === 'vi' ? 'Lượng Hoàn Thành Theo Giờ' : language === 'ja' ? '時間帯別清掃完了数' : 'Hourly Completion Trend'}
+                    {statsTimeRange === 'today'
+                      ? (language === 'vi' ? 'Lượng Hoàn Thành Theo Giờ' : language === 'ja' ? '時間帯別清掃完了数' : 'Hourly Completion Trend')
+                      : statsTimeRange === 'week' || statsTimeRange === 'month'
+                        ? (language === 'vi' ? 'Lượng Hoàn Thành Theo Ngày' : language === 'ja' ? '日別清掃完了数' : 'Daily Completion Trend')
+                        : (language === 'vi' ? 'Lượng Hoàn Thành Theo Tháng' : language === 'ja' ? '月別清掃完了数' : 'Monthly Completion Trend')
+                    }
                   </h4>
                   
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {(() => {
-                      const maxCount = Math.max(...branchStats.hourlyTrend.map(t => t.count), 4);
+                      const maxCount = Math.max(...branchStats.hourlyTrend.map(t => t.total), 4);
                       const width = 380;
                       const height = 180;
                       const paddingLeft = 25;
@@ -1379,68 +1483,114 @@ export const CheckerDashboard: React.FC = () => {
                       const usableHeight = height - paddingTop - paddingBottom;
                       
                       const colWidth = usableWidth / branchStats.hourlyTrend.length;
-                      const barWidth = Math.max(14, colWidth - 8);
+                      const barWidth = Math.max(4, colWidth - 6);
 
                       return (
-                        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
-                          {/* Y-axis helper lines */}
-                          {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
-                            const val = Math.round(maxCount * ratio);
-                            const y = height - paddingBottom - (ratio * usableHeight);
-                            return (
-                              <g key={idx} opacity={0.15}>
-                                <line x1={paddingLeft} y1={y} x2={width - paddingRight} y2={y} stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
-                                <text x={paddingLeft - 5} y={y + 3} textAnchor="end" fill="currentColor" style={{ fontSize: '0.6rem', fontWeight: 600 }}>{val}</text>
-                              </g>
-                            );
-                          })}
-                          
-                          {/* Bars and labels */}
-                          {branchStats.hourlyTrend.map((t, i) => {
-                            const barHeight = (t.count / maxCount) * usableHeight;
-                            const x = paddingLeft + i * colWidth + (colWidth - barWidth) / 2;
-                            const y = height - paddingBottom - barHeight;
-                            return (
-                              <g key={i}>
-                                {/* Bar rect */}
-                                <rect
-                                  x={x}
-                                  y={y}
-                                  width={barWidth}
-                                  height={barHeight}
-                                  rx="3"
-                                  fill="var(--primary-color)"
-                                  opacity={t.count > 0 ? 0.85 : 0.15}
-                                  style={{ transition: 'all 0.5s ease' }}
-                                />
-                                
-                                {/* Label text */}
-                                <text
-                                  x={x + barWidth / 2}
-                                  y={height - 8}
-                                  textAnchor="middle"
-                                  fill="currentColor"
-                                  style={{ fontSize: '0.6rem', opacity: 0.7 }}
-                                >
-                                  {t.label.split(':')[0]}
-                                </text>
+                        <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+                          <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+                            {/* Y-axis helper lines */}
+                            {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                              const val = Math.round(maxCount * ratio);
+                              const y = height - paddingBottom - (ratio * usableHeight);
+                              return (
+                                <g key={idx} opacity={0.15}>
+                                  <line x1={paddingLeft} y1={y} x2={width - paddingRight} y2={y} stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
+                                  <text x={paddingLeft - 5} y={y + 3} textAnchor="end" fill="currentColor" style={{ fontSize: '0.6rem', fontWeight: 600 }}>{val}</text>
+                                </g>
+                              );
+                            })}
+                            
+                            {/* Bars and labels */}
+                            {branchStats.hourlyTrend.map((t, i) => {
+                              const outHeight = (t.out / maxCount) * usableHeight;
+                              const stayHeight = (t.stay / maxCount) * usableHeight;
+                              const dndHeight = (t.dnd / maxCount) * usableHeight;
+                              
+                              const x = paddingLeft + i * colWidth + (colWidth - barWidth) / 2;
+                              
+                              const outY = height - paddingBottom - outHeight;
+                              const stayY = outY - stayHeight;
+                              const dndY = stayY - dndHeight;
 
-                                {/* Value label */}
-                                {t.count > 0 && (
-                                  <text
-                                    x={x + barWidth / 2}
-                                    y={y - 5}
-                                    textAnchor="middle"
-                                    fill="currentColor"
-                                    style={{ fontSize: '0.65rem', fontWeight: 700 }}
-                                  >
-                                    {t.count}
-                                  </text>
-                                )}
-                              </g>
-                            );
-                          })}
-                        </svg>
+                              const showLabelText = branchStats.hourlyTrend.length <= 12 || i % 5 === 0 || i === branchStats.hourlyTrend.length - 1;
+
+                              return (
+                                <g key={i}>
+                                  {/* Out bar (Red) */}
+                                  {t.out > 0 && (
+                                    <rect
+                                      x={x}
+                                      y={outY}
+                                      width={barWidth}
+                                      height={outHeight}
+                                      rx="1"
+                                      fill="#ef4444"
+                                      opacity={0.85}
+                                      style={{ transition: 'all 0.5s ease' }}
+                                    />
+                                  )}
+                                  
+                                  {/* Stay bar (Purple) */}
+                                  {t.stay > 0 && (
+                                    <rect
+                                      x={x}
+                                      y={stayY}
+                                      width={barWidth}
+                                      height={stayHeight}
+                                      rx="1"
+                                      fill="#8b5cf6"
+                                      opacity={0.85}
+                                      style={{ transition: 'all 0.5s ease' }}
+                                    />
+                                  )}
+                                  
+                                  {/* DND bar (Slate/DND) */}
+                                  {t.dnd > 0 && (
+                                    <rect
+                                      x={x}
+                                      y={dndY}
+                                      width={barWidth}
+                                      height={dndHeight}
+                                      rx="1"
+                                      fill="#475569"
+                                      opacity={0.85}
+                                      style={{ transition: 'all 0.5s ease' }}
+                                    />
+                                  )}
+                                  
+                                  {/* Label text */}
+                                  {showLabelText && (
+                                    <text
+                                      x={x + barWidth / 2}
+                                      y={height - 8}
+                                      textAnchor="middle"
+                                      fill="currentColor"
+                                      style={{ fontSize: '0.55rem', opacity: 0.7, fontWeight: 600 }}
+                                    >
+                                      {statsTimeRange === 'today' ? t.label.split(':')[0] : t.label}
+                                    </text>
+                                  )}
+                                </g>
+                              );
+                            })}
+                          </svg>
+                          
+                          {/* Legend */}
+                          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '0.75rem', fontSize: '0.7rem', fontWeight: 700, flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444', display: 'inline-block' }} />
+                              <span>{language === 'vi' ? 'Phòng Out' : language === 'ja' ? 'チェックアウト' : 'Out Rooms'}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#8b5cf6', display: 'inline-block' }} />
+                              <span>{language === 'vi' ? 'Phòng Stay' : language === 'ja' ? '滞在清掃' : 'Stay Rooms'}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#475569', display: 'inline-block' }} />
+                              <span>{language === 'vi' ? 'Phòng DND' : language === 'ja' ? '起こさないで' : 'DND Rooms'}</span>
+                            </div>
+                          </div>
+                        </div>
                       );
                     })()}
                   </div>
