@@ -61,6 +61,7 @@ export const FrontDeskDashboard: React.FC = () => {
   const isEditDisabled = useMemo(() => {
     return (activeDate < getTodayDateString()) && (currentUser?.role === 'kacho');
   }, [activeDate, currentUser]);
+  const isKacho = currentUser?.role === 'kacho' || currentUser?.role === 'admin';
   const [statsTimeRange, setStatsTimeRange] = useState<'today' | 'week' | 'month' | 'year'>('today');
   const [leaderboardPage, setLeaderboardPage] = useState<number>(1);
   const [leaderboardPerPage, setLeaderboardPerPage] = useState<number>(6);
@@ -1370,7 +1371,7 @@ export const FrontDeskDashboard: React.FC = () => {
 
       <div className="dashboard-layout">
         <aside className="sidebar-menu glass-panel">
-          {currentUser?.role === 'kacho' && (
+          {isKacho && (
             <button
               className={`sidebar-link ${activeTab === 'stats' ? 'active' : ''}`}
               onClick={() => setActiveTab('stats')}
