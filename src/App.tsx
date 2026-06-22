@@ -1,10 +1,10 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
 import { AppProvider, useApp } from './components/Common/AppContext';
 import ErrorBoundary from './components/Common/ErrorBoundary';
 import Header from './components/Common/Header';
 import ToastList from './components/Common/ToastList';
 import Login from './components/Common/Login';
-import { ArrowRight, Sun, Moon, Building, Loader2, LogOut } from 'lucide-react';
+import { ArrowRight, Sun, Moon, Building, Loader2, LogOut, LayoutGrid, List } from 'lucide-react';
 import { db, getDatabaseProvider } from './db/firebaseDB';
 import { getTodayDateString } from './db/localDB';
 import type { Hotel as HotelType } from './db/dbInterface';
@@ -20,9 +20,9 @@ const HotelSelectionPortal: React.FC = () => {
   const { selectHotel, language, setLanguage, darkMode, toggleDarkMode, currentUser, logout, addToast } = useApp();
   const [hotels, setHotels] = useState<HotelType[]>([]);
   const [cols, setCols] = useState<number | 'list'>(5);
+  const [preferredCols, setPreferredCols] = useState<number>(5);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedHotelIds, setSelectedHotelIds] = useState<string[]>([]);
-  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [scheduledHotelIds, setScheduledHotelIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -65,18 +65,28 @@ const HotelSelectionPortal: React.FC = () => {
     fetchHotels();
   }, [currentUser]);
 
-  const toggleHotelSelection = (id: string) => {
-    setSelectedHotelIds(prev => 
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
+
+
+  const incrementHotelAccess = (hotelId: string) => {
+    try {
+      const accessData = localStorage.getItem('hotelAccessCounts');
+      const counts = accessData ? JSON.parse(accessData) : {};
+      counts[hotelId] = (counts[hotelId] || 0) + 1;
+      localStorage.setItem('hotelAccessCounts', JSON.stringify(counts));
+    } catch (e) {
+      console.error('Failed to increment hotel access count:', e);
+    }
   };
 
-  const handleSelectAll = () => {
-    setSelectedHotelIds(hotels.map(h => h.id));
-  };
-
-  const handleDeselectAll = () => {
-    setSelectedHotelIds([]);
+  const getHotelAccessCount = (hotelId: string): number => {
+    try {
+      const accessData = localStorage.getItem('hotelAccessCounts');
+      if (!accessData) return 0;
+      const counts = JSON.parse(accessData);
+      return counts[hotelId] || 0;
+    } catch (e) {
+      return 0;
+    }
   };
 
   const filteredHotels = hotels.filter(hotel => {
@@ -85,6 +95,14 @@ const HotelSelectionPortal: React.FC = () => {
     const matchesSelection = selectedHotelIds.includes(hotel.id);
     return matchesSearch && matchesSelection;
   });
+
+  const sortedFilteredHotels = useMemo(() => {
+    return [...filteredHotels].sort((a, b) => {
+      const countA = getHotelAccessCount(a.id);
+      const countB = getHotelAccessCount(b.id);
+      return countB - countA;
+    });
+  }, [filteredHotels]);
 
   const portalMaxWidth = cols === 'list' ? '780px' : cols === 3 ? '1000px' : cols === 4 ? '1200px' : '1400px';
 
@@ -113,13 +131,13 @@ const HotelSelectionPortal: React.FC = () => {
       </div>
 
       <div className="text-center max-w-[600px] px-4">
-        <h1 className="text-4xl font-extrabold tracking-tight flex items-center justify-center gap-3">
-          <Building size={40} className="text-[var(--primary-color)]" />
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight flex items-center justify-center gap-3">
+          <Building className="text-[var(--primary-color)] w-8 h-8 md:w-10 md:h-10 flex-shrink-0" />
           {language === 'ja' ? '客室清掃ポータル' : language === 'vi' ? 'Cổng Chọn Khách Sạn' : 'Hotel Housekeeping Portal'}
         </h1>
-        <p className="mt-2 opacity-70 text-[0.95rem]">
+        <p className="mt-2 opacity-70 text-sm md:text-base">
           {language === 'ja' 
-            ? '管理するホテルを選択して清掃管理システムにアクセスしてください。' 
+            ? '管理するホテルを選択して清掃管理 system にアクセスしてください。' 
             : language === 'vi' 
               ? 'Vui lòng chọn khách sạn bạn muốn quản lý để truy cập hệ thống dọn phòng.' 
               : 'Please select a hotel to access the housekeeping management system.'}
@@ -127,18 +145,15 @@ const HotelSelectionPortal: React.FC = () => {
       </div>
 
       {/* Search & Layout Control Panel */}
-      <div className="glass-panel" style={{ 
-        width: '100%', 
-        maxWidth: portalMaxWidth,
-        padding: '1.25rem',
-        borderRadius: 'var(--radius-md)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1rem',
-        margin: '0 auto',
-        boxSizing: 'border-box',
-        transition: 'all 0.3s ease'
-      }}>
+      <div 
+        className="glass-panel portal-control-panel" 
+        style={{ 
+          width: '100%', 
+          maxWidth: portalMaxWidth,
+          margin: '0 auto',
+          boxSizing: 'border-box'
+        }}
+      >
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -159,103 +174,89 @@ const HotelSelectionPortal: React.FC = () => {
             <span style={{ position: 'absolute', left: '12px', top: '9px', opacity: 0.5 }}>🔍</span>
           </div>
 
-          {/* Layout & Filter controls */}
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            {/* Show/Hide Filter Button */}
-            <button 
-              className={`btn btn-secondary btn-sm`} 
-              onClick={() => setFilterPanelOpen(!filterPanelOpen)}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-            >
-              <span>⚙️</span>
-              {language === 'vi' ? 'Chọn hiển thị' : language === 'ja' ? '表示選択' : 'Display Options'}
-            </button>
-
-            {/* Column Switcher */}
+          {/* Layout Switcher: Grid vs List */}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ display: 'flex', backgroundColor: 'rgba(0,0,0,0.03)', padding: '0.2rem', borderRadius: '8px' }}>
-              {([5, 4, 3, 'list'] as const).map(option => (
-                <button
-                  key={option}
-                  className={`btn-sm`}
-                  onClick={() => setCols(option)}
-                  style={{
-                    border: 'none',
-                    background: cols === option ? 'var(--primary-color)' : 'transparent',
-                    color: cols === option ? 'white' : 'inherit',
-                    borderRadius: '6px',
-                    padding: '0.35rem 0.75rem',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  {option === 'list' 
-                    ? (language === 'vi' ? 'D.Sách' : language === 'ja' ? 'リスト' : 'List')
-                    : `${option} ${language === 'vi' ? 'Cột' : language === 'ja' ? '列' : 'Cols'}`}
-                </button>
-              ))}
+              <button
+                type="button"
+                className="btn-sm"
+                onClick={() => setCols(preferredCols)}
+                style={{
+                  border: 'none',
+                  background: cols !== 'list' ? 'var(--primary-color)' : 'transparent',
+                  color: cols !== 'list' ? 'white' : 'inherit',
+                  borderRadius: '6px',
+                  padding: '0.35rem 0.75rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <LayoutGrid size={14} />
+                <span className="portal-switcher-text">{language === 'vi' ? 'Lưới' : language === 'ja' ? 'グリッド' : 'Grid'}</span>
+              </button>
+              <button
+                type="button"
+                className="btn-sm"
+                onClick={() => setCols('list')}
+                style={{
+                  border: 'none',
+                  background: cols === 'list' ? 'var(--primary-color)' : 'transparent',
+                  color: cols === 'list' ? 'white' : 'inherit',
+                  borderRadius: '6px',
+                  padding: '0.35rem 0.75rem',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <List size={14} />
+                <span className="portal-switcher-text">{language === 'vi' ? 'Danh sách' : language === 'ja' ? 'リスト' : 'List'}</span>
+              </button>
             </div>
+
+            {/* Column Count Selector (only in Grid mode) */}
+            {cols !== 'list' && (
+              <div className="portal-cols-selector" style={{ display: 'flex', backgroundColor: 'rgba(0,0,0,0.03)', padding: '0.2rem', borderRadius: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.6, padding: '0 0.5rem' }}>
+                  {language === 'vi' ? 'Số cột:' : language === 'ja' ? '列数:' : 'Cols:'}
+                </span>
+                {([2, 3, 4, 5] as const).map(num => (
+                  <button
+                    key={num}
+                    type="button"
+                    className="btn-sm"
+                    onClick={() => {
+                      setCols(num);
+                      setPreferredCols(num);
+                    }}
+                    style={{
+                      border: 'none',
+                      background: cols === num ? 'var(--primary-color)' : 'transparent',
+                      color: cols === num ? 'white' : 'inherit',
+                      borderRadius: '6px',
+                      padding: '0.35rem 0.6rem',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '0.8rem',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Expandable Filter Panel */}
-        {filterPanelOpen && (
-          <div style={{ 
-            borderTop: '1px solid rgba(0,0,0,0.05)', 
-            paddingTop: '1rem',
-            animation: 'fadeIn 0.2s ease'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, opacity: 0.8 }}>
-                {language === 'vi' ? 'Lựa chọn các khách sạn hiển thị:' : language === 'ja' ? '表示するホテルを選択してください：' : 'Select hotels to display:'}
-              </span>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={handleSelectAll}>
-                  {language === 'vi' ? 'Chọn tất cả' : language === 'ja' ? 'すべて選択' : 'Select All'}
-                </button>
-                <button className="btn btn-secondary btn-sm" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={handleDeselectAll}>
-                  {language === 'vi' ? 'Bỏ chọn tất cả' : language === 'ja' ? 'すべて解除' : 'Deselect All'}
-                </button>
-              </div>
-            </div>
-            
-            <div style={{ 
-              display: 'flex', 
-              flexWrap: 'wrap', 
-              gap: '1rem',
-              maxHeight: '120px',
-              overflowY: 'auto',
-              padding: '0.25rem'
-            }}>
-              {hotels.map(h => (
-                <label 
-                  key={h.id} 
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '0.5rem', 
-                    cursor: 'pointer',
-                    fontSize: '0.85rem',
-                    padding: '0.35rem 0.75rem',
-                    borderRadius: '20px',
-                    backgroundColor: selectedHotelIds.includes(h.id) ? 'rgba(37, 99, 235, 0.1)' : 'rgba(0,0,0,0.03)',
-                    border: `1px solid ${selectedHotelIds.includes(h.id) ? 'rgba(37, 99, 235, 0.2)' : 'rgba(0,0,0,0.05)'}`,
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedHotelIds.includes(h.id)}
-                    onChange={() => toggleHotelSelection(h.id)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <span>{h.name} ({h.id})</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Grid of hotels */}
@@ -263,11 +264,26 @@ const HotelSelectionPortal: React.FC = () => {
         {currentUser?.role === 'admin' && (
           <div 
             className="glass-panel portal-hotel-card admin-pane-card" 
-            onClick={() => selectHotel('admin')}
-            style={{ 
+            onClick={() => {
+              incrementHotelAccess('admin');
+              selectHotel('admin');
+            }}
+            style={cols === 'list' ? {
+              padding: '0.75rem 1.25rem',
+              cursor: 'pointer',
+              border: '2px solid rgba(239, 68, 68, 0.25)', 
+              display: 'flex',
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              transition: 'all 0.3s ease',
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.02) 100%)',
+              position: 'relative',
+              gap: '1rem'
+            } : { 
               padding: '1.5rem', 
               cursor: 'pointer',
-              minHeight: cols === 'list' ? '140px' : '220px',
+              minHeight: '220px',
               border: '2px solid rgba(239, 68, 68, 0.25)', 
               display: 'flex',
               flexDirection: 'column',
@@ -278,38 +294,68 @@ const HotelSelectionPortal: React.FC = () => {
               position: 'relative'
             }}
           >
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', backgroundColor: '#ef4444' }} />
+            {cols !== 'list' ? (
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', backgroundColor: '#ef4444' }} />
+            ) : (
+              <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '6px', backgroundColor: '#ef4444' }} />
+            )}
             
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.35rem' }}>
-                <span style={{ fontSize: '1.75rem' }}>🛠️</span>
-                <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
-                  {language === 'vi' ? 'Hệ thống' : language === 'ja' ? 'システム' : 'System'}
-                </span>
-              </div>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>
-                {language === 'vi' ? 'Bảng Điều Khiển Admin' : language === 'ja' ? '管理画面 (Admin Pane)' : 'Admin Dashboard'}
-              </h2>
-              <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>system_admin</p>
-              <p style={{ fontSize: '0.8rem', marginTop: '0.5rem', opacity: 0.8, lineBreak: 'anywhere' }}>
-                {language === 'vi' 
-                  ? 'Quản lý nhân viên, cấu hình khách sạn, xem báo cáo doanh thu và cài đặt hệ thống.' 
-                  : language === 'ja'
-                    ? 'ユーザー・ホテルの管理、出勤設定、完了レポート của chi nhánh, và cài đặt hệ thống.'
-                    : 'Manage users, branch hotels, view finalized reports, and configure system databases.'}
-              </p>
-            </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', fontWeight: 600, color: '#ef4444', fontSize: '0.85rem' }}>
-              <span>
-                {language === 'ja' ? '管理画面を開く' : language === 'vi' ? 'Truy cập quản trị' : 'Open Admin Panel'}
-              </span>
-              <ArrowRight size={16} />
-            </div>
+            {cols === 'list' ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>⚙️</span>
+                  <div style={{ minWidth: 0 }}>
+                    <h2 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {language === 'vi' ? 'Bảng Điều Khiển Admin' : language === 'ja' ? '管理画面 (Admin Pane)' : 'Admin Dashboard'}
+                    </h2>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>system_admin</span>
+                  </div>
+                  <span className="badge badge-clean desktop-only-inline" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)', marginLeft: '0.5rem', flexShrink: 0 }}>
+                    {language === 'vi' ? 'Hệ thống' : language === 'ja' ? 'システム' : 'System'}
+                  </span>
+                </div>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                  <span style={{ fontWeight: 600, color: '#ef4444', fontSize: '0.8rem' }}>
+                    {language === 'ja' ? '管理画面を開く' : language === 'vi' ? 'Truy cập quản trị' : 'Open Admin Panel'}
+                  </span>
+                  <ArrowRight size={14} style={{ color: '#ef4444' }} />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="portal-hotel-card-content">
+                  <div className="portal-hotel-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.35rem' }}>
+                    <span className="portal-hotel-card-icon" style={{ fontSize: '1.75rem' }}>⚙️</span>
+                    <span className="badge badge-clean portal-hotel-card-badge-admin" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+                      {language === 'vi' ? 'Hệ thống' : language === 'ja' ? 'システム' : 'System'}
+                    </span>
+                  </div>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>
+                    {language === 'vi' ? 'Bảng Điều Khiển Admin' : language === 'ja' ? '管理画面 (Admin Pane)' : 'Admin Dashboard'}
+                  </h2>
+                  <p className="portal-hotel-card-code" style={{ fontSize: '0.8rem', opacity: 0.6 }}>system_admin</p>
+                  <p className="portal-hotel-card-desc" style={{ fontSize: '0.8rem', marginTop: '0.5rem', opacity: 0.8, lineBreak: 'anywhere' }}>
+                    {language === 'vi' 
+                      ? 'Quản lý nhân viên, cấu hình khách sạn, xem báo cáo doanh thu và cài đặt hệ thống.' 
+                      : language === 'ja'
+                        ? 'スタッフ管理、ブランチ設定、完了レポート의 閲覧、システムデータベース設定を行います。'
+                        : 'Manage users, branch hotels, view finalized reports, and configure system databases.'}
+                  </p>
+                </div>
+                
+                <div className="portal-hotel-card-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', fontWeight: 600, color: '#ef4444', fontSize: '0.85rem' }}>
+                  <span>
+                    {language === 'ja' ? '管理画面を開く' : language === 'vi' ? 'Truy cập quản trị' : 'Open Admin Panel'}
+                  </span>
+                  <ArrowRight size={16} />
+                </div>
+              </>
+            )}
           </div>
         )}
 
-        {filteredHotels.map(hotel => {
+        {sortedFilteredHotels.map(hotel => {
           const isSakura = hotel.id === 'ks1';
           const isFuji = hotel.id === 'ks2';
           const emoji = isSakura ? '🌸' : isFuji ? '🗻' : '🏨';
@@ -323,6 +369,7 @@ const HotelSelectionPortal: React.FC = () => {
 
           const handleCardClick = () => {
             if (currentUser?.role === 'admin') {
+              incrementHotelAccess(hotel.id);
               selectHotel(hotel.id);
               return;
             }
@@ -331,7 +378,7 @@ const HotelSelectionPortal: React.FC = () => {
                 language === 'vi' 
                   ? 'Khách sạn này tạm thời không hoạt động.' 
                   : language === 'ja'
-                    ? 'このホテルは現在非アクティブです。'
+                    ? 'このホテルは現在休止中です。'
                     : 'This hotel is currently inactive.',
                 'warning'
               );
@@ -342,12 +389,13 @@ const HotelSelectionPortal: React.FC = () => {
                 language === 'vi'
                   ? 'Hôm nay bạn chưa có lịch phân công dọn phòng ở khách sạn này.'
                   : language === 'ja'
-                    ? '本日、このホテルでの清掃シフトがまだ割り当てられていません。'
+                    ? '本日のシフトにこのホテルは割り当てられていません。'
                     : 'You do not have a cleaning assignment here today.',
                 'warning'
               );
               return;
             }
+            incrementHotelAccess(hotel.id);
             selectHotel(hotel.id);
           };
 
@@ -356,10 +404,23 @@ const HotelSelectionPortal: React.FC = () => {
               key={hotel.id}
               className="glass-panel portal-hotel-card" 
               onClick={handleCardClick}
-              style={{ 
+              style={cols === 'list' ? {
+                padding: '0.75rem 1.25rem', 
+                cursor: isAccessAllowed ? 'pointer' : 'not-allowed',
+                border: `2px solid ${isAccessAllowed ? color : '#e5e7eb'}26`, 
+                display: 'flex',
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                opacity: isAccessAllowed ? 1 : 0.55,
+                filter: isAccessAllowed ? 'none' : 'grayscale(0.65)',
+                transition: 'all 0.3s ease',
+                position: 'relative',
+                gap: '1rem'
+              } : { 
                 padding: '1.5rem', 
                 cursor: isAccessAllowed ? 'pointer' : 'not-allowed',
-                minHeight: cols === 'list' ? '140px' : '220px',
+                minHeight: '220px',
                 border: `2px solid ${isAccessAllowed ? color : '#e5e7eb'}26`, 
                 display: 'flex',
                 flexDirection: 'column',
@@ -370,48 +431,94 @@ const HotelSelectionPortal: React.FC = () => {
                 transition: 'all 0.3s ease'
               }}
             >
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', backgroundColor: isAccessAllowed ? color : '#9ca3af' }} />
+              {cols !== 'list' ? (
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '6px', backgroundColor: isAccessAllowed ? color : '#9ca3af' }} />
+              ) : (
+                <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: '6px', backgroundColor: isAccessAllowed ? color : '#9ca3af' }} />
+              )}
               
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.35rem' }}>
-                  <span style={{ fontSize: '1.75rem' }}>{emoji}</span>
-                  <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-                    <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: `${color}1a`, color: color, borderColor: `${color}33` }}>
-                      {badgeText}
-                    </span>
-                    {!isHotelActive && (
-                      <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
-                        {language === 'vi' ? 'Không hoạt động' : language === 'ja' ? '非アクティブ' : 'No Active'}
-                      </span>
-                    )}
-                    {isHotelActive && isHousekeeper && !isScheduled && (
-                      <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(249, 115, 22, 0.1)', color: '#f97316', borderColor: 'rgba(249, 115, 22, 0.2)' }}>
-                        {language === 'vi' ? 'Chưa phân lịch' : language === 'ja' ? 'シフト未割当' : 'No Schedule'}
-                      </span>
-                    )}
+              {cols === 'list' ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>{emoji}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <h2 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hotel.name}</h2>
+                      <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>{hotel.id}</span>
+                    </div>
+                    
+                    <div className="desktop-only-inline" style={{ marginLeft: '0.75rem', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                        <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: `${color}1a`, color: color, borderColor: `${color}33` }}>
+                          {badgeText}
+                        </span>
+                        {!isHotelActive && (
+                          <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+                            {language === 'vi' ? 'Không hoạt động' : language === 'ja' ? '非稼働' : 'No Active'}
+                          </span>
+                        )}
+                        {isHotelActive && isHousekeeper && !isScheduled && (
+                          <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(249, 115, 22, 0.1)', color: '#f97316', borderColor: 'rgba(249, 115, 22, 0.2)' }}>
+                            {language === 'vi' ? 'Chưa phân lịch' : language === 'ja' ? 'スケジュールなし' : 'No Schedule'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>{hotel.name}</h2>
-                <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>{hotel.id}</p>
-                <p style={{ fontSize: '0.8rem', marginTop: '0.5rem', opacity: 0.8, lineBreak: 'anywhere' }}>
-                  {hotel.description || (language === 'ja' ? '客室清掃管理システム' : language === 'vi' ? 'Hệ thống dọn phòng' : 'Housekeeping system')}
-                </p>
-              </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', fontWeight: 600, color: isAccessAllowed ? color : '#6b7280', fontSize: '0.85rem' }}>
-                <span>
-                  {!isHotelActive 
-                    ? (language === 'vi' ? 'Không hoạt động' : language === 'ja' ? '非アクティブ' : 'Inactive') 
-                    : (isHousekeeper && !isScheduled) 
-                      ? (language === 'vi' ? 'Chưa có lịch' : language === 'ja' ? 'シフトなし' : 'No Schedule') 
-                      : (language === 'ja' ? '選択する' : language === 'vi' ? 'Truy cập' : 'Access')}
-                </span>
-                {isAccessAllowed && <ArrowRight size={16} />}
-              </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                    <span style={{ fontWeight: 600, color: isAccessAllowed ? color : '#6b7280', fontSize: '0.8rem' }}>
+                      {!isHotelActive 
+                        ? (language === 'vi' ? 'Không hoạt động' : language === 'ja' ? '非稼働' : 'Inactive') 
+                        : (isHousekeeper && !isScheduled) 
+                          ? (language === 'vi' ? 'Chưa có lịch' : language === 'ja' ? '予定なし' : 'No Schedule') 
+                          : (language === 'ja' ? 'アクセス' : language === 'vi' ? 'Truy cập' : 'Access')}
+                    </span>
+                    {isAccessAllowed && <ArrowRight size={14} style={{ color: color }} />}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="portal-hotel-card-content">
+                    <div className="portal-hotel-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.35rem' }}>
+                      <span className="portal-hotel-card-icon" style={{ fontSize: '1.75rem' }}>{emoji}</span>
+                      <div className="portal-hotel-card-badges" style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                        <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: `${color}1a`, color: color, borderColor: `${color}33` }}>
+                          {badgeText}
+                        </span>
+                        {!isHotelActive && (
+                          <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+                            {language === 'vi' ? 'Không hoạt động' : language === 'ja' ? '非稼働' : 'No Active'}
+                          </span>
+                        )}
+                        {isHotelActive && isHousekeeper && !isScheduled && (
+                          <span className="badge badge-clean" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(249, 115, 22, 0.1)', color: '#f97316', borderColor: 'rgba(249, 115, 22, 0.2)' }}>
+                            {language === 'vi' ? 'Chưa phân lịch' : language === 'ja' ? 'スケジュールなし' : 'No Schedule'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>{hotel.name}</h2>
+                    <p className="portal-hotel-card-code" style={{ fontSize: '0.8rem', opacity: 0.6 }}>{hotel.id}</p>
+                    <p className="portal-hotel-card-desc" style={{ fontSize: '0.8rem', marginTop: '0.5rem', opacity: 0.8, lineBreak: 'anywhere' }}>
+                      {hotel.description || (language === 'ja' ? '客室清掃ポータル' : language === 'vi' ? 'Hệ thống dọn phòng' : 'Housekeeping system')}
+                    </p>
+                  </div>
+                  
+                  <div className="portal-hotel-card-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', fontWeight: 600, color: isAccessAllowed ? color : '#6b7280', fontSize: '0.85rem' }}>
+                    <span>
+                      {!isHotelActive 
+                        ? (language === 'vi' ? 'Không hoạt động' : language === 'ja' ? '非稼働' : 'Inactive') 
+                        : (isHousekeeper && !isScheduled) 
+                          ? (language === 'vi' ? 'Chưa có lịch' : language === 'ja' ? '予定なし' : 'No Schedule') 
+                          : (language === 'ja' ? 'アクセス' : language === 'vi' ? 'Truy cập' : 'Access')}
+                    </span>
+                    {isAccessAllowed && <ArrowRight size={16} />}
+                  </div>
+                </>
+              )}
             </div>
           );
-        })}
-      </div>
+        })}</div>
 
       <div style={{ opacity: 0.5, fontSize: '0.8rem', textAlign: 'center', marginTop: '2rem' }}>
         © 2026 Room Cleaning Management System. All rights reserved.

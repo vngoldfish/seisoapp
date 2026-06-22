@@ -990,6 +990,11 @@
   transition: all var(--transition-normal);
 }
 
+.portal-grid.cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 800px;
+}
+
 .portal-grid.cols-3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   max-width: 1000px;
@@ -1033,9 +1038,97 @@
   }
 }
 
+/* Portal Search & Layout Panel */
+.portal-control-panel {
+  padding: 1.25rem;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: all 0.3s ease;
+}
+
 @media (max-width: 480px) {
+  .portal-control-panel {
+    padding: 0.75rem !important;
+    gap: 0.75rem !important;
+  }
+
+  .portal-switcher-text {
+    display: none !important;
+  }
+
+  .portal-control-panel .btn-sm {
+    padding: 0.35rem 0.5rem !important;
+  }
   .portal-grid.cols-3, .portal-grid.cols-4, .portal-grid.cols-5 {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Only apply to Grid mode (not cols-list) on mobile */
+  .portal-grid:not(.cols-list) .portal-hotel-card {
+    aspect-ratio: 1 / 1;
+    min-height: unset !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding: 1rem !important;
+  }
+
+  /* Content container */
+  .portal-grid:not(.cols-list) .portal-hotel-card .portal-hotel-card-content {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* Emoji header row */
+  .portal-grid:not(.cols-list) .portal-hotel-card .portal-hotel-card-header {
+    display: flex !important;
+    justify-content: center !important;
+    margin-bottom: 0.25rem !important;
+    width: 100% !important;
+  }
+
+  /* Hide badges container inside emoji header row */
+  .portal-grid:not(.cols-list) .portal-hotel-card .portal-hotel-card-badges,
+  .portal-grid:not(.cols-list) .portal-hotel-card .portal-hotel-card-badge-admin {
+    display: none !important;
+  }
+
+  /* Style emoji span */
+  .portal-grid:not(.cols-list) .portal-hotel-card .portal-hotel-card-icon {
+    font-size: 2.25rem !important;
+  }
+
+  /* Style hotel name */
+  .portal-grid:not(.cols-list) .portal-hotel-card h2 {
+    font-size: 0.95rem !important;
+    margin: 0 0 0.15rem 0 !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+    text-align: center !important;
+  }
+
+  /* Style hotel ID (code) */
+  .portal-grid:not(.cols-list) .portal-hotel-card .portal-hotel-card-code {
+    display: block !important;
+    font-size: 0.7rem !important;
+    opacity: 0.6 !important;
+    margin: 0 !important;
+  }
+
+  /* Hide description */
+  .portal-grid:not(.cols-list) .portal-hotel-card .portal-hotel-card-desc {
+    display: none !important;
+  }
+
+  /* Hide the card footer div containing Access label/arrow */
+  .portal-grid:not(.cols-list) .portal-hotel-card .portal-hotel-card-footer {
+    display: none !important;
   }
 }
 
@@ -1135,6 +1228,31 @@
   background-color: rgba(255, 255, 255, 0.15);
   color: #ffffff !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive capsule switcher & dashboard title on mobile */
+@media (max-width: 480px) {
+  .capsule-switcher {
+    width: 100% !important;
+    display: flex !important;
+  }
+  
+  .capsule-button {
+    flex: 1 !important;
+    padding: 0.35rem 0.2rem !important;
+    font-size: 0.72rem !important;
+    justify-content: center !important;
+    gap: 0 !important;
+  }
+
+  /* Hide emojis inside the capsule buttons on mobile to prevent wrapping */
+  .capsule-button > span:first-of-type {
+    display: none !important;
+  }
+
+  .dashboard-title {
+    font-size: 1.1rem !important;
+  }
 }
 
 .date-picker-pill {

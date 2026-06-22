@@ -47,16 +47,21 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
   addToast,
   getTranslation
 }) => {
-  const [searchTerm, setSearchTerm] = React.useState('');
   const [floorFilter, setFloorFilter] = React.useState('all');
-  const [statusFilter, setStatusFilter] = React.useState('all');
+  const [cleanerFilter, setCleanerFilter] = React.useState('all');
   const [sortBy, setSortBy] = React.useState<'endedAt' | 'startedAt' | 'duration' | 'roomNumber' | 'cleanerName'>('endedAt');
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = React.useState(1);
   const [itemsPerPage, setItemsPerPage] = React.useState(10);
 
   // Filter logs for the active date
-  const dailyLogs = React.useMemo(() => logs.filter(log => log.endedAt.startsWith(activeDate)), [logs, activeDate]);
+  const dailyLogs = React.useMemo(() => {
+    return logs.filter(log => {
+      const ended = log.endedAt && log.endedAt.startsWith(activeDate);
+      const started = log.startedAt && log.startedAt.startsWith(activeDate);
+      return !!(ended || started);
+    });
+  }, [logs, activeDate]);
 
   // Extract unique floors from daily logs
   const uniqueFloors = React.useMemo(() => {
@@ -64,29 +69,23 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
     return Array.from(new Set(floors)).sort((a, b) => a - b);
   }, [dailyLogs]);
 
-  // Filter logs by search query, floor, and special statuses
+  // Extract unique cleaners from daily logs
+  const uniqueCleaners = React.useMemo(() => {
+    const names = dailyLogs.map(log => log.cleanerName).filter(Boolean);
+    return Array.from(new Set(names)).sort();
+  }, [dailyLogs]);
+
+
+
+  // Filter logs by search query, floor, cleaner, checker, and special statuses
   const filteredLogs = React.useMemo(() => {
     return dailyLogs.filter(log => {
-      const sTerm = searchTerm.trim().toLowerCase();
-      const matchesSearch = !sTerm || 
-        log.roomNumber.toLowerCase().includes(sTerm) || 
-        log.cleanerName.toLowerCase().includes(sTerm) ||
-        (log.notes && log.notes.toLowerCase().includes(sTerm));
-      
       const matchesFloor = floorFilter === 'all' || log.floor.toString() === floorFilter;
+      const matchesCleaner = cleanerFilter === 'all' || log.cleanerName === cleanerFilter;
       
-      let matchesStatus = true;
-      if (statusFilter === 'notes') {
-        matchesStatus = !!log.notes;
-      } else if (statusFilter === 'defects') {
-        matchesStatus = !!(log.errors && log.errors.length > 0);
-      } else if (statusFilter === 'photo') {
-        matchesStatus = !!log.photoAfter;
-      }
-      
-      return matchesSearch && matchesFloor && matchesStatus;
+      return matchesFloor && matchesCleaner;
     });
-  }, [dailyLogs, searchTerm, floorFilter, statusFilter]);
+  }, [dailyLogs, floorFilter, cleanerFilter]);
 
   // Sort filtered logs
   const sortedLogs = React.useMemo(() => {
@@ -127,7 +126,7 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
   // Reset to page 1 when search or filter states change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, floorFilter, statusFilter, sortBy, sortOrder, itemsPerPage]);
+  }, [floorFilter, cleanerFilter, sortBy, sortOrder, itemsPerPage]);
 
   const getVisiblePages = (curr: number, total: number) => {
     const pages: (number | string)[] = [];
@@ -230,27 +229,7 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
       {/* Toolbar: Search, Filters, Sort, Page Size */}
       <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', backgroundColor: 'var(--panel-bg-subtle)', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {/* Search Input */}
-          <div style={{ flex: '2 1 200px', position: 'relative' }}>
-            <input
-              type="text"
-              placeholder={language === 'vi' ? 'Tìm phòng, nhân viên, ghi chú...' : language === 'ja' ? '部屋、スタッフ、メモで検索...' : 'Search room, cleaner, notes...'}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="form-input"
-              style={{ width: '100%', padding: '0.4rem 2rem 0.4rem 0.75rem', fontSize: '0.85rem' }}
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm('')}
-                style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', opacity: 0.5 }}
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
+          
           {/* Floor filter */}
           <select
             value={floorFilter}
@@ -264,17 +243,17 @@ export const CleaningLogsTab: React.FC<CleaningLogsTabProps> = ({
             ))}
           </select>
 
-          {/* Status filter */}
+          {/* Cleaner filter */}
           <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            value={cleanerFilter}
+            onChange={(e) => setCleanerFilter(e.target.value)}
             className="form-input"
-            style={{ flex: '1 1 120px', padding: '0.4rem 0.5rem', fontSize: '0.85rem', height: 'auto' }}
+            style={{ flex: '1 1 130px', padding: '0.4rem 0.5rem', fontSize: '0.85rem', height: 'auto' }}
           >
-            <option value="all">{language === 'vi' ? 'Tất cả trạng thái' : language === 'ja' ? 'すべての状態' : 'All Status'}</option>
-            <option value="notes">{language === 'vi' ? 'Có ghi chú' : language === 'ja' ? 'メモあり' : 'Has Notes'}</option>
-            <option value="defects">{language === 'vi' ? 'Có lỗi phát hiện' : language === 'ja' ? '不備あり' : 'Has Defects'}</option>
-            <option value="photo">{language === 'vi' ? 'Có ảnh dọn dẹp' : language === 'ja' ? '写真あり' : 'Has Photos'}</option>
+            <option value="all">{language === 'vi' ? 'Tất cả nhân viên' : language === 'ja' ? 'すべての清掃員' : 'All Cleaners'}</option>
+            {uniqueCleaners.map(cleaner => (
+              <option key={cleaner} value={cleaner}>{cleaner}</option>
+            ))}
           </select>
 
           {/* Sort field */}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../Common/AppContext';
+import { CleaningLogsTab } from '../Admin/components/CleaningLogsTab';
 import { getTranslation } from '../../i18n/translations';
 import { db } from '../../db/firebaseDB';
 import type { Room, CleaningLog, User } from '../../db/dbInterface';
@@ -125,7 +126,7 @@ const getVisiblePages = (current: number, total: number) => {
 };
 
 export const CheckerDashboard: React.FC = () => {
-  const { currentUser, language, addToast, activeDate, logout, darkMode, toggleDarkMode, setLanguage, hotelId, isLocked } = useApp();
+  const { currentUser, language, addToast, activeDate, logout, darkMode, toggleDarkMode, setLanguage, hotelId, isLocked, selectHotel } = useApp();
   const isEditDisabled = useMemo(() => {
     return (activeDate < getTodayDateString()) && (currentUser?.role === 'checka');
   }, [activeDate, currentUser]);
@@ -1608,7 +1609,7 @@ export const CheckerDashboard: React.FC = () => {
     <div className="main-content">
       {/* Title Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+        <h2 className="dashboard-title" style={{ fontSize: '1.5rem', fontWeight: 700 }}>
           {language === 'vi' ? 'Màn hình Giám sát / Kiểm phòng' : language === 'ja' ? '客室検査ダッシュボード' : 'Room Checker Dashboard'}
         </h2>
       </div>
@@ -1643,6 +1644,22 @@ export const CheckerDashboard: React.FC = () => {
           >
             <Users size={16} />
             <span>{language === 'vi' ? 'Phân công dọn dẹp' : language === 'ja' ? '出勤スタッフ設定' : 'Staff Assignment'}</span>
+          </button>
+
+          {/* Quay về Chọn Khách Sạn Link */}
+          <button
+            className="sidebar-link portal-back-link"
+            onClick={() => selectHotel('portal')}
+            style={{ 
+              marginTop: '1.25rem', 
+              borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+              paddingTop: '1rem',
+              color: 'var(--primary-color)',
+              fontWeight: 600
+            }}
+          >
+            <Building size={16} />
+            <span>{language === 'vi' ? 'Chọn khách sạn' : language === 'ja' ? '店舗選択に戻る' : 'Select Hotel'}</span>
           </button>
 
           <div className="sidebar-mobile-actions">
@@ -3137,157 +3154,14 @@ export const CheckerDashboard: React.FC = () => {
 
           {/* Logs View */}
           {activeTab === 'logs' && (
-            <div className="glass-panel" style={{ padding: '1.5rem' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.5rem' }}>{getTranslation(language, 'cleaningSummary')}</h3>
-              {logs.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '3rem', opacity: 0.6 }}>{getTranslation(language, 'noData')}</div>
-              ) : (
-                <>
-                  {/* Desktop view: Table */}
-                  <div className="desktop-only-block" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
-                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.05)', paddingBottom: '0.5rem' }}>
-                          <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'roomNumber')}</th>
-                          <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'cleanerName')}</th>
-                          <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Người duyệt' : language === 'ja' ? '検査者' : 'Checked By'}</th>
-                          <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Bắt đầu' : 'Start'}</th>
-                          <th style={{ padding: '0.75rem 0.5rem' }}>{language === 'vi' ? 'Kết thúc' : 'Finish'}</th>
-                          <th style={{ padding: '0.75rem 0.5rem' }}>Duration</th>
-                          <th style={{ padding: '0.75rem 0.5rem' }}>{getTranslation(language, 'notes')}</th>
-                          <th style={{ padding: '0.75rem 0.5rem' }}>Photo</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {logs
-                          .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
-                          .map(log => (
-                             <tr key={log.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                              <td style={{ padding: '0.75rem 0.5rem', fontWeight: 700 }}>
-                                {log.roomNumber} <span style={{ fontSize: '0.75rem', fontWeight: 400, opacity: 0.6 }}>({log.floor}F)</span>
-                              </td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{log.cleanerName}</td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>
-                                {log.checkedBy ? (
-                                  <span style={{ fontWeight: 500 }}>
-                                    {log.checkedBy}
-                                    <span style={{ fontSize: '0.75rem', opacity: 0.6, display: 'block' }}>
-                                      {new Date(log.checkedAt!).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
-                                    </span>
-                                  </span>
-                                ) : (
-                                  <span style={{ opacity: 0.4 }}>—</span>
-                                )}
-                              </td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
-                                {new Date(log.startedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
-                              </td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.8rem' }}>
-                                {new Date(log.endedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}
-                              </td>
-                              <td style={{ padding: '0.75rem 0.5rem' }}>
-                                <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
-                              </td>
-                              <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem' }}>
-                                {log.notes && (
-                                  <div style={{ marginBottom: '0.25rem' }}>
-                                    <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>🧹 {language === 'vi' ? 'Ghi chú NV:' : language === 'ja' ? '清掃員メモ:' : 'Cleaner Notes:'}</span> {log.notes}
-                                  </div>
-                                )}
-                                {log.checkerNotes && (
-                                  <div style={{ marginBottom: '0.25rem' }}>
-                                    <span style={{ fontSize: '0.75rem', opacity: 0.6, color: 'var(--status-maintenance)' }}>🔍 {language === 'vi' ? 'Người check:' : language === 'ja' ? '指摘メモ:' : 'Checker Notes:'}</span> {log.checkerNotes}
-                                  </div>
-                                )}
-                                {log.errors && log.errors.length > 0 ? (
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.15rem', marginTop: '0.25rem' }}>
-                                    {log.errors.map((e, idx) => (
-                                      <span key={idx} style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '3px' }}>
-                                        {translateDefect(e, language)}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : log.checkedBy ? (
-                                  <div style={{ fontSize: '0.75rem', color: 'var(--status-clean)', fontWeight: 500, marginTop: '0.25rem' }}>
-                                    ✓ {language === 'vi' ? 'Đạt 100%' : language === 'ja' ? '100%合格' : 'Passed 100%'}
-                                  </div>
-                                ) : null}
-                              </td>
-                              <td style={{ padding: '0.75rem 0.5rem' }}>
-                                {log.photoAfter ? (
-                                  <a href={log.photoAfter} target="_blank" rel="noreferrer" style={{ color: 'var(--primary-color)', fontSize: '0.8rem', fontWeight: 600 }}>
-                                    {language === 'vi' ? 'Xem ảnh' : language === 'ja' ? '写真を見る' : 'View Photo'}
-                                  </a>
-                                ) : (
-                                  <span style={{ opacity: 0.4, fontSize: '0.8rem' }}>{language === 'vi' ? 'Không ảnh' : language === 'ja' ? '写真なし' : 'No Photo'}</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Mobile view: Cards/Boxes */}
-                  <div className="mobile-only-block" style={{ width: '100%' }}>
-                    {logs
-                      .sort((a, b) => new Date(b.endedAt).getTime() - new Date(a.endedAt).getTime())
-                      .map(log => (
-                        <div key={log.id} className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: '4px solid var(--primary-color)', position: 'relative' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                            <span style={{ fontWeight: 700, fontSize: '1rem' }}>Room {log.roomNumber} ({log.floor}F)</span>
-                            <span className="badge badge-clean" style={{ fontSize: '0.65rem' }}>{log.durationMinutes} mins</span>
-                          </div>
-                          <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                            <strong>{getTranslation(language, 'cleanerName')}:</strong> {log.cleanerName}
-                          </div>
-                          {log.checkedBy && (
-                            <div style={{ fontSize: '0.85rem', marginBottom: '0.35rem' }}>
-                              <strong>{language === 'vi' ? 'Người duyệt:' : language === 'ja' ? '検査者:' : 'Checked By:'}</strong> {log.checkedBy} <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>({new Date(log.checkedAt!).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })})</span>
-                            </div>
-                          )}
-                          <div style={{ fontSize: '0.8rem', opacity: 0.8, display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
-                            <span>🕒 {language === 'vi' ? 'Bắt đầu' : 'Start'}: {new Date(log.startedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}</span>
-                            <span>⌛ {language === 'vi' ? 'Kết thúc' : 'Finish'}: {new Date(log.endedAt).toLocaleString(language === 'vi' ? 'vi-VN' : language === 'ja' ? 'ja-JP' : 'en-US', { dateStyle: 'short', timeStyle: 'short' })}</span>
-                          </div>
-                          {(log.notes || log.checkerNotes || (log.errors && log.errors.length > 0)) && (
-                            <div style={{ fontSize: '0.8rem', backgroundColor: 'rgba(0,0,0,0.02)', padding: '0.5rem', borderRadius: '6px', marginBottom: '0.5rem', borderLeft: '3px solid var(--primary-color)' }}>
-                              {log.notes && (
-                                <div style={{ marginBottom: '0.25rem' }}>
-                                  <strong>🧹 {language === 'vi' ? 'Ghi chú NV:' : language === 'ja' ? '清掃員メモ:' : 'Cleaner Notes:'}</strong> {log.notes}
-                                </div>
-                              )}
-                              {log.checkerNotes && (
-                                <div style={{ marginBottom: '0.25rem' }}>
-                                  <strong>🔍 {language === 'vi' ? 'Ghi chú kiểm phòng:' : language === 'ja' ? '検査指摘メモ:' : 'Checker Notes:'}</strong> {log.checkerNotes}
-                                </div>
-                              )}
-                              {log.errors && log.errors.length > 0 && (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginTop: '0.35rem' }}>
-                                  {log.errors.map((e, idx) => (
-                                    <span key={idx} style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', backgroundColor: 'rgba(239, 68, 68, 0.08)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '3px' }}>
-                                      ❌ {translateDefect(e, language)}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          <div style={{ marginTop: '0.5rem' }}>
-                            {log.photoAfter ? (
-                              <a href={log.photoAfter} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm" style={{ display: 'inline-flex', padding: '0.25rem 0.75rem', fontSize: '0.75rem', alignItems: 'center' }}>
-                                🖼️ {language === 'vi' ? 'Xem ảnh' : language === 'ja' ? '写真を見る' : 'View Photo'}
-                              </a>
-                            ) : (
-                              <span style={{ opacity: 0.5, fontSize: '0.75rem' }}>🚫 {language === 'vi' ? 'Không có ảnh' : language === 'ja' ? '写真なし' : 'No Photo'}</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </>
-              )}
-            </div>
+            <CleaningLogsTab
+              language={language}
+              logs={logs}
+              activeDate={activeDate}
+              selectedHotelId={hotelId}
+              addToast={addToast}
+              getTranslation={getTranslation}
+            />
           )}
 
           {activeTab === 'staff' && (

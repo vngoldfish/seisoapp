@@ -845,6 +845,22 @@ export const AdminDashboard: React.FC = () => {
             <span>{getTranslation(language, 'resetDatabase')}</span>
           </button>
 
+          {/* Quay về Chọn Khách Sạn Link */}
+          <button
+            className="sidebar-link portal-back-link"
+            onClick={() => selectHotel('portal')}
+            style={{ 
+              marginTop: '1.25rem', 
+              borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+              paddingTop: '1rem',
+              color: 'var(--primary-color)',
+              fontWeight: 600
+            }}
+          >
+            <Building size={16} />
+            <span>{language === 'vi' ? 'Chọn khách sạn' : language === 'ja' ? '店舗選択に戻る' : 'Select Hotel'}</span>
+          </button>
+
           <div className="sidebar-mobile-actions">
             <div className="mobile-action-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

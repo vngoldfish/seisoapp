@@ -3,7 +3,7 @@ import { useApp } from '../Common/AppContext';
 import { getTranslation } from '../../i18n/translations';
 import { db } from '../../db/firebaseDB';
 import type { Room } from '../../db/dbInterface';
-import { Play, CheckCircle, Camera, Check, Sparkles, Filter, ClipboardList, AlertTriangle, Sun, Moon, LogOut, User, Maximize2, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, CheckCircle, Camera, Check, Sparkles, Filter, ClipboardList, AlertTriangle, Sun, Moon, LogOut, User, Maximize2, Minimize2, ChevronLeft, ChevronRight, Building } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { getDateLockedMessage, isDateLockedError } from '../../utils/errors';
 
@@ -600,7 +600,21 @@ export const HousekeepingDashboard: React.FC<HousekeepingDashboardProps> = ({ is
       <div className="main-content">
         <div className="dashboard-layout">
           <aside className="sidebar-menu mobile-only-sidebar glass-panel">
-          <div className="sidebar-mobile-actions" style={{ marginTop: '0' }}>
+            {/* Quay về Chọn Khách Sạn Link */}
+            <button
+              className="sidebar-link portal-back-link"
+              onClick={() => selectHotel('portal')}
+              style={{ 
+                margin: '0.75rem 0.75rem 0 0.75rem',
+                color: 'var(--primary-color)',
+                fontWeight: 600
+              }}
+            >
+              <Building size={16} />
+              <span>{language === 'vi' ? 'Chọn khách sạn' : language === 'ja' ? '店舗選択に戻る' : 'Select Hotel'}</span>
+            </button>
+
+            <div className="sidebar-mobile-actions" style={{ marginTop: '0', borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: '1rem' }}>
             {/* User Profile & Logout */}
             <div className="mobile-action-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
