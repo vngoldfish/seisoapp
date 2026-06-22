@@ -85,6 +85,24 @@ const translateDefect = (defect: string, lang: string): string => {
   }
 };
 
+const getFormattedLogTime = (isoString?: string, showDate: boolean = false): string => {
+  if (!isoString) return '';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return '';
+    const hours = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    if (!showDate) {
+      return `${hours}:${mins}`;
+    }
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${hours}:${mins} ${day}/${month}`;
+  } catch {
+    return '';
+  }
+};
+
 const getVisiblePages = (current: number, total: number) => {
   if (total <= 5) {
     return Array.from({ length: total }, (_, i) => i + 1);
@@ -112,6 +130,13 @@ export const CheckerDashboard: React.FC = () => {
     return (activeDate < getTodayDateString()) && (currentUser?.role === 'checka');
   }, [activeDate, currentUser]);
   const [statsTimeRange, setStatsTimeRange] = useState<'today' | 'week' | 'month' | 'year'>('today');
+  const [hoveredBarIdx, setHoveredBarIdx] = useState<number | null>(null);
+  const [selectedBarIdx, setSelectedBarIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    setHoveredBarIdx(null);
+    setSelectedBarIdx(null);
+  }, [statsTimeRange]);
   const [leaderboardSortBy, setLeaderboardSortBy] = useState<'count' | 'time'>('count');
   const [leaderboardSortOrder, setLeaderboardSortOrder] = useState<'asc' | 'desc'>('desc');
   const [leaderboardPage, setLeaderboardPage] = useState<number>(1);
@@ -1244,7 +1269,7 @@ export const CheckerDashboard: React.FC = () => {
     // Calculate Defects/Errors Stats
     let totalErrors = 0;
     const errorTypeMap: Record<string, number> = {};
-    const cleanerErrorMap: Record<string, { name: string; count: number; errorList: string[] }> = {};
+    const cleanerErrorMap: Record<string, { name: string; count: number; errorList: { errorName: string; roomNumber: string; time: string; checkerName: string }[] }> = {};
 
     rangeLogs.forEach(log => {
       if (log.errors && log.errors.length > 0) {
@@ -1258,7 +1283,20 @@ export const CheckerDashboard: React.FC = () => {
           cleanerErrorMap[key] = { name: key, count: 0, errorList: [] };
         }
         cleanerErrorMap[key].count += log.errors.length;
-        cleanerErrorMap[key].errorList.push(...log.errors);
+
+        const timeStr = log.checkedAt 
+          ? getFormattedLogTime(log.checkedAt, statsTimeRange !== 'today') 
+          : (log.endedAt ? getFormattedLogTime(log.endedAt, statsTimeRange !== 'today') : '');
+        const checker = log.checkedBy || 'Unknown';
+
+        log.errors.forEach(err => {
+          cleanerErrorMap[key].errorList.push({
+            errorName: err,
+            roomNumber: log.roomNumber,
+            time: timeStr,
+            checkerName: checker
+          });
+        });
       }
     });
 
@@ -2003,109 +2041,216 @@ export const CheckerDashboard: React.FC = () => {
                       const colWidth = usableWidth / branchStats.hourlyTrend.length;
                       const barWidth = Math.max(4, colWidth - 6);
 
+                      const totals = branchStats.hourlyTrend.reduce(
+                        (acc, t) => {
+                          acc.out += t.out;
+                          acc.stay += t.stay;
+                          acc.dnd += t.dnd;
+                          return acc;
+                        },
+                        { out: 0, stay: 0, dnd: 0 }
+                      );
+
+                      const activeIdx = hoveredBarIdx !== null ? hoveredBarIdx : selectedBarIdx;
+
                       return (
                         <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
-                          <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
-                            {/* Y-axis helper lines */}
-                            {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
-                              const val = Math.round(maxCount * ratio);
-                              const y = height - paddingBottom - (ratio * usableHeight);
-                              return (
-                                <g key={idx} opacity={0.15}>
-                                  <line x1={paddingLeft} y1={y} x2={width - paddingRight} y2={y} stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
-                                  <text x={paddingLeft - 5} y={y + 3} textAnchor="end" fill="currentColor" style={{ fontSize: '0.6rem', fontWeight: 600 }}>{val}</text>
-                                </g>
-                              );
-                            })}
-                            
-                            {/* Bars and labels */}
-                            {branchStats.hourlyTrend.map((t, i) => {
-                              const outHeight = (t.out / maxCount) * usableHeight;
-                              const stayHeight = (t.stay / maxCount) * usableHeight;
-                              const dndHeight = (t.dnd / maxCount) * usableHeight;
-                              
-                              const x = paddingLeft + i * colWidth + (colWidth - barWidth) / 2;
-                              
-                              const outY = height - paddingBottom - outHeight;
-                              const stayY = outY - stayHeight;
-                              const dndY = stayY - dndHeight;
+                          {/* Summary Subtitle */}
+                          <div style={{ fontSize: '0.75rem', opacity: 0.8, paddingBottom: '0.5rem', marginBottom: '0.75rem', borderBottom: '1px solid rgba(0,0,0,0.05)', fontWeight: 600, textAlign: 'center' }}>
+                            {language === 'vi' 
+                              ? `Tổng: ${totals.out + totals.stay + totals.dnd} phòng (Out: ${totals.out}, Stay: ${totals.stay}, DND: ${totals.dnd})`
+                              : language === 'ja'
+                                ? `合計: ${totals.out + totals.stay + totals.dnd} 室 (アウト: ${totals.out}, 滞在: ${totals.stay}, DND: ${totals.dnd})`
+                                : `Total: ${totals.out + totals.stay + totals.dnd} rooms (Out: ${totals.out}, Stay: ${totals.stay}, DND: ${totals.dnd})`}
+                          </div>
 
-                              const showLabelText = branchStats.hourlyTrend.length <= 12 || i % 5 === 0 || i === branchStats.hourlyTrend.length - 1;
+                          <div style={{ position: 'relative', width: '100%' }}>
+                            <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
+                              {/* Y-axis helper lines */}
+                              {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                                const val = Math.round(maxCount * ratio);
+                                const y = height - paddingBottom - (ratio * usableHeight);
+                                return (
+                                  <g key={idx} opacity={0.15}>
+                                    <line x1={paddingLeft} y1={y} x2={width - paddingRight} y2={y} stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
+                                    <text x={paddingLeft - 5} y={y + 3} textAnchor="end" fill="currentColor" style={{ fontSize: '0.6rem', fontWeight: 600 }}>{val}</text>
+                                  </g>
+                                );
+                              })}
+                              
+                              {/* Bars and labels */}
+                              {branchStats.hourlyTrend.map((t, i) => {
+                                const outHeight = (t.out / maxCount) * usableHeight;
+                                const stayHeight = (t.stay / maxCount) * usableHeight;
+                                const dndHeight = (t.dnd / maxCount) * usableHeight;
+                                
+                                const x = paddingLeft + i * colWidth + (colWidth - barWidth) / 2;
+                                
+                                const outY = height - paddingBottom - outHeight;
+                                const stayY = outY - stayHeight;
+                                const dndY = stayY - dndHeight;
 
-                              return (
-                                <g key={i}>
-                                  {/* Out bar (Red) */}
-                                  {t.out > 0 && (
+                                const showLabelText = branchStats.hourlyTrend.length <= 12 || i % 5 === 0 || i === branchStats.hourlyTrend.length - 1;
+                                const isBarActive = activeIdx === i;
+                                const isAnyBarActive = activeIdx !== null;
+                                const barOpacity = isAnyBarActive ? (isBarActive ? 1 : 0.3) : 0.85;
+
+                                return (
+                                  <g key={i}>
+                                    {/* Vertical highlight guide behind active bar */}
+                                    {isBarActive && (
+                                      <rect
+                                        x={x - 2}
+                                        y={paddingTop - 5}
+                                        width={barWidth + 4}
+                                        height={usableHeight + 10}
+                                        fill="currentColor"
+                                        opacity={darkMode ? 0.12 : 0.08}
+                                        rx="2"
+                                      />
+                                    )}
+
+                                    {/* Out bar (Red) */}
+                                    {t.out > 0 && (
+                                      <rect
+                                        x={x}
+                                        y={outY}
+                                        width={barWidth}
+                                        height={outHeight}
+                                        rx="1"
+                                        fill="#ef4444"
+                                        opacity={barOpacity}
+                                        style={{ transition: 'all 0.3s ease' }}
+                                      />
+                                    )}
+                                    
+                                    {/* Stay bar (Purple) */}
+                                    {t.stay > 0 && (
+                                      <rect
+                                        x={x}
+                                        y={stayY}
+                                        width={barWidth}
+                                        height={stayHeight}
+                                        rx="1"
+                                        fill="#8b5cf6"
+                                        opacity={barOpacity}
+                                        style={{ transition: 'all 0.3s ease' }}
+                                      />
+                                    )}
+                                    
+                                    {/* DND bar (Slate/DND) */}
+                                    {t.dnd > 0 && (
+                                      <rect
+                                        x={x}
+                                        y={dndY}
+                                        width={barWidth}
+                                        height={dndHeight}
+                                        rx="1"
+                                        fill="#475569"
+                                        opacity={barOpacity}
+                                        style={{ transition: 'all 0.3s ease' }}
+                                      />
+                                    )}
+                                    
+                                    {/* Label text */}
+                                    {showLabelText && (
+                                      <text
+                                        x={x + barWidth / 2}
+                                        y={height - 8}
+                                        textAnchor="middle"
+                                        fill="currentColor"
+                                        style={{ fontSize: '0.55rem', opacity: isBarActive ? 1 : 0.7, fontWeight: isBarActive ? 700 : 600 }}
+                                      >
+                                        {statsTimeRange === 'today' ? t.label.split(':')[0] : t.label}
+                                      </text>
+                                    )}
+
+                                    {/* Transparent interaction overlay covering full vertical grid height */}
                                     <rect
-                                      x={x}
-                                      y={outY}
-                                      width={barWidth}
-                                      height={outHeight}
-                                      rx="1"
-                                      fill="#ef4444"
-                                      opacity={0.85}
-                                      style={{ transition: 'all 0.5s ease' }}
+                                      x={x - (colWidth - barWidth) / 2}
+                                      y={paddingTop}
+                                      width={colWidth}
+                                      height={usableHeight}
+                                      fill="transparent"
+                                      style={{ cursor: 'pointer' }}
+                                      onMouseEnter={() => setHoveredBarIdx(i)}
+                                      onMouseLeave={() => setHoveredBarIdx(null)}
+                                      onClick={() => setSelectedBarIdx(selectedBarIdx === i ? null : i)}
                                     />
-                                  )}
-                                  
-                                  {/* Stay bar (Purple) */}
-                                  {t.stay > 0 && (
-                                    <rect
-                                      x={x}
-                                      y={stayY}
-                                      width={barWidth}
-                                      height={stayHeight}
-                                      rx="1"
-                                      fill="#8b5cf6"
-                                      opacity={0.85}
-                                      style={{ transition: 'all 0.5s ease' }}
-                                    />
-                                  )}
-                                  
-                                  {/* DND bar (Slate/DND) */}
-                                  {t.dnd > 0 && (
-                                    <rect
-                                      x={x}
-                                      y={dndY}
-                                      width={barWidth}
-                                      height={dndHeight}
-                                      rx="1"
-                                      fill="#475569"
-                                      opacity={0.85}
-                                      style={{ transition: 'all 0.5s ease' }}
-                                    />
-                                  )}
-                                  
-                                  {/* Label text */}
-                                  {showLabelText && (
-                                    <text
-                                      x={x + barWidth / 2}
-                                      y={height - 8}
-                                      textAnchor="middle"
-                                      fill="currentColor"
-                                      style={{ fontSize: '0.55rem', opacity: 0.7, fontWeight: 600 }}
-                                    >
-                                      {statsTimeRange === 'today' ? t.label.split(':')[0] : t.label}
-                                    </text>
-                                  )}
-                                </g>
-                              );
-                            })}
-                          </svg>
+                                  </g>
+                                );
+                              })}
+                            </svg>
+
+                            {/* Interactive Tooltip Card */}
+                            {activeIdx !== null && branchStats.hourlyTrend[activeIdx] && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  left: `${((paddingLeft + activeIdx * colWidth + colWidth / 2) / width) * 100}%`,
+                                  top: `${Math.max(5, height - paddingBottom - (branchStats.hourlyTrend[activeIdx].total / maxCount) * usableHeight - 85)}px`,
+                                  transform: 'translateX(-50%)',
+                                  backgroundColor: darkMode ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                                  color: darkMode ? '#f8fafc' : '#0f172a',
+                                  padding: '0.4rem 0.6rem',
+                                  borderRadius: '6px',
+                                  fontSize: '0.65rem',
+                                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                                  border: darkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
+                                  pointerEvents: 'none',
+                                  zIndex: 10,
+                                  minWidth: '95px',
+                                  backdropFilter: 'blur(4px)',
+                                  transition: 'left 0.2s ease, top 0.2s ease'
+                                }}
+                              >
+                                <div style={{ fontWeight: 700, borderBottom: '1px solid rgba(128,128,128,0.2)', paddingBottom: '0.2rem', marginBottom: '0.2rem', textAlign: 'center' }}>
+                                  {branchStats.hourlyTrend[activeIdx].label}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#ef4444', display: 'inline-block' }} />
+                                      Out:
+                                    </span>
+                                    <span style={{ fontWeight: 700, color: '#ef4444' }}>{branchStats.hourlyTrend[activeIdx].out}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#8b5cf6', display: 'inline-block' }} />
+                                      Stay:
+                                    </span>
+                                    <span style={{ fontWeight: 700, color: '#8b5cf6' }}>{branchStats.hourlyTrend[activeIdx].stay}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#475569', display: 'inline-block' }} />
+                                      DND:
+                                    </span>
+                                    <span style={{ fontWeight: 700, color: '#94a3b8' }}>{branchStats.hourlyTrend[activeIdx].dnd}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', borderTop: '1px solid rgba(128,128,128,0.2)', paddingTop: '0.15rem', marginTop: '0.15rem' }}>
+                                    <span style={{ fontWeight: 700 }}>{language === 'vi' ? 'Tổng:' : language === 'ja' ? '合計:' : 'Total:'}</span>
+                                    <span style={{ fontWeight: 800 }}>{branchStats.hourlyTrend[activeIdx].total}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                           
                           {/* Legend */}
                           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '0.75rem', fontSize: '0.7rem', fontWeight: 700, flexWrap: 'wrap' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#ef4444', display: 'inline-block' }} />
-                              <span>{language === 'vi' ? 'Phòng Out' : language === 'ja' ? 'チェックアウト' : 'Out Rooms'}</span>
+                              <span>{language === 'vi' ? `Phòng Out (${totals.out})` : language === 'ja' ? `チェックアウト (${totals.out})` : `Out Rooms (${totals.out})`}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#8b5cf6', display: 'inline-block' }} />
-                              <span>{language === 'vi' ? 'Phòng Stay' : language === 'ja' ? '滞在清掃' : 'Stay Rooms'}</span>
+                              <span>{language === 'vi' ? `Phòng Stay (${totals.stay})` : language === 'ja' ? `滞在清掃 (${totals.stay})` : `Stay Rooms (${totals.stay})`}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#475569', display: 'inline-block' }} />
-                              <span>{language === 'vi' ? 'Phòng DND' : language === 'ja' ? '起こさないで' : 'DND Rooms'}</span>
+                              <span>{language === 'vi' ? `Phòng DND (${totals.dnd})` : language === 'ja' ? `起こさないで (${totals.dnd})` : `DND Rooms (${totals.dnd})`}</span>
                             </div>
                           </div>
                         </div>
@@ -2457,11 +2602,20 @@ export const CheckerDashboard: React.FC = () => {
                                   <span style={{ color: 'var(--status-maintenance)' }}>{cleaner.count} {language === 'vi' ? 'lỗi' : language === 'ja' ? '不備' : 'errors'}</span>
                                 </div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                                  {cleaner.errorList.map((err, idx) => (
-                                    <span key={idx} className="badge badge-dirty" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                                      {err}
-                                    </span>
-                                  ))}
+                                  {cleaner.errorList.map((err, idx) => {
+                                    const translatedText = translateDefect(err.errorName, language);
+                                    const roomLabel = language === 'vi' ? `P.${err.roomNumber}` : language === 'ja' ? `部屋${err.roomNumber}` : `Rm.${err.roomNumber}`;
+                                    const checkerLabel = language === 'vi' ? `Check: ${err.checkerName}` : language === 'ja' ? `確認: ${err.checkerName}` : `Checker: ${err.checkerName}`;
+                                    const timeLabel = err.time;
+                                    const details = [roomLabel, timeLabel, checkerLabel].filter(Boolean).join(' - ');
+                                    
+                                    return (
+                                      <span key={idx} className="badge badge-dirty" style={{ fontSize: '0.65rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-maintenance)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '0.25rem 0.4rem', borderRadius: '4px', display: 'inline-flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                                        <strong>{translatedText}</strong>
+                                        <span style={{ opacity: 0.75 }}>({details})</span>
+                                      </span>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             ))}
