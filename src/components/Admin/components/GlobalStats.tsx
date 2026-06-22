@@ -39,7 +39,6 @@ interface GlobalStatsProps {
     totalItems: number;
   };
   setManagingHotel: (hotel: HotelType) => void;
-  selectHotel: (id: string) => void;
   setBranchTab: (tab: any) => void;
   getVisiblePages: (curr: number, total: number) => (number | string)[];
 }
@@ -60,7 +59,6 @@ export const GlobalStats: React.FC<GlobalStatsProps> = ({
   setHotelSortOrder,
   processedHotelsData,
   setManagingHotel,
-  selectHotel,
   setBranchTab,
   getVisiblePages
 }) => {
@@ -528,7 +526,6 @@ export const GlobalStats: React.FC<GlobalStatsProps> = ({
                   }}
                   onClick={() => {
                     setManagingHotel(h);
-                    selectHotel(h.id);
                     setBranchTab('stats');
                   }}
                   title={language === 'vi' ? 'Xem chi tiết chi nhánh' : 'View branch details'}

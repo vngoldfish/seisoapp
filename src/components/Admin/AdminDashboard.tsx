@@ -100,7 +100,6 @@ export const AdminDashboard: React.FC = () => {
   const [hotelUsers, setHotelUsers] = useState<User[]>([]);
   const [logs, setLogs] = useState<CleaningLog[]>([]);
   const [hotels, setHotels] = useState<HotelType[]>([]);
-  const selectedHotelId = hotelId;
   const [cleaners, setCleaners] = useState<User[]>([]);
   const [activeStaffIds, setActiveStaffIds] = useState<string[]>([]);
   const [allActiveStaff, setAllActiveStaff] = useState<Record<string, string[]>>({});
@@ -127,6 +126,7 @@ export const AdminDashboard: React.FC = () => {
   // Detailed branch states
   const [managingHotel, setManagingHotel] = useState<HotelType | null>(null);
   const [managingHotelStaff, setManagingHotelStaff] = useState<User[]>([]);
+  const selectedHotelId = managingHotel ? managingHotel.id : hotelId;
 
   const hasInitializedRef = useRef(false);
 
@@ -152,7 +152,6 @@ export const AdminDashboard: React.FC = () => {
         const foundHotel = hotels.find(h => h.id === hotelIdParam);
         if (foundHotel) {
           setManagingHotel(foundHotel);
-          selectHotel(foundHotel.id);
           if (branchTabParam && ['stats', 'grid', 'staff', 'rooms', 'linkStaff', 'users', 'settings'].includes(branchTabParam)) {
             setBranchTab(branchTabParam as any);
           }
@@ -968,7 +967,6 @@ export const AdminDashboard: React.FC = () => {
               setHotelSortOrder={setHotelSortOrder}
               processedHotelsData={processedHotelsData}
               setManagingHotel={setManagingHotel}
-              selectHotel={selectHotel}
               setBranchTab={setBranchTab}
               getVisiblePages={getVisiblePages}
             />
@@ -995,7 +993,6 @@ export const AdminDashboard: React.FC = () => {
               handleEditHotelClick={handleEditHotelClick}
               handleDeleteHotel={handleDeleteHotel}
               setManagingHotel={setManagingHotel}
-              selectHotel={selectHotel}
               setBranchTab={setBranchTab}
               hotelId={selectedHotelId}
               getTranslation={getTranslation}

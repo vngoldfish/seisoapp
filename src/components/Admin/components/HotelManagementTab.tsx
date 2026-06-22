@@ -27,7 +27,6 @@ interface HotelManagementTabProps {
   handleEditHotelClick: (hotel: HotelType) => void;
   handleDeleteHotel: (id: string) => void;
   setManagingHotel: (hotel: HotelType | null) => void;
-  selectHotel: (id: string) => void;
   setBranchTab: (tab: any) => void;
   hotelId: string;
   getTranslation: (lang: any, key: any) => string;
@@ -53,7 +52,6 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
   handleEditHotelClick,
   handleDeleteHotel,
   setManagingHotel,
-  selectHotel,
   setBranchTab,
   hotelId,
   getTranslation,
@@ -184,7 +182,6 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
                     style={{ padding: '0.75rem 0.5rem', fontWeight: 600, color: 'var(--primary-color)', cursor: 'pointer' }}
                     onClick={() => {
                       setManagingHotel(h);
-                      selectHotel(h.id);
                       setBranchTab('stats');
                     }}
                     title={language === 'vi' ? 'Nhấp để quản lý chi nhánh này' : 'Click to manage this branch'}
@@ -209,7 +206,6 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
                       style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} 
                       onClick={() => {
                         setManagingHotel(h);
-                        selectHotel(h.id);
                         setBranchTab('stats');
                       }}
                     >
@@ -242,7 +238,6 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
                   style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--primary-color)', cursor: 'pointer' }}
                   onClick={() => {
                     setManagingHotel(h);
-                    selectHotel(h.id);
                     setBranchTab('stats');
                   }}
                 >
@@ -270,7 +265,6 @@ export const HotelManagementTab: React.FC<HotelManagementTabProps> = ({
                   style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
                   onClick={() => {
                     setManagingHotel(h);
-                    selectHotel(h.id);
                     setBranchTab('stats');
                   }}
                 >
