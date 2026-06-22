@@ -1835,9 +1835,9 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                       {(() => {
                         const maxAvgTime = Math.max(...filteredLeaderboard.map(c => c.avgTime), 50);
                         return (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                             {paginatedLeaderboard.map((cleaner, i) => {
-                              const barPercent = (cleaner.avgTime / maxAvgTime) * 100;
+                              const barPercent = Math.max(8, (cleaner.avgTime / maxAvgTime) * 100);
                               const barColor = cleaner.speedCategory === 'fast' 
                                 ? 'var(--status-clean)' 
                                 : cleaner.speedCategory === 'slow' 
@@ -1846,14 +1846,14 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                                   
                               return (
                                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.8rem' }}>
-                                  <div style={{ width: '120px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                                  <div style={{ width: '90px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left', color: 'var(--text-color)' }}>
                                     {cleaner.name}
                                   </div>
-                                  <div style={{ flex: 1, height: '18px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '4px', overflow: 'hidden', position: 'relative' }}>
-                                    <div style={{ width: `${barPercent}%`, height: '100%', backgroundColor: barColor, transition: 'width 0.5s ease-in-out', borderRadius: '4px' }} />
-                                    <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.7rem', fontWeight: 700, color: cleaner.avgTime > (maxAvgTime * 0.2) ? 'white' : 'var(--text-color)' }}>
-                                      {cleaner.avgTime} {language === 'vi' ? 'phút' : language === 'ja' ? '分' : 'mins'}
-                                    </span>
+                                  <div style={{ flex: 1, height: '12px', backgroundColor: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: '6px', overflow: 'hidden', position: 'relative' }}>
+                                    <div style={{ width: `${barPercent}%`, height: '100%', backgroundColor: barColor, transition: 'width 0.5s ease-in-out', borderRadius: '6px' }} />
+                                  </div>
+                                  <div style={{ width: '65px', fontWeight: 700, textAlign: 'right', color: barColor, fontSize: '0.75rem' }}>
+                                    {cleaner.avgTime} {language === 'vi' ? 'phút' : language === 'ja' ? '分' : 'mins'}
                                   </div>
                                 </div>
                               );
@@ -1861,6 +1861,22 @@ export const HotelDetailsView: React.FC<HotelDetailsViewProps> = ({
                           </div>
                         );
                       })()}
+
+                      {/* Speed Performance Legend */}
+                      <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1.25rem', fontSize: '0.65rem', fontWeight: 700, flexWrap: 'wrap', borderTop: '1px solid rgba(128,128,128,0.1)', paddingTop: '0.75rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--status-clean)', display: 'inline-block' }} />
+                          <span>{language === 'vi' ? 'Nhanh (< 30 ph)' : language === 'ja' ? '早い (< 30分)' : 'Fast (< 30m)'}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary-color)', display: 'inline-block' }} />
+                          <span>{language === 'vi' ? 'Bình thường (30 - 40 ph)' : language === 'ja' ? '普通 (30 - 40分)' : 'Normal (30 - 40m)'}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f97316', display: 'inline-block' }} />
+                          <span>{language === 'vi' ? 'Chậm (> 40 ph)' : language === 'ja' ? '遅い (> 40分)' : 'Slow (> 40m)'}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

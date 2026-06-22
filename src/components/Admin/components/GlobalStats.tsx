@@ -278,25 +278,28 @@ export const GlobalStats: React.FC<GlobalStatsProps> = ({
               {language === 'vi' ? 'Chưa có hoạt động dọn dẹp nào được ghi nhận' : language === 'ja' ? '本日の実績はありません' : 'No housekeeping activities recorded'}
             </div>
           ) : (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem', justifyContent: 'center', padding: '0.5rem 0' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.85rem', padding: '0.5rem 0' }}>
               {Object.entries(globalStats.housekeeperTimes).map(([name, times]) => {
                 const avg = Math.round(times.reduce((sum, t) => sum + t, 0) / times.length) || 0;
                 // Normalize bar width (max 60 minutes represents 100%)
-                const percentage = Math.min(100, Math.max(10, (avg / 60) * 100));
+                const percentage = Math.min(100, Math.max(8, (avg / 60) * 100));
 
                 let barColor = 'var(--status-clean)';
                 if (avg > 45) barColor = 'var(--status-maintenance)';
                 else if (avg > 30) barColor = 'var(--status-dirty)';
 
+                const timeLabel = language === 'vi' 
+                  ? `${avg} ph (${times.length} lần)` 
+                  : language === 'ja' 
+                    ? `${avg}分 (${times.length}回)` 
+                    : `${avg}m (${times.length} cleans)`;
+
                 return (
-                  <div key={name} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600 }}>
-                      <span>{name}</span>
-                      <span style={{ opacity: 0.8 }}>
-                        {avg} {language === 'vi' ? 'phút / phòng' : language === 'ja' ? '分 / 部屋' : 'mins / room'} ({times.length} {language === 'vi' ? 'lần' : language === 'ja' ? '回' : 'cleans'})
-                      </span>
+                  <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.8rem' }}>
+                    <div style={{ width: '90px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left', color: 'var(--text-color)' }}>
+                      {name}
                     </div>
-                    <div style={{ width: '100%', height: '12px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '6px', overflow: 'hidden' }}>
+                    <div style={{ flex: 1, height: '12px', backgroundColor: 'rgba(128,128,128,0.08)', borderRadius: '6px', overflow: 'hidden', position: 'relative' }}>
                       <div
                         style={{
                           width: `${percentage}%`,
@@ -305,11 +308,30 @@ export const GlobalStats: React.FC<GlobalStatsProps> = ({
                           borderRadius: '6px',
                           transition: 'width 0.5s ease-out'
                         }}
-                      ></div>
+                      />
+                    </div>
+                    <div style={{ width: '95px', fontWeight: 700, textAlign: 'right', color: barColor, fontSize: '0.75rem' }}>
+                      {timeLabel}
                     </div>
                   </div>
                 );
               })}
+
+              {/* Speed Performance Legend */}
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '1.25rem', fontSize: '0.65rem', fontWeight: 700, flexWrap: 'wrap', borderTop: '1px solid rgba(128,128,128,0.1)', paddingTop: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--status-clean)', display: 'inline-block' }} />
+                  <span>{language === 'vi' ? 'Nhanh (< 30 ph)' : language === 'ja' ? '早い (< 30分)' : 'Fast (< 30m)'}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--status-dirty)', display: 'inline-block' }} />
+                  <span>{language === 'vi' ? 'Bình thường (30 - 45 ph)' : language === 'ja' ? '普通 (30 - 45分)' : 'Normal (30 - 45m)'}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--status-maintenance)', display: 'inline-block' }} />
+                  <span>{language === 'vi' ? 'Chậm (> 45 ph)' : language === 'ja' ? '遅い (> 45分)' : 'Slow (> 45m)'}</span>
+                </div>
+              </div>
             </div>
           )}
         </div>
